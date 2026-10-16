@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,11 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import com.agarthavision.ui.components.ReadOnlyAuthorNote
-import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.Download
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -38,13 +38,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.RectangleShape
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.agarthavision.R
-import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.ui.components.ReadOnlyAuthorNote
+import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Description
+import com.agarthavision.ui.icons.Download
 import com.agarthavision.ui.image.SampleImageRef
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -57,35 +60,38 @@ internal fun ReportsSection(
     state: SessionDetailContentState,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
+    // A report covers verified samples only, so with none there is nothing to report on
+    // (86d4bzm9k). A sample verified as negative still counts: that is a result.
+    val canGenerate = state.session.verifiedSamples.isNotEmpty()
+    val readOnlyAuthor = state.readOnlyAuthor
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(AgarthaTheme.colors.surfaceVariant, RoundedCornerShape(12.dp))
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .background(colors.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(16.dp),
     ) {
-        // A report covers verified samples only, so with none there is nothing to report on
-        // (86d4bzm9k). A sample verified as negative still counts: that is a result.
-        val canGenerate = state.session.verifiedSamples.isNotEmpty()
-        val readOnlyAuthor = state.readOnlyAuthor
         if (readOnlyAuthor != null) {
             ReadOnlyAuthorNote(authorName = readOnlyAuthor.name)
+            Spacer(Modifier.height(8.dp))
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             // The subtitle can now be a full sentence; weight lets it wrap instead of pushing
             // the button out, and the gap keeps the two apart when it does.
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                 Text(
                     text = stringResource(R.string.report_section_title),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = when {
                         readOnlyAuthor != null && state.totalReports == 0 ->
@@ -96,8 +102,8 @@ internal fun ReportsSection(
                         state.totalReports == 0 -> stringResource(R.string.report_empty)
                         else -> stringResource(R.string.report_generated_count, state.totalReports)
                     },
-                    fontSize = 12.sp,
-                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 13.sp,
+                    color = colors.textSecondary,
                 )
             }
             // Icon rather than a label: the text pill fought the subtitle for width and
@@ -113,12 +119,27 @@ internal fun ReportsSection(
             }
         }
 
-        state.reports.forEach { report ->
-            ReportRow(report = report, onOpen = { state.onOpenReport(report) })
+        if (state.reports.isNotEmpty()) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                thickness = 1.dp,
+                color = colors.border,
+            )
+            state.reports.forEachIndexed { index, report ->
+                if (index > 0) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        thickness = 1.dp,
+                        color = colors.border,
+                    )
+                }
+                ReportRow(report = report, onOpen = { state.onOpenReport(report) })
+            }
         }
 
         // Only paginate once reports spill past a single page.
         if (state.totalReports > REPORTS_PER_PAGE) {
+            Spacer(Modifier.height(8.dp))
             ReportsPager(
                 currentPage = state.currentPage,
                 totalReports = state.totalReports,
@@ -131,6 +152,7 @@ internal fun ReportsSection(
 
 @Composable
 private fun ReportRow(report: Report, onOpen: () -> Unit) {
+    val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -140,34 +162,60 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
                 onClick = onOpen,
             )
             .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(
+            modifier = Modifier
+                .size(width = 46.dp, height = 50.dp)
+                .background(colors.surfaceMuted, RoundedCornerShape(10.dp))
+                .border(1.dp, colors.border, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = AgarthaIcons.Description,
+                    contentDescription = null,
+                    tint = colors.brandFill,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.report_format_pdf),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textSecondary,
+                )
+            }
+        }
+
+        Spacer(Modifier.width(12.dp))
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = report.generatedAt.formatReportDateTime(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = AgarthaTheme.colors.textPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = report.positiveSpecies.joinToString(", ").ifBlank {
                     stringResource(R.string.report_no_positive_species)
                 },
-                fontSize = 12.sp,
-                color = AgarthaTheme.colors.textSecondary,
+                fontSize = 13.sp,
+                color = colors.textSecondary,
+                lineHeight = 17.sp,
             )
-            Spacer(Modifier.height(4.dp))
-            if (report.pdfFilePath != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FormatChip(stringResource(R.string.report_format_pdf))
-                }
-            }
         }
+
+        Spacer(Modifier.width(8.dp))
+
         ReportStatusPill(status = report.supabaseStatus)
     }
 }
-
 
 @Composable
 private fun GenerateReportButton(
@@ -179,21 +227,22 @@ private fun GenerateReportButton(
     val clickable = enabled && !isGenerating
     Box(
         modifier = Modifier
-            .size(34.dp)
+            .size(40.dp)
             .background(
-                if (clickable) colors.accent else colors.borderStrong,
-                RoundedCornerShape(999.dp),
+                if (clickable) colors.brandFill else colors.brandFill.copy(alpha = 0.4f),
+                CircleShape,
             )
+            .clip(CircleShape)
             .clickable(enabled = clickable, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = AgarthaIcons.Download,
             contentDescription = stringResource(
-                if (isGenerating) R.string.report_generating else R.string.report_generate
+                if (isGenerating) R.string.report_generating else R.string.report_generate,
             ),
-            tint = colors.onAccent,
-            modifier = Modifier.size(17.dp),
+            tint = Color.White,
+            modifier = Modifier.size(20.dp),
         )
     }
 }
