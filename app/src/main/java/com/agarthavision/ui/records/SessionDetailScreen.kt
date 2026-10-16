@@ -573,6 +573,8 @@ private fun SessionDetailSamplesTab(
             EmptyState(
                 title = stringResource(R.string.session_detail_samples_empty),
                 body = stringResource(R.string.session_detail_samples_empty_body),
+                illustrationLight = R.drawable.ill_empty_samples_light,
+                illustrationDark = R.drawable.ill_empty_samples_dark,
             )
         }
     } else {
