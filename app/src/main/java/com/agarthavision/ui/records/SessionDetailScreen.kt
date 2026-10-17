@@ -22,7 +22,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -42,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -63,13 +70,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.LpfDensity
+import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.ui.records.labelRes
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import com.agarthavision.ui.theme.AgarthaTheme
-import com.agarthavision.ui.theme.HeroDensityStyle
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
+import com.agarthavision.ui.theme.detectionBoxColor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -89,6 +103,14 @@ internal data class SessionDetailUi(
     val verifiedSamples: List<SampleUi>,
 )
 
+internal data class TileBox(
+    val cx: Float,
+    val cy: Float,
+    val w: Float,
+    val h: Float,
+    val color: Color,
+)
+
 internal data class SampleUi(
     val id: String,
     val source: SampleSource,
@@ -99,6 +121,9 @@ internal data class SampleUi(
     val storagePath: String?,
     val timeLabel: String,
     val isEdited: Boolean = false,
+    val isManual: Boolean = false,
+    val eggCount: Int = 0,
+    val boxes: List<TileBox> = emptyList(),
 )
 
 internal enum class SampleSource { Ai, Manual }
@@ -138,10 +163,7 @@ fun SessionDetailScreen(
                         duration = SnackbarDuration.Long,
                     )
                     if (result == SnackbarResult.ActionPerformed) {
-                        shareError = when (event.format) {
-                            ExportFormat.PDF -> shareReportPdf(context, event.pdfPath)
-                            ExportFormat.CSV -> shareReportCsv(context, event.csvPath)
-                        }
+                        shareError = shareReportPdf(context, event.pdfPath)
                     }
                 }
 
@@ -153,10 +175,10 @@ fun SessionDetailScreen(
                 }
 
                 is SessionDetailEvent.ReportRestored -> {
-                    shareError = when {
-                        event.pdfPath != null -> viewReportPdf(context, event.pdfPath)
-                        event.csvPath != null -> viewReportCsv(context, event.csvPath)
-                        else -> R.string.report_share_file_gone
+                    shareError = if (event.pdfPath != null) {
+                        viewReportPdf(context, event.pdfPath)
+                    } else {
+                        R.string.report_share_file_gone
                     }
                 }
 
@@ -218,10 +240,10 @@ fun SessionDetailScreen(
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
             onOpenReport = { report ->
-                val result = when {
-                    report.pdfFilePath != null -> viewReportPdf(context, report.pdfFilePath)
-                    report.csvFilePath != null -> viewReportCsv(context, report.csvFilePath)
-                    else -> R.string.report_share_missing_path
+                val result = if (report.pdfFilePath != null) {
+                    viewReportPdf(context, report.pdfFilePath)
+                } else {
+                    R.string.report_share_missing_path
                 }
                 // A file this device has never had is the synced-from-elsewhere case, not a
                 // mistake to scold the medtech for. Fetch it instead of reporting it.
@@ -235,6 +257,7 @@ fun SessionDetailScreen(
             },
             onPrevPage = viewModel::goToPreviousReportPage,
             onNextPage = viewModel::goToNextReportPage,
+            readOnlyAuthor = state.session?.author as? RecordAuthor.Colleague,
         )
         Column(
             modifier = Modifier
@@ -266,7 +289,7 @@ fun SessionDetailScreen(
     }
 }
 
-private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
+internal fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
     val sessionData = state.session ?: return null
     val sessionRecord = sessionData.session
     val startedAt = Instant.ofEpochMilli(sessionRecord.startedAt)
@@ -277,6 +300,21 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         val hasAi = item.detections.isNotEmpty() && !item.sample.isManual
         val sampleTime = Instant.ofEpochMilli(item.sample.timestamp)
             .atZone(ZoneId.systemDefault())
+        val isManual = item.sample.isManual
+        val eggCount = item.detections.count { it.group != DetectionGroup.REJECTED }
+        val boxes = item.detections.mapIndexedNotNull { i, d ->
+            if (d.group != DetectionGroup.REJECTED && d.hasBox) {
+                TileBox(
+                    cx = d.bboxX!!,
+                    cy = d.bboxY!!,
+                    w = d.bboxW!!,
+                    h = d.bboxH!!,
+                    color = detectionBoxColor(i),
+                )
+            } else {
+                null
+            }
+        }
         SampleUi(
             id = item.sample.id,
             source = if (hasAi) SampleSource.Ai else SampleSource.Manual,
@@ -286,6 +324,9 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             storagePath = item.sample.storagePath,
             timeLabel = sampleTime.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
             isEdited = item.sample.isEdited,
+            isManual = isManual,
+            eggCount = eggCount,
+            boxes = boxes,
         )
     }
 
@@ -423,10 +464,16 @@ internal data class SessionDetailContentState(
     val totalReports: Int,
     val currentPage: Int,
     val isGenerating: Boolean,
-    val onGenerate: (ExportFormat) -> Unit,
+    val onGenerate: () -> Unit,
     val onOpenReport: (Report) -> Unit,
     val onPrevPage: () -> Unit,
     val onNextPage: () -> Unit,
+    /**
+     * Set when a colleague recorded the session (14zcqntjph6). Its reports stay listed and
+     * openable; generating a new one is not offered — a report is generated by the medtech
+     * who owns the session (`GenerateSessionReportUseCase` refuses anyone else).
+     */
+    val readOnlyAuthor: RecordAuthor.Colleague? = null,
 )
 
 @Composable
@@ -436,20 +483,26 @@ private fun SessionDetailTabBar(
     onTabSelected: (SessionDetailTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.xl, vertical = Spacing.xs),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = Spacing.xl, vertical = Spacing.xs)
+            .clip(CircleShape)
+            .background(colors.surface)
+            .border(1.dp, colors.border, CircleShape)
+            .padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        TabButton(
+        SessionDetailTabItem(
             text = stringResource(R.string.session_detail_tab_report),
             selected = selectedTab == SessionDetailTab.REPORT,
             onClick = { onTabSelected(SessionDetailTab.REPORT) },
             modifier = Modifier.weight(1f),
         )
-        TabButton(
-            text = "${stringResource(R.string.session_detail_tab_samples)} ($samplesCount)",
+        SessionDetailTabItem(
+            text = stringResource(R.string.session_detail_tab_samples),
+            count = samplesCount,
             selected = selectedTab == SessionDetailTab.SAMPLES,
             onClick = { onTabSelected(SessionDetailTab.SAMPLES) },
             modifier = Modifier.weight(1f),
@@ -458,32 +511,60 @@ private fun SessionDetailTabBar(
 }
 
 @Composable
-private fun TabButton(
+private fun SessionDetailTabItem(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    count: Int? = null,
 ) {
     val colors = AgarthaTheme.colors
-    val bg = if (selected) colors.brandFill else colors.surface
-    val border = if (selected) colors.brandFill else colors.border
+    val bg = if (selected) colors.brandFill else Color.Transparent
     val fg = if (selected) colors.onBrandFill else colors.textSecondary
 
     Box(
         modifier = modifier
-            .height(38.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .height(42.dp)
+            .clip(CircleShape)
             .background(bg)
-            .border(1.dp, border, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            color = fg,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = text,
+                color = fg,
+                fontSize = 15.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            )
+            if (count != null) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .sizeIn(minWidth = 22.dp, minHeight = 22.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) {
+                                colors.onBrandFill.copy(alpha = 0.25f)
+                            } else {
+                                colors.surfaceVariant
+                            }
+                        )
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = count.toString(),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fg,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -523,39 +604,39 @@ private fun SessionDetailSamplesTab(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(horizontal = Spacing.xl),
-            contentAlignment = Alignment.Center,
+                .padding(horizontal = 20.dp),
+            contentAlignment = BiasAlignment(horizontalBias = 0f, verticalBias = -0.25f),
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.session_detail_samples_empty),
-                    color = AgarthaTheme.colors.textPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = stringResource(R.string.session_detail_samples_empty_body),
-                    color = AgarthaTheme.colors.textSecondary,
-                    fontSize = 13.sp,
-                )
-            }
+            EmptyState(
+                title = stringResource(R.string.session_detail_samples_empty),
+                body = stringResource(R.string.session_detail_samples_empty_body),
+                illustrationLight = R.drawable.ill_empty_samples_light,
+                illustrationDark = R.drawable.ill_empty_samples_dark,
+            )
         }
     } else {
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = Spacing.xl,
-                end = Spacing.xl,
-                top = Spacing.sm,
-                bottom = Spacing.xxl,
-            ),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.session_detail_captured_samples,
+                        samples.size,
+                        samples.size,
+                    ),
+                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
             items(samples, key = { it.id }) { sample ->
-                SampleRow(
+                SampleTile(
                     sample = sample,
                     onClick = { onSampleClick(sample) },
                 )
@@ -573,13 +654,19 @@ internal fun LpfHeroCard(
     val speciesCount = session.speciesCount
     val samplesTotal = session.samplesTotal
     val themeColors = AgarthaTheme.colors
-    val onCard = themeColors.onBrandFill
-    val onCardMuted = onCard.copy(alpha = 0.72f)
+    val onCard = Color.White
+    val onCardMuted = Color.White.copy(alpha = 0.80f)
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(themeColors.brandFill, RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp)),
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(themeColors.brandFill, AppColors.MaroonPressed),
+                ),
+                shape = RoundedCornerShape(24.dp),
+            )
+            .clip(RoundedCornerShape(24.dp)),
     ) {
         Box(
             modifier = Modifier
@@ -594,30 +681,53 @@ internal fun LpfHeroCard(
                     )
                 },
         )
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(22.dp)) {
             Text(
-                "TOTAL EGGS CONFIRMED",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
+                text = stringResource(R.string.session_detail_total_eggs),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
                 color = onCardMuted,
-                letterSpacing = 1.sp,
+                letterSpacing = 1.2.sp,
             )
             Spacer(Modifier.height(8.dp))
-            Text(
-                confirmedEggs.toString(),
-                color = onCard,
-                style = HeroDensityStyle,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(
+                    text = confirmedEggs.toString(),
+                    fontSize = 68.sp,
+                    lineHeight = 68.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = onCard,
+                    style = TextStyle(fontFeatureSettings = "tnum"),
+                    modifier = Modifier.alignByBaseline(),
+                )
+                Spacer(Modifier.width(12.dp))
+                LpfMeta(
+                    confirmedEggs = confirmedEggs,
+                    speciesCount = speciesCount,
+                    samplesTotal = samplesTotal,
+                    contentColor = onCard,
+                    modifier = Modifier.alignByBaseline(),
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.20f)),
             )
-            Spacer(Modifier.height(12.dp))
-            LpfMeta(confirmedEggs, speciesCount, samplesTotal, onCard)
-            
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
+
             Text(
-                stringResource(R.string.session_detail_lpf_title).uppercase(),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
+                text = stringResource(R.string.session_detail_per_field_density),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
                 color = onCardMuted,
-                letterSpacing = 1.sp,
+                letterSpacing = 1.2.sp,
             )
             Spacer(Modifier.height(8.dp))
 
@@ -628,8 +738,8 @@ internal fun LpfHeroCard(
             // the same way: PB-18 asks for one of the two, consistently.
             if (session.lpfPerSpecies.isEmpty()) {
                 Text(
-                    stringResource(R.string.session_detail_no_parasites),
-                    fontSize = 13.sp,
+                    text = stringResource(R.string.session_detail_no_parasites),
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = onCard,
                     modifier = Modifier.testTag(SessionDetailTestTags.NO_PARASITES),
@@ -639,37 +749,69 @@ internal fun LpfHeroCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag(SessionDetailTestTags.lpfRow(species)),
+                        .testTag(SessionDetailTestTags.lpfRow(species))
+                        .padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        species,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        // Binomials are italic per the design system; "Hookworm" is a common
-                        // name covering two genera, so it is not.
-                        fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
-                        color = onCard,
-                        modifier = Modifier.weight(1f),
-                    )
-                    density.descriptor?.let { descriptor ->
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
+                    ) {
                         Text(
-                            stringResource(descriptor.labelRes),
-                            fontSize = 12.sp,
-                            color = onCardMuted,
-                            modifier = Modifier.padding(end = 10.dp),
+                            text = species,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
+                            color = onCard,
                         )
+                        density.descriptor?.let { descriptor ->
+                            val burden = density.burdenLevel
+                            val descriptorName = stringResource(descriptor.labelRes).replaceFirstChar { it.uppercase() }
+                            val labelText = if (burden != null) {
+                                "$descriptorName · ${stringResource(burden.labelRes)}"
+                            } else {
+                                descriptorName
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.18f))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = labelText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = onCard,
+                                )
+                            }
+                        }
+                    }
+                    val displayStr = density.displayText()
+                    val lpfIndex = displayStr.indexOf("LPF")
+                    val annotated = buildAnnotatedString {
+                        if (lpfIndex != -1) {
+                            withStyle(SpanStyle(fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)) {
+                                append(displayStr.substring(0, lpfIndex))
+                            }
+                            withStyle(SpanStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold)) {
+                                append(displayStr.substring(lpfIndex))
+                            }
+                        } else {
+                            withStyle(SpanStyle(fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)) {
+                                append(displayStr)
+                            }
+                        }
                     }
                     Text(
-                        stringResource(R.string.lpf_range_value, density.min, density.max),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = annotated,
                         color = onCard,
                         style = TextStyle(fontFeatureSettings = "tnum"),
                     )
                 }
-                Spacer(Modifier.height(4.dp))
             }
         }
     }
@@ -681,27 +823,38 @@ private fun LpfMeta(
     speciesCount: Int,
     samplesTotal: Int,
     contentColor: Color,
+    modifier: Modifier = Modifier,
 ) {
-    val labelColor = contentColor.copy(alpha = 0.72f)
+    val labelColor = contentColor.copy(alpha = 0.80f)
     if (confirmedEggs == 0) {
         Text(
-            pluralStringResource(
+            text = pluralStringResource(
                 R.plurals.session_detail_no_confirmed_eggs_fields,
                 samplesTotal,
                 samplesTotal,
             ),
             fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
             color = labelColor,
+            modifier = modifier,
         )
     } else {
-        StatRun(
-            listOf(
-                Stat(speciesCount.toString(), "species"),
-                Stat(samplesTotal.toString(), "fields"),
-            ),
-            valueColor = contentColor,
-            labelColor = labelColor,
-            separatorColor = contentColor.copy(alpha = 0.6f),
+        val species = pluralStringResource(
+            R.plurals.session_detail_species_count,
+            speciesCount,
+            speciesCount,
+        )
+        val fields = pluralStringResource(
+            R.plurals.session_detail_fields_count,
+            samplesTotal,
+            samplesTotal,
+        )
+        Text(
+            text = "$species · $fields",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = labelColor,
+            modifier = modifier,
         )
     }
 }

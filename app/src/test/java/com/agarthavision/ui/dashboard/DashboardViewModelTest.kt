@@ -41,6 +41,7 @@ import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncSummary
 import com.agarthavision.util.MainDispatcherRule
@@ -116,6 +117,11 @@ class DashboardViewModelTest {
         whenever(it.invoke()).thenReturn(themeModeFlow)
     }
     private val setThemeModeUseCase: SetThemeModeUseCase = mock()
+    private val workerSyncingFlow = MutableStateFlow(false)
+    private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase =
+        mock<ObserveSyncInProgressUseCase>().also {
+            whenever(it.invoke()).thenReturn(workerSyncingFlow)
+        }
     private val clock: Clock = Clock.fixed(Instant.parse("2026-09-27T10:00:00Z"), CLINICAL_ZONE)
     private val observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase = mock<ObserveNeedsAttentionUseCase>().also {
         whenever(it.invoke(any(), anyOrNull())).thenReturn(flowOf(NeedsAttention(0, 0, 0)))
@@ -202,6 +208,7 @@ class DashboardViewModelTest {
         sampleRepository = sampleRepository,
         patientRepository = patientRepository,
         observeThemeModeUseCase = observeThemeModeUseCase,
+        observeSyncInProgressUseCase = observeSyncInProgressUseCase,
         setThemeModeUseCase = setThemeModeUseCase,
         observeNeedsAttentionUseCase = observeNeedsAttentionUseCase,
         observeHomeKpisUseCase = observeHomeKpisUseCase,
@@ -299,6 +306,78 @@ class DashboardViewModelTest {
                 cancelAndIgnoreRemainingEvents()
             }
         }
+
+    // ── worker sync + initial download status ───────────────────────────────
+
+    private fun kotlinx.coroutines.test.TestScope.settledState(vm: DashboardViewModel): DashboardUiState {
+        val collectJob = launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        val snapshot = vm.uiState.value
+        collectJob.cancel()
+        return snapshot
+    }
+
+    @Test
+    fun `isSyncing follows the worker flow`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
+        val vm = viewModel()
+        val collectJob = launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isSyncing)
+
+        workerSyncingFlow.value = true
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.isSyncing)
+
+        workerSyncingFlow.value = false
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isSyncing)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `initialDownload is DONE when the first fetch is done even while syncing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            workerSyncingFlow.value = true
+            val snapshot = settledState(viewModel())
+            assertTrue(snapshot.isSignedIn)
+            assertEquals(InitialDownload.DONE, snapshot.initialDownload)
+        }
+
+    @Test
+    fun `initialDownload is IN_PROGRESS when not done and syncing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(initialFetchStateStore.observeCompleted(any())).thenReturn(MutableStateFlow(false))
+            workerSyncingFlow.value = true
+            val snapshot = settledState(viewModel())
+            assertEquals(InitialDownload.IN_PROGRESS, snapshot.initialDownload)
+        }
+
+    @Test
+    fun `initialDownload is INCOMPLETE when not done and not syncing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(initialFetchStateStore.observeCompleted(any())).thenReturn(MutableStateFlow(false))
+            val snapshot = settledState(viewModel())
+            assertEquals(InitialDownload.INCOMPLETE, snapshot.initialDownload)
+        }
+
+    @Test
+    fun `initialDownload is INCOMPLETE when not done and offline`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(initialFetchStateStore.observeCompleted(any())).thenReturn(MutableStateFlow(false))
+            whenever(connectivityObserver.isOnline).thenReturn(MutableStateFlow(false))
+            workerSyncingFlow.value = true
+            val snapshot = settledState(viewModel())
+            assertTrue(snapshot.isOffline)
+            assertEquals(InitialDownload.INCOMPLETE, snapshot.initialDownload)
+        }
+
+    @Test
+    fun `initialDownload is DONE when signed out`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
+        whenever(observeLocalIdentityUseCase.invoke()).thenReturn(flowOf(null))
+        val snapshot = settledState(viewModel())
+        assertFalse(snapshot.isSignedIn)
+        assertEquals(InitialDownload.DONE, snapshot.initialDownload)
+    }
 
     @Test
     fun `onToggleTheme flips dark state back to light`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {

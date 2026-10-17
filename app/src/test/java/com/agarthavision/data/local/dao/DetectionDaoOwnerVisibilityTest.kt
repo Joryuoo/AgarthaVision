@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PatientEntity
+import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import kotlinx.coroutines.test.runTest
@@ -117,6 +118,33 @@ class DetectionDaoOwnerVisibilityTest {
                 total,
             )
         }
+
+    // ─────────── a medtech assigned to the patient sees its whole history ──────
+
+    @Test
+    fun `a medtech assigned to the patient counts every author's samples`() = runTest {
+        val sessionId = seedData()
+        patientDao.linkPatientToUser(
+            PatientUserEntity(patientId = PATIENT_ID, userId = "user-c", linkedAt = 1_000L),
+        )
+
+        // 14zcqntjph5: user-c wrote none of these, and is assigned to the patient, so the
+        // session's count is the session's, whoever verified each field.
+        val total = detectionDao.getConfirmedEggCountsForSession(sessionId, "user-c").sumOf { it.eggCount }
+        val samples = sampleDao.getSamplesForSession(sessionId, "user-c").map { it.sampleId }.toSet()
+
+        assertEquals(3, total)
+        assertEquals(setOf("smp-a", "smp-b", "smp-unowned"), samples)
+    }
+
+    @Test
+    fun `a medtech not assigned to the patient still counts only unowned samples`() = runTest {
+        val sessionId = seedData()
+
+        val total = detectionDao.getConfirmedEggCountsForSession(sessionId, "user-c").sumOf { it.eggCount }
+
+        assertEquals(1, total)
+    }
 
     // ─────────────────── empty table edge case ────────────────────────────────
 

@@ -9,6 +9,7 @@ import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.mapper.UNSTAGED_ADDED_STAGE_KEY
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.local.mapper.effectiveInferenceState
 import com.agarthavision.data.local.mapper.toDomain
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
@@ -17,6 +18,9 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.model.ReadOnlyRecordException
+import com.agarthavision.domain.model.isColleagueRecord
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.google.gson.Gson
@@ -37,10 +41,16 @@ class OpenVerificationTargetUseCase @Inject constructor(
     private val findingDao: SampleSpeciesFindingDao,
     private val resolveSampleImageSource: ResolveSampleImageSourceUseCase,
     private val gson: Gson,
+    private val authRepository: AuthRepository,
 ) {
     suspend operator fun invoke(sampleId: String): Result<VerificationTarget> = runCatching {
         val entity = requireNotNull(sampleDao.getSampleById(sampleId)) {
             "Sample $sampleId not found."
+        }
+        // Edit mode on a colleague's sample would end in a submit the server refuses
+        // (14zcqntjph6). Sample Detail hides the way in; this refuses it if reached anyway.
+        if (isColleagueRecord(entity.userId, authRepository.currentLocalUserId())) {
+            throw ReadOnlyRecordException(sampleId)
         }
         val storedDetections = detectionDao.getDetectionsForSample(sampleId)
 
@@ -65,6 +75,7 @@ class OpenVerificationTargetUseCase @Inject constructor(
             inferenceModelVersion = entity.inferenceModelVersion,
             imageWidth = entity.imageWidth,
             imageHeight = entity.imageHeight,
+            inferenceState = entity.effectiveInferenceState(),
         )
 
         val detections = storedById

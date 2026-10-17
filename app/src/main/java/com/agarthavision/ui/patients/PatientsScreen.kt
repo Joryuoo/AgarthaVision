@@ -367,11 +367,15 @@ fun PatientsScreen(
 
                     if (hasOlderRecords) {
                         EmptyState(
-                            icon = Icons.Outlined.Inbox,
                             title = "No recent activity",
                             body = "No patient activity found for today or this week. " +
                                 "Switch to Earlier to view older records.",
-                            modifier = Modifier.padding(top = Spacing.xxl),
+                            illustrationLight = R.drawable.ill_empty_activity_light,
+                            illustrationDark = R.drawable.ill_empty_activity_dark,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .padding(top = Spacing.xxl),
                             action = {
                                 Button(
                                     onClick = { viewModel.onSortSelected(PatientSort.EARLIER) },
@@ -386,23 +390,10 @@ fun PatientsScreen(
                             },
                         )
                     } else {
-                        val emptyAction: (@Composable () -> Unit)? = if (narrowed) {
-                            null
-                        } else {
-                            { NewPatientButton(onClick = viewModel::onCreatePatient) }
-                        }
-                        EmptyState(
-                            icon = Icons.Outlined.Inbox,
-                            title = stringResource(
-                                if (narrowed) R.string.patients_empty_filtered_title
-                                else R.string.patients_empty_title,
-                            ),
-                            body = stringResource(
-                                if (narrowed) R.string.patients_empty_filtered_body
-                                else R.string.patients_empty_body,
-                            ),
-                            modifier = Modifier.padding(top = Spacing.xxl),
-                            action = emptyAction,
+                        PatientsEmptyContent(
+                            narrowed = narrowed,
+                            downloading = state.initialDownloadPending && !narrowed,
+                            onCreatePatient = viewModel::onCreatePatient,
                         )
                     }
                 }
@@ -881,6 +872,48 @@ private fun PatientCardSkeleton(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.width(4.dp))
         SkeletonBox(modifier = Modifier.size(24.dp))
     }
+}
+
+/**
+ * Empty-list content. While the first download is still running (and no search/filter is active)
+ * it says so instead of "No patients yet", but keeps the create call to action so a medtech whose
+ * download never finishes (offline, blocked worker) can still add a patient.
+ */
+@Composable
+internal fun PatientsEmptyContent(
+    narrowed: Boolean,
+    downloading: Boolean,
+    onCreatePatient: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val emptyAction: (@Composable () -> Unit)? = if (narrowed) {
+        null
+    } else {
+        { NewPatientButton(onClick = onCreatePatient) }
+    }
+    val titleRes = when {
+        narrowed -> R.string.patients_empty_filtered_title
+        downloading -> R.string.patients_empty_downloading
+        else -> R.string.patients_empty_title
+    }
+    val bodyRes = when {
+        narrowed -> R.string.patients_empty_filtered_body
+        downloading -> R.string.patients_empty_downloading_body
+        else -> R.string.patients_empty_body
+    }
+    val showIllustration = !narrowed && !downloading
+    EmptyState(
+        icon = if (showIllustration) null else Icons.Outlined.Inbox,
+        title = stringResource(titleRes),
+        body = stringResource(bodyRes),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(top = Spacing.xxl),
+        illustrationLight = if (showIllustration) R.drawable.ill_empty_patients_light else null,
+        illustrationDark = if (showIllustration) R.drawable.ill_empty_patients_dark else null,
+        action = emptyAction,
+    )
 }
 
 @Composable

@@ -39,6 +39,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    androidResources {
+        // The on-device model is memory-mapped straight out of the APK. A compressed asset
+        // would have to be inflated into the heap first, all ~40 MB of it.
+        noCompress += listOf("tflite")
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -61,10 +67,17 @@ android {
                 "INFERENCE_URL",
                 "\"${localProperties.getProperty("INFERENCE_URL_DEV") ?: ""}\"",
             )
+            // Turnstile on sign-in (14zcqntnqxf). A site key is public by design; blank turns the
+            // check off, which only works while the project's CAPTCHA protection is off.
             buildConfigField(
                 "String",
-                "INFERENCE_API_KEY",
-                "\"${localProperties.getProperty("INFERENCE_API_KEY_DEV") ?: ""}\"",
+                "TURNSTILE_SITE_KEY",
+                "\"${localProperties.getProperty("TURNSTILE_SITE_KEY_DEV") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "TURNSTILE_HOSTNAME",
+                "\"${localProperties.getProperty("TURNSTILE_HOSTNAME_DEV") ?: ""}\"",
             )
         }
         release {
@@ -84,10 +97,17 @@ android {
                 "INFERENCE_URL",
                 "\"${localProperties.getProperty("INFERENCE_URL_PROD") ?: ""}\"",
             )
+            // Turnstile on sign-in (14zcqntnqxf). A site key is public by design; blank turns the
+            // check off, which only works while the project's CAPTCHA protection is off.
             buildConfigField(
                 "String",
-                "INFERENCE_API_KEY",
-                "\"${localProperties.getProperty("INFERENCE_API_KEY_PROD") ?: ""}\"",
+                "TURNSTILE_SITE_KEY",
+                "\"${localProperties.getProperty("TURNSTILE_SITE_KEY_PROD") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "TURNSTILE_HOSTNAME",
+                "\"${localProperties.getProperty("TURNSTILE_HOSTNAME_PROD") ?: ""}\"",
             )
         }
     }
@@ -127,10 +147,13 @@ dependencies {
     implementation(libs.camerax.mlkit)
     implementation(libs.camerax.extensions)
     implementation("androidx.compose.material:material-icons-extended")
+    // On-device inference
+    implementation(libs.litert)
     // Core
     implementation(libs.core.ktx)
     implementation(libs.core.splashscreen)
     implementation(libs.exifinterface)
+    implementation(libs.biometric)
 
     // Activity
     implementation(libs.activity.compose)

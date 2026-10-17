@@ -25,11 +25,6 @@ interface SessionRepository {
     suspend fun getSessionById(sessionId: String): Session?
 
     /**
-     * Observes sessions with sample and egg counts.
-     */
-    fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>>
-
-    /**
      * Updates the label for a session.
      */
     suspend fun updateSessionLabel(sessionId: String, label: String)
@@ -180,4 +175,10 @@ interface SessionRepository {
         userId: String,
         limit: Int,
     ): Flow<List<ActivityItem.SessionStarted>> = emptyFlow()
+
+    /**
+     * All of [userId]'s sessions for [patientId], oldest first — the candidate pool a patient
+     * report is generated from.
+     */
+    suspend fun getSessionsForPatient(patientId: String, userId: String): List<Session> = emptyList()
 }

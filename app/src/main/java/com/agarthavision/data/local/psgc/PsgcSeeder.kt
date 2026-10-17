@@ -3,7 +3,7 @@ package com.agarthavision.data.local.psgc
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -73,7 +73,7 @@ class PsgcSeeder @Inject constructor(
             // Seeding runs in the application scope; if that scope is cancelled the work
             // should stop, not be logged as a seeding failure and swallowed.
             if (throwable is CancellationException) throw throwable
-            Log.w(TAG, "PSGC seeding failed; the barangay picker will be empty.", throwable)
+            Logger.w(TAG, "PSGC seeding failed; the barangay picker will be empty.", throwable)
             0
         }
     }

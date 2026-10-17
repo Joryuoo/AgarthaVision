@@ -3,25 +3,36 @@ package com.agarthavision.domain.usecase.verify
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.inference.Prediction
+import com.agarthavision.domain.usecase.inference.InferencePendingException
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.data.sync.BackgroundSamplePush
 import com.agarthavision.util.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -53,12 +64,22 @@ class SubmitVerificationUseCaseTest {
 
     private val syncScheduler = RecordingSyncScheduler()
 
+    private val authRepository: AuthRepository = mock {
+        onBlocking { currentLocalUserId() } doReturn "user-1"
+    }
+
+    // On the test scheduler, so advanceUntilIdle() is what lets the background push run - and
+    // leaving it out is how a test sees the save return before the push has.
     private val useCase = SubmitVerificationUseCase(
         sampleDao = sampleDao,
         detectionDao = detectionDao,
         findingDao = findingDao,
-        syncSampleUseCase = syncSampleUseCase,
-        syncScheduler = syncScheduler,
+        backgroundSamplePush = BackgroundSamplePush(
+            syncSampleUseCase = syncSampleUseCase,
+            syncScheduler = syncScheduler,
+            scope = CoroutineScope(mainDispatcherRule.testDispatcher),
+        ),
+        authRepository = authRepository,
     )
 
     private val prediction = Prediction(
@@ -87,7 +108,46 @@ class SubmitVerificationUseCaseTest {
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             useCase(frame, findings = emptyList(), missedEgg = false)
+            advanceUntilIdle()
 
+            assertEquals(1, syncScheduler.requests)
+        }
+
+    @Test
+    fun `the save returns before the push to Supabase finishes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The bug this replaced: the push was awaited, so the sheet sat on "Loading..." for
+            // about three seconds on Wi-Fi with every other control still live.
+            val upload = CompletableDeferred<Unit>()
+            whenever(syncSampleUseCase.invoke(any())).doSuspendableAnswer {
+                upload.await()
+                Result.success(Unit)
+            }
+
+            val result = useCase(frame, findings = emptyList(), missedEgg = false)
+            runCurrent()
+
+            assertTrue("The save must not wait on the network.", result.isSuccess)
+            verify(syncSampleUseCase).invoke("sample-1")
+            assertEquals("The pass is asked for only once the push is done.", 0, syncScheduler.requests)
+
+            upload.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(1, syncScheduler.requests)
+        }
+
+    @Test
+    fun `a push that cannot land still asks for a sync pass`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Offline is the normal case for verification, and the pass is what retries it.
+            whenever(syncSampleUseCase.invoke(any()))
+                .thenReturn(Result.failure(java.io.IOException("Unable to resolve host")))
+
+            val result = useCase(frame, findings = emptyList(), missedEgg = false)
+            advanceUntilIdle()
+
+            assertTrue(result.isSuccess)
             assertEquals(1, syncScheduler.requests)
         }
 
@@ -422,4 +482,67 @@ class SubmitVerificationUseCaseTest {
             )
         }
 
+    // ── a frame still waiting on inference (14zcqntj6ny) ────────────────────────────────────
+
+    @Test
+    fun `a frame still in inference cannot be verified`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val pending = frame.copy(predictions = emptyList(), inferenceState = InferenceState.QUEUED)
+
+            val result = useCase(pending, findings = emptyList(), missedEgg = null)
+
+            // Verifying it would record a clean field no model ever read.
+            assertTrue(result.exceptionOrNull() is InferencePendingException)
+            verify(sampleDao, never()).updateSampleOnVerify(any(), any(), any(), any(), anyOrNull(), any())
+            verify(detectionDao, never()).insertDetections(any())
+        }
+
+    @Test
+    fun `a frame the medtech saw as ready is refused if the row is still pending`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById("sample-1")).thenReturn(
+                SampleEntity(
+                    sampleId = "sample-1",
+                    sessionId = "session-1",
+                    userId = "user-1",
+                    deviceId = "device-1",
+                    timestamp = 0L,
+                    imagePath = "/tmp/sample-1.jpg",
+                    status = SampleStatus.FLAGGED.value,
+                    inferenceState = InferenceState.IN_INFERENCE.value,
+                ),
+            )
+
+            val result = useCase(frame, findings = emptyList(), missedEgg = null)
+
+            assertTrue(result.exceptionOrNull() is InferencePendingException)
+            verify(sampleDao, never()).updateSampleOnVerify(any(), any(), any(), any(), anyOrNull(), any())
+        }
+
+    @Test
+    fun `a colleague's sample is refused and nothing is written`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // 14zcqntjph6: the server lets only the author update it, so an edit here would be
+            // written locally and silently refused on push.
+            whenever(sampleDao.getSampleById("sample-1")).thenReturn(
+                SampleEntity(
+                    sampleId = "sample-1",
+                    sessionId = "session-1",
+                    userId = "user-2",
+                    deviceId = "device-1",
+                    timestamp = 0L,
+                    imagePath = "/tmp/sample-1.jpg",
+                    status = SampleStatus.SYNCED.value,
+                ),
+            )
+
+            val result = useCase(frame, findings = emptyList(), missedEgg = false)
+
+            assertTrue(result.exceptionOrNull() is ReadOnlyRecordException)
+            verify(sampleDao, never()).updateSampleOnVerify(any(), any(), any(), any(), anyOrNull(), any())
+            verify(detectionDao, never()).insertDetections(any())
+            advanceUntilIdle()
+            verify(syncSampleUseCase, never()).invoke(any())
+            assertEquals(0, syncScheduler.requests)
+        }
 }

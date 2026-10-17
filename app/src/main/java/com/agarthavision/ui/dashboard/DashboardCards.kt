@@ -97,6 +97,7 @@ internal fun ActiveSessionHero(
                 lineHeight = 24.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                softWrap = false,
             )
             Spacer(Modifier.height(2.dp))
             Text(

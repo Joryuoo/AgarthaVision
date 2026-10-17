@@ -12,6 +12,7 @@ import com.agarthavision.domain.usecase.patients.PatientSort
 import com.agarthavision.domain.usecase.patients.PatientsQuery
 import com.agarthavision.domain.usecase.patients.PatientsResult
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
+import com.agarthavision.domain.usecase.sync.ObserveInitialDownloadDoneUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Clock
 import java.time.Instant
@@ -44,6 +45,7 @@ class PatientsViewModelTest {
     private val psgcRepository: PsgcRepository = mock()
     private val observePatientsUseCase: ObservePatientsUseCase = mock()
     private val searchBarangaysUseCase = SearchBarangaysUseCase(psgcRepository)
+    private val observeInitialDownloadDoneUseCase: ObserveInitialDownloadDoneUseCase = mock()
 
     @Before
     fun setUp() {
@@ -51,12 +53,14 @@ class PatientsViewModelTest {
             .thenReturn(flowOf(LocalIdentity(userId = USER_ID, email = "user@test.org")))
         whenever(observePatientsUseCase(anyOrNull(), any(), any()))
             .thenReturn(flowOf(PatientsResult(items = emptyList(), total = 0)))
+        whenever(observeInitialDownloadDoneUseCase(any())).thenReturn(flowOf(true))
     }
 
     private fun createViewModel() = PatientsViewModel(
         observePatientsUseCase = observePatientsUseCase,
         observeLocalIdentityUseCase = ObserveLocalIdentityUseCase(authRepository),
         searchBarangaysUseCase = searchBarangaysUseCase,
+        observeInitialDownloadDoneUseCase = observeInitialDownloadDoneUseCase,
         clock = Clock.fixed(Instant.parse("2026-09-28T12:00:00Z"), ZoneOffset.UTC),
     )
 
@@ -78,6 +82,61 @@ class PatientsViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `initialDownloadPending is true while the first download is not done`() = runTest {
+        whenever(observeInitialDownloadDoneUseCase(any())).thenReturn(flowOf(false))
+        val vm = createViewModel()
+
+        vm.state.test {
+            advanceUntilIdle()
+            val state = expectMostRecentItem()
+            assertTrue(state.initialDownloadPending)
+            assertFalse(state.isNarrowed)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `initialDownloadPending is false once the first download is done`() = runTest {
+        val vm = createViewModel()
+
+        vm.state.test {
+            advanceUntilIdle()
+            assertFalse(expectMostRecentItem().initialDownloadPending)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `initialDownloadPending is false when signed out`() = runTest {
+        whenever(authRepository.observeLocalIdentity()).thenReturn(flowOf(null))
+        whenever(observeInitialDownloadDoneUseCase(any())).thenReturn(flowOf(false))
+        val vm = createViewModel()
+
+        vm.state.test {
+            advanceUntilIdle()
+            assertFalse(expectMostRecentItem().initialDownloadPending)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `narrowing keeps initialDownloadPending so the screen falls back to the filtered empty state`() =
+        runTest {
+            whenever(observeInitialDownloadDoneUseCase(any())).thenReturn(flowOf(false))
+            val vm = createViewModel()
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onSearchQueryChanged("Cruz")
+                advanceUntilIdle()
+                val state = expectMostRecentItem()
+                assertTrue(state.isNarrowed)
+                assertTrue(state.initialDownloadPending)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
 
     @Test
     fun `search query updates and marks state as narrowed`() = runTest {

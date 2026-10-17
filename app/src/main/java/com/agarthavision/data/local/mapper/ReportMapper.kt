@@ -28,9 +28,14 @@ fun ReportEntity.toDomain(gson: Gson, sessionLabel: String? = null, patientName:
     val lpf: Map<String, LpfDensity> = runCatching {
         gson.fromJson<Map<String, LpfDensity>>(lpfPerSpeciesJson, stringLpfDensityMapType)
     }.getOrNull().orEmpty()
+    val sessionIds: List<String> = runCatching {
+        sessionIdsJson?.let { gson.fromJson<List<String>>(it, stringListType) }
+    }.getOrNull().orEmpty()
     return Report(
         id = reportId,
         sessionId = sessionId,
+        patientId = patientId,
+        sessionIds = sessionIds,
         userId = userId,
         reportType = ReportType.fromValue(reportType),
         generatedAt = Instant.ofEpochMilli(generatedAt),
@@ -50,6 +55,8 @@ fun Report.toEntity(gson: Gson): ReportEntity =
     ReportEntity(
         reportId = id,
         sessionId = sessionId,
+        patientId = patientId,
+        sessionIdsJson = sessionIds.takeIf { it.isNotEmpty() }?.let { gson.toJson(it) },
         userId = userId,
         reportType = reportType.value,
         generatedAt = generatedAt.toEpochMilli(),

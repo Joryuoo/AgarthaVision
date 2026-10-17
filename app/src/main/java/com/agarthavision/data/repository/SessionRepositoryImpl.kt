@@ -28,19 +28,6 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun getSessionById(sessionId: String): Session? =
         sessionDao.getSessionById(sessionId)?.toDomain()
 
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        sessionDao.observeSessionsWithStats(userId, sinceMillis).map { list ->
-            list.map { item ->
-                SessionWithStats(
-                    session = item.session.toDomain(),
-                    totalSamples = item.totalSamples,
-                    verifiedSamples = item.verifiedSamples,
-                    unverifiedSamples = item.unverifiedSamples,
-                    totalEggs = item.totalEggs
-                )
-            }
-        }
-
     override suspend fun updateSessionLabel(sessionId: String, label: String) {
         sessionDao.updateSessionLabel(sessionId, label)
     }
@@ -57,6 +44,9 @@ class SessionRepositoryImpl @Inject constructor(
 
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> =
         sessionDao.getLabelsForPatient(patientId)
+
+    override suspend fun getSessionsForPatient(patientId: String, userId: String): List<Session> =
+        sessionDao.getSessionsForPatient(patientId, userId).map { it.toDomain() }
 
     /**
      * A signed-out caller sees nothing, not everything.

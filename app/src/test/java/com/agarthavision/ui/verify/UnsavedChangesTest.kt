@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.usecase.inference.CancelInferenceUseCase
 import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.util.MainDispatcherRule
@@ -49,6 +50,7 @@ class UnsavedChangesTest {
         flaggedFrameStore,
         mock<SubmitVerificationUseCase>(),
         searchSpeciesSuggestions,
+        mock<CancelInferenceUseCase>(),
     )
 
     private fun frame(id: String) = FlaggedFrame(

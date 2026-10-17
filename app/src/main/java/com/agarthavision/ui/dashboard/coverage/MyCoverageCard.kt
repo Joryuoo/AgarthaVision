@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -149,10 +148,12 @@ fun MyCoverageCard(
                     // this content stays alpha(0f) so nothing needs to render here.
                     is MyCoverageCardUiState.Loading -> Unit
                     is MyCoverageCardUiState.Empty -> EmptyState(
-                        icon = Icons.Outlined.Map,
                         title = "No smears in this period",
                         body = "Smears you examine will appear here by province.",
                         modifier = Modifier.fillMaxWidth(),
+                        illustrationLight = R.drawable.ill_empty_smears_light,
+                        illustrationDark = R.drawable.ill_empty_smears_dark,
+                        illustrationWidth = 120.dp,
                     )
                     is MyCoverageCardUiState.Error -> Text(
                         text = s.message,

@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -30,22 +30,38 @@ class SyncReportUseCase @Inject constructor(
      * otherwise [Result.failure] after marking the local row
      * [ReportSyncStatus.SYNC_FAILED].
      */
+    @Suppress("ReturnCount")
     suspend operator fun invoke(reportId: String): Result<Unit> {
         val report = reportDao.getReportById(reportId)
-            ?: return Result.failure(IllegalArgumentException("Report $reportId does not exist."))
+        if (report == null) {
+            val errorMsg = "Report $reportId does not exist."
+            Logger.e(TAG, "[SyncFailed][Report:$reportId][Class:MISSING_ENTITY] $errorMsg")
+            return Result.failure(IllegalArgumentException(errorMsg))
+        }
+
+        if (report.supabaseStatus == ReportSyncStatus.SYNCED.value) {
+            return Result.success(Unit)
+        }
 
         return runCatching {
             uploadFiles(report)
             remoteDataSource.upsertReport(report)
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNCED.value)
-        }.onFailure {
-            Log.e(TAG, "Sync report failed for $reportId", it)
+        }.onFailure { throwable ->
+            val failureClass = classifyFailure(throwable)
+            val scopeTag = report.patientId?.let { "Patient:$it" } ?: "Session:${report.sessionId}"
+            Logger.e(
+                TAG,
+                "[SyncFailed][Report:$reportId][$scopeTag]" +
+                    "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
+                throwable,
+            )
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNC_FAILED.value)
         }
     }
 
     /**
-     * Uploads whichever of the two files this report actually has.
+     * Uploads the report's PDF, when this device still has one.
      *
      * A file the device no longer holds is skipped rather than failed. Shared storage is the
      * medtech's to clear, and failing the row over it would park the report in `sync_failed`
@@ -59,12 +75,6 @@ class SyncReportUseCase @Inject constructor(
             report.pdfFilePath,
             ReportRemoteDataSource.PDF_EXTENSION,
         )
-        uploadIfPresent(
-            report.userId,
-            report.reportId,
-            report.csvFilePath,
-            ReportRemoteDataSource.CSV_EXTENSION,
-        )
     }
 
     private suspend fun uploadIfPresent(
@@ -76,7 +86,7 @@ class SyncReportUseCase @Inject constructor(
         val bytes = localPath?.let { reportFileStore.readBytes(it) }
         if (bytes == null) {
             if (localPath != null) {
-                Log.w(TAG, "Report $reportId has no readable .$extension at $localPath")
+                Logger.w(TAG, "Report $reportId has no readable .$extension at $localPath")
             }
             return
         }
@@ -84,6 +94,22 @@ class SyncReportUseCase @Inject constructor(
             ReportRemoteDataSource.objectPathFor(userId, reportId, extension),
             bytes,
         )
+    }
+
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.net.UnknownHostException ||
+                throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            throwable is IllegalStateException &&
+                msg.contains("session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+        }
     }
 
     private companion object {

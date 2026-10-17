@@ -1,0 +1,6 @@
+# Runs tests/ against a fake model: no GPU and no Ultralytics fork needed.
+fastapi
+uvicorn[standard]
+pillow
+httpx
+pytest

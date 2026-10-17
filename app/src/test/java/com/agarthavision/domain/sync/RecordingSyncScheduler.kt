@@ -17,5 +17,12 @@ internal class RecordingSyncScheduler : SyncScheduler {
         requests += 1
     }
 
+    var signInRequests: Int = 0
+        private set
+
+    override fun requestSyncAfterSignIn() {
+        signInRequests += 1
+    }
+
     override val isSyncing: Flow<Boolean> = MutableStateFlow(false)
 }

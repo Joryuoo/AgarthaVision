@@ -10,30 +10,32 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.ArrowBackIosNew
-import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.ui.icons.ChevronLeft
+import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
-import com.agarthavision.ui.theme.MonoSmallStyle
 
 /**
  * Back arrow, a title, and an optional line of meta beneath it.
@@ -54,7 +56,12 @@ fun ScreenTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp, horizontal = 16.dp),
+            .padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = if (metaText.isNotBlank()) 4.dp else 8.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -67,26 +74,55 @@ fun ScreenTopBar(
             Icon(AgarthaIcons.ArrowBackIosNew, contentDescription = "Back", tint = colors.textPrimary)
         }
         Spacer(modifier = Modifier.width(8.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
                 style = AppTypography.headlineSmall,
                 color = colors.textPrimary,
             )
-            // MonoSmallStyle is the app-wide face for timestamps and counters (Inter + tnum);
-            // the platform monospace face this used to force is what made the sheets look
-            // different from every other screen.
             if (metaText.isNotBlank()) {
                 Text(
-                    metaText.uppercase(),
+                    metaText,
+                    fontSize = 12.sp,
                     color = colors.textSecondary,
-                    letterSpacing = 0.5.sp,
-                    style = MonoSmallStyle,
                 )
             }
         }
-        Spacer(modifier = Modifier.weight(1f))
         actions()
+    }
+}
+
+@Composable
+internal fun ModeChip(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    containerColor: Color? = null,
+    contentColor: Color? = null,
+) {
+    val colors = AgarthaTheme.colors
+    val fgColor = contentColor ?: colors.accent
+    Row(
+        modifier = modifier
+            .background(containerColor ?: colors.accentTint2, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = fgColor,
+                modifier = Modifier.size(13.dp),
+            )
+        }
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = fgColor,
+        )
     }
 }
 
@@ -107,51 +143,47 @@ data class SheetActionRowState(
 fun SheetActionRow(state: SheetActionRowState) {
     val colors = AgarthaTheme.colors
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Secondary Button — neutral grey chip. Discard is a confirmed action (it opens a
         // dialog), so it reads as secondary rather than as a red destructive control.
         Box(
             modifier = Modifier
                 .weight(1f)
+                .heightIn(min = 48.dp)
                 .testTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
-                .background(colors.surfaceVariant, RoundedCornerShape(14.dp))
-                .border(0.5.dp, colors.borderStrong, RoundedCornerShape(14.dp))
-                .clickable { state.onSecondaryClick() }
-                .padding(vertical = 16.dp),
+                .background(colors.surface, RoundedCornerShape(12.dp))
+                .border(1.dp, colors.borderStrong, RoundedCornerShape(12.dp))
+                .clickable { state.onSecondaryClick() },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = state.secondaryLabel,
                 color = colors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = (-0.2).sp
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
 
         // Primary Button — brand maroon, dimmed while the form is incomplete.
         Box(
             modifier = Modifier
-                .weight(2f)
+                .weight(1f)
+                .heightIn(min = 48.dp)
                 .testTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
                 .background(
                     if (state.primaryEnabled) colors.brandFill else colors.brandFill.copy(alpha = 0.4f),
-                    RoundedCornerShape(14.dp),
+                    RoundedCornerShape(12.dp),
                 )
-                .clickable(enabled = state.primaryEnabled && !state.primaryLoading) { state.onPrimaryClick() }
-                .padding(vertical = 16.dp),
+                .clickable(enabled = state.primaryEnabled && !state.primaryLoading) { state.onPrimaryClick() },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (state.primaryLoading) "Loading..." else state.primaryLabel,
                 color = colors.onBrandFill,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = (-0.2).sp
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
@@ -176,10 +208,10 @@ internal fun FlaggedFrame.previewAspectRatio(): Float {
 internal fun SheetSectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
         color = AgarthaTheme.colors.textSecondary,
-        letterSpacing = 0.5.sp,
+        letterSpacing = 0.8.sp,
         modifier = modifier,
     )
 }
@@ -214,37 +246,82 @@ internal fun CycleRow(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    centered: Boolean = false,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = indicator,
-            color = AgarthaTheme.colors.textSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        CycleButton(
-            icon = Icons.AutoMirrored.Outlined.ArrowBack,
-            contentDescription = prevDescription,
-            enabled = canGoPrev,
-            onClick = onPrev,
-            tag = prevTag,
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        CycleButton(
-            icon = Icons.AutoMirrored.Outlined.ArrowForward,
-            contentDescription = nextDescription,
-            enabled = canGoNext,
-            onClick = onNext,
-            tag = nextTag,
-        )
+    if (centered) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CycleButton(
+                icon = AgarthaIcons.ChevronLeft,
+                contentDescription = prevDescription,
+                enabled = canGoPrev,
+                onClick = onPrev,
+                tag = prevTag,
+            )
+            Text(
+                text = indicator,
+                color = AgarthaTheme.colors.textPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f),
+            )
+            CycleButton(
+                icon = AgarthaIcons.ChevronRight,
+                contentDescription = nextDescription,
+                enabled = canGoNext,
+                onClick = onNext,
+                tag = nextTag,
+            )
+        }
+    } else {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = indicator,
+                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        color = AgarthaTheme.colors.textSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                    )
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CycleButton(
+                    icon = AgarthaIcons.ChevronLeft,
+                    contentDescription = prevDescription,
+                    enabled = canGoPrev,
+                    onClick = onPrev,
+                    tag = prevTag,
+                )
+                CycleButton(
+                    icon = AgarthaIcons.ChevronRight,
+                    contentDescription = nextDescription,
+                    enabled = canGoNext,
+                    onClick = onNext,
+                    tag = nextTag,
+                )
+            }
+        }
     }
 }
 
-/** One side of a [CycleRow]. 48dp square — the minimum touch target, not a decorative size. */
+/** One side of a [CycleRow]. Circular outline button matching the Figma redesign. */
 @Composable
 private fun CycleButton(
     icon: ImageVector,
@@ -256,12 +333,12 @@ private fun CycleButton(
     val colors = AgarthaTheme.colors
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(40.dp)
+            .clip(CircleShape)
             .border(
                 1.dp,
                 if (enabled) colors.borderStrong else colors.border,
-                RoundedCornerShape(12.dp),
+                CircleShape,
             )
             .clickable(enabled = enabled, onClick = onClick)
             .testTag(tag),
@@ -271,6 +348,7 @@ private fun CycleButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = if (enabled) colors.textPrimary else colors.textTertiary,
+            modifier = Modifier.size(20.dp),
         )
     }
 }

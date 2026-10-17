@@ -89,8 +89,8 @@ export enum EggSpecies {
  * Persisted report category.
  *
  * Supabase source of truth:
- * - Created by `0008_reports.sql`
- * - CHECK: `report_type in ('session')`
+ * - Created by `0001_init.sql` (consolidated)
+ * - CHECK widened by `0015_patient_reports.sql`: `report_type in ('session', 'patient')`
  *
  * Room/domain mirror:
  * - `domain/model/ReportType.kt`
@@ -98,6 +98,7 @@ export enum EggSpecies {
  */
 export enum ReportType {
   SESSION = "session",
+  PATIENT = "patient",
 }
 
 /**
@@ -142,18 +143,35 @@ export enum FrameSource {
  * - `0001_init.sql`: creates `profiles`, `handle_new_user()`, base RLS.
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin-readable policies
  *   with `public.is_admin(uuid)` to avoid recursive profile reads.
+ * - `0011_profile_outlives_login.sql`: `id` stops referencing `auth.users`;
+ *   adds `account_id`, cleared when the login is deleted (14zcqntjph8).
+ * - `0014_super_admins.sql`: retires `role`. Super admins are rows in
+ *   `super_admins` (below), and `handle_new_user()` no longer names a role.
  *
- * Room mirror: none. User identity comes from Supabase Auth session state.
+ * - `0008_colleague_names.sql` (current project): `profiles_select_colleague` lets
+ *   a medtech read the profile of a colleague who authored a session or report on
+ *   a patient they are both assigned to. The app selects `id` and `full_name` only.
+ *
+ * Room mirror: `ColleagueEntity.kt` (`colleagues`, v24) caches colleagues' `id` and
+ * `full_name` for read-only records. The signed-in user's own identity comes from
+ * Supabase Auth session state.
  */
 export interface Profile {
   id: UUID;
-  // PK. FK -> auth.users(id). DELETE CASCADE.
+  // PK. The person's permanent id, referenced by every authored row. Equal to
+  // the login id for every profile `handle_new_user()` creates. No FK since 0011.
+
+  account_id: string | null;
+  // UNIQUE. The login this profile belongs to, as the provider's subject id
+  // (text, so it is provider-neutral). Null once the login is deleted: the
+  // person left, their authorship stays. Nothing reads it yet.
 
   full_name: string | null;
   // Nullable display name copied from auth metadata on signup when available.
 
   role: "medtech" | "admin";
-  // NOT NULL. Default `medtech`. CHECK in migration `0001`.
+  // NOT NULL. Default `medtech`. CHECK in migration `0001`. Retired by `0014`:
+  // grants nothing, kept in place. A super admin is a `SuperAdmin` row.
 
   created_at: TimestampTZ;
   // NOT NULL. Default `now()`.
@@ -166,6 +184,10 @@ export interface Profile {
  * Supabase migrations:
  * - `0001_init.sql` (patient-based consolidation): creates `patients`, the
  *   `patient_users` join, and the `on_patient_created` auto-link trigger.
+ * - `0012_deidentified_reads.sql`: `patients_deidentified`, a super-admin-only view
+ *   of every column but `lastname`, `firstname`, `middle_name`, `sex`, `birthdate`.
+ * - `0013_super_admin_reads_deidentified.sql`: the SELECT policy loses its
+ *   `is_admin()` branch; a super admin reads the view, never this table (D19).
  *
  * Room mirror:
  * - `PatientEntity.kt`
@@ -201,11 +223,49 @@ export interface Patient {
 
   created_by: UUID;
   // NOT NULL FK -> profiles(id). Provenance only — it grants no visibility.
-  // Access resolves through `patient_users`.
+  // Access resolves through `patient_users`. Since `0007_patient_shared_history.sql`
+  // the link also opens the patient's whole history — every session, sample,
+  // detection, finding, prediction and report on it, whoever authored them.
 
   created_at: TimestampTZ;
   updated_at: TimestampTZ;
   // Both NOT NULL, default `now()`.
+}
+
+/**
+ * One super admin grant (D22, 14zcqntjwje). A user is a super admin while they
+ * hold a row with `revoked_at` null; `public.is_admin(uuid)` reads exactly that.
+ *
+ * Supabase migrations:
+ * - `0014_super_admins.sql`: creates the table, backfills one active row per
+ *   `profiles.role = 'admin'`, and repoints `is_admin()`.
+ *
+ * No client reads or writes it: RLS is on with no policy, and `anon` and
+ * `authenticated` hold no privilege. Revoking sets `revoked_at`; a trigger
+ * refuses a delete, a truncate and any other update (C8). Grants are made by
+ * hand in the SQL editor until the console adds its own guarded functions.
+ *
+ * Room mirror: none. The app never reads it.
+ */
+export interface SuperAdmin {
+  id: UUID;
+  // PK. Default `uuid_generate_v4()`.
+
+  user_id: UUID;
+  // NOT NULL. FK → `profiles(id)`. At most one active row per user (partial
+  // unique index `where revoked_at is null`, which `is_admin()` also uses).
+
+  granted_by: UUID | null;
+  // FK → `profiles(id)`. Null on the rows `0014` copied from `profiles.role`.
+
+  granted_at: TimestampTZ;
+  // NOT NULL. Default `now()`; on backfilled rows, when `0014` ran.
+
+  revoked_by: UUID | null;
+  // FK → `profiles(id)`. Only with `revoked_at`.
+
+  revoked_at: TimestampTZ | null;
+  // Null while the grant is active. Never set back to null.
 }
 
 /**
@@ -237,6 +297,10 @@ export interface PatientUser {
  * - `0001_init.sql` (patient-based consolidation): creates `sessions` with
  *   `patient_id`, `label` and the two indexes. Three columns present in the
  *   legacy-dev history are deliberately absent — see the interface below.
+ * - `0012_deidentified_reads.sql`: `sessions_deidentified`, a super-admin-only view
+ *   without `label`, which encodes the patient's initials, sex and age.
+ * - `0013_super_admin_reads_deidentified.sql`: the SELECT policy loses its
+ *   `is_admin()` branch; a super admin reads the view, never this table (D19).
  *
  * Room mirror:
  * - `SessionEntity.kt`
@@ -260,10 +324,13 @@ export interface Session {
   // NOT NULL. Default `now()` in Supabase; epoch millis in Room.
 
   label: string | null;
-  // Nullable human-friendly smear label. Auto-generated as
-  // `C.G.-0730600000-001` (initials, the patient's barangay code, then the Nth
-  // smear for that patient) and editable thereafter. Cosmetic and deliberately
-  // not unique — the session UUID is the real key.
+  // Nullable human-friendly smear label. Auto-generated as `LDNJ-M21-S01`
+  // (3-letter surname abbreviation + first initial, sex and age, then the Nth
+  // smear for that patient; domain/session/SessionLabelGenerator.kt) and editable
+  // thereafter. Unique per patient in Room (index on patient_id, label). Postgres
+  // has no constraint; since `0009_session_label_collisions.sql` a trigger renames
+  // a clashing insert or rename to `<label>-<first 4 of id>` and never rejects it.
+  // The session UUID is the real key.
 
   // ── Deliberately absent, all three ────────────────────────────────────────
   // `notes`     — removed. It was being used as an ad-hoc patient identifier
@@ -326,6 +393,10 @@ export interface PsgcBarangay {
  *   `verified_at`, `storage_path`, `inference_model_version`, `user_note`,
  *   `needs_reannotation`, `is_manual`, and `deleted_at`.
  * - Historical development migrations archived under `legacy-dev/` (`0001` through `0013`).
+ * - `0012_deidentified_reads.sql`: `samples_deidentified`, a super-admin-only view
+ *   without `user_note`.
+ * - `0013_super_admin_reads_deidentified.sql`: the SELECT policy loses its
+ *   `is_admin()` branch; a super admin reads the view, never this table (D19).
  *
  * Room mirror:
  * - `SampleEntity.kt`
@@ -394,6 +465,15 @@ export interface Sample {
 
   image_height: number | null;
   // Room-only pixel height.
+
+  inference_state: "queued" | "in_inference" | "ready" | "manual";
+  // Room-only, not null, default 'ready' (Room version 23). Where the frame is in getting its
+  // model output from the background inference queue. Never synced: only a `ready` or `manual`
+  // sample can be verified, and only verified samples reach Supabase. `is_manual` wins over it.
+
+  inference_attempts: number;
+  // Room-only, not null, default 0. Times both inference engines failed on this frame; at the
+  // queue's limit the frame becomes manual.
 
   // ── Deliberately absent ───────────────────────────────────────────────────
   // `gps_latitude` / `gps_longitude` / `gps_accuracy` — removed. The fix was
@@ -532,10 +612,21 @@ export interface SampleSpeciesFinding {
 }
 
 /**
- * Persisted session-level report generated from verified local samples.
+ * Persisted report snapshot, scoped to either one session or one patient.
+ *
+ * A row is a session report (`session_id` set, `patient_id` null) or a patient report
+ * (`patient_id` set, `session_id` null); `reports_scope_check` enforces exactly one. A patient
+ * report pools every session named in `session_ids` into one document — that array is what
+ * keeps the report reproducible if the patient's session list changes later.
+ *
+ * Reports are PDF-only since 86d4be47c — `csv_file_path` is a legacy column read for reports
+ * generated before that change; no report of either scope writes one.
  *
  * Supabase migrations:
  * - `0001_init.sql` (consolidated): creates `reports` with `pdf_file_path` and `lpf_per_species`.
+ * - `0015_patient_reports.sql`: adds `patient_id`, `session_ids`, drops the `session_id` NOT
+ *   NULL, widens `report_type`, adds `reports_scope_check`, and requires a `patient_users` link
+ *   for a patient-report insert.
  * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:
@@ -545,33 +636,41 @@ export interface Report {
   id: UUID;
   // Supabase PK. Room column: `report_id` PK.
 
-  session_id: UUID;
-  // Supabase NOT NULL FK -> sessions(id). DELETE CASCADE.
+  session_id: UUID | null;
+  // Supabase FK -> sessions(id), DELETE CASCADE. NOT NULL only for report_type='session'.
+
+  patient_id: UUID | null;
+  // Supabase FK -> patients(id). NOT NULL only for report_type='patient' (0007).
+
+  session_ids: UUID[] | null;
+  // Supabase `uuid[]`, patient reports only (0007). The sessions pooled into this snapshot.
+  // Room stores as `session_ids_json`. Null on session reports.
 
   user_id: UUID;
   // Supabase NOT NULL FK -> profiles(id). DELETE CASCADE.
 
   report_type: ReportType;
-  // NOT NULL. Default `session`. CHECK currently allows only `session`.
+  // NOT NULL. Default `session`. CHECK allows `session` or `patient` (0007).
 
   generated_at: TimestampTZ;
   // NOT NULL. Default `now()` in Supabase; epoch millis in Room.
 
   total_samples: number;
-  // NOT NULL. Count of non-deleted verified samples in the session at report time.
+  // NOT NULL. Count of non-deleted verified samples in scope at report time.
 
   total_eggs_confirmed: number;
-  // NOT NULL. Sum of confirmed detections across the smear.
+  // NOT NULL. Sum of confirmed detections across the scope.
 
   positive_species: string[];
   // Supabase `text[]` NOT NULL default `{}`. Room stores as `positive_species_json`.
 
   lpf_per_species: Record<string, { mean: number; min: number; max: number }>;
   // Supabase `jsonb` NOT NULL default `{}`. Room stores as `lpf_per_species_json`.
-  // Per-species low-power-field density range (PB-17/18), replacing Kato-Katz EPG.
+  // Per-species low-power-field density range (PB-17/18), replacing Kato-Katz EPG. On a
+  // patient report this is pooled across every included session's findings.
 
   csv_file_path: string | null;
-  // Nullable local/export path to generated CSV.
+  // Nullable. Legacy only — set on reports generated before 86d4be47c; no report writes one now.
 
   pdf_file_path: string | null;
   // Nullable local/export path to generated PDF. Device-local file or URI.
@@ -640,6 +739,12 @@ export interface ValidationRecord {
  * - `0009_storage_admin_read.sql`: adds an admin-only SELECT policy using
  *   `public.is_admin(auth.uid())`. Policies are OR'd, so admins can read across
  *   all user folders while writes stay owner-scoped through `0003`.
+ * - `0007_patient_shared_history.sql` (current project): adds a SELECT policy on
+ *   each bucket for any medtech assigned to the object's patient — `samples` by
+ *   matching `samples.storage_path`, `reports` by the report id in the file name
+ *   and the author in the folder. Writes stay owner-folder only.
+ * - `0013_super_admin_reads_deidentified.sql`: drops `reports: admin read all`;
+ *   a report file prints the patient's name. The `samples` admin read stays.
  *
  * Room mirror: none. `SampleEntity.storage_path` stores the object key after
  * upload.
@@ -694,7 +799,13 @@ export type RelationshipMatrix = [
     from: "auth.users";
     cardinality: "1 -> 0..1";
     to: "profiles";
-    description: "Each Supabase Auth user receives one profile via `handle_new_user()`; profile deletion cascades from auth user deletion.";
+    description: "Each Supabase Auth user receives one profile via `handle_new_user()`. Since `0011` deleting the login keeps the profile and clears `account_id`.";
+  },
+  {
+    from: "profiles";
+    cardinality: "1 -> many";
+    to: "super_admins";
+    description: "A user holds any number of grants over time, at most one active. `is_admin()` reads the active one.";
   },
   {
     from: "profiles";
@@ -742,7 +853,13 @@ export type RelationshipMatrix = [
     from: "sessions";
     cardinality: "1 -> many";
     to: "reports";
-    description: "A session can have generated report snapshots; deleting the session cascades to reports.";
+    description: "A session can have generated session-scoped report snapshots (report_type='session'); deleting the session cascades to reports.";
+  },
+  {
+    from: "patients";
+    cardinality: "1 -> many";
+    to: "reports";
+    description: "A patient can have generated patient-scoped report snapshots (report_type='patient', 0007) pooling several sessions via `session_ids`; deleting the patient cascades to reports.";
   },
   {
     from: "profiles";
@@ -760,7 +877,7 @@ export type RelationshipMatrix = [
     from: "profiles";
     cardinality: "1 -> many";
     to: "storage.objects";
-    description: "Storage RLS permits users to read/write objects only in their own top-level folder.";
+    description: "Storage RLS permits users to write objects only in their own top-level folder. Reads also reach a colleague's object when the reader is assigned to its patient (`0007_patient_shared_history.sql`).";
   },
   {
     from: "samples";
@@ -807,8 +924,10 @@ export type RelationshipMatrix = [
  *   Supabase. Its sibling `claim_exempt` is gone: login is mandatory on first
  *   run, so every row has an owner from the moment it is created and the whole
  *   deferred-claim axis it served has nothing left to do.
- * - Reports are implemented for session reports only; admin/cross-session
- *   report types require a future migration.
+ * - Reports have two scopes since `0015_patient_reports.sql`: session reports
+ *   (`session_id` set, `patient_id` null) and patient reports (`patient_id` set,
+ *   `session_id` null, `session_ids` records the pooled sessions). Admin/cross-user
+ *   report types still require a future migration.
  * - Room `psgc_barangays` has no Supabase counterpart at all. It is bundled
  *   reference data for the barangay picker; the surveillance map joins
  *   `patients.psgc_barangay_code` against PSGC boundary GeoJSON instead. The

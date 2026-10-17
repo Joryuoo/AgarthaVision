@@ -51,6 +51,9 @@ internal object VerifyTestTags {
     const val LEAVE_DIALOG_CONFIRM = "leave_dialog_confirm"
     const val LEAVE_DIALOG_DISMISS = "leave_dialog_dismiss"
 
+    /** The layer that swallows input over the sheet while a save is in flight. */
+    const val SAVING_INPUT_BLOCKER = "saving_input_blocker"
+
     /** Discard-changes confirmation dialog when leaving/discarding unsaved edits. */
     const val DISCARD_CHANGES_CONFIRM = "discard_changes_confirm"
     const val DISCARD_CHANGES_DISMISS = "discard_changes_dismiss"
@@ -199,6 +202,17 @@ internal object VerifyTestTags {
     /** Discards the box already drawn on egg [slot] of the added species at [findingIndex]. */
     fun removeDrawnBox(findingIndex: Int, slot: Int): String =
         "remove_drawn_box_" + findingIndex + "_" + slot
+
+    /** "Frame is in inference", shown while the model output is pending (14zcqntj6p1). */
+    const val MODEL_OUTPUT_PENDING = "model_output_pending"
+
+    /** Opens the "cancel inference?" confirmation. */
+    const val CANCEL_INFERENCE = "cancel_inference"
+    const val CANCEL_INFERENCE_CONFIRM = "cancel_inference_confirm"
+    const val CANCEL_INFERENCE_DISMISS = "cancel_inference_dismiss"
+
+    /** A queue row's inference-state pill, suffixed with which of the four it is showing. */
+    fun inferenceBadge(badge: InferenceBadge): String = "inference_badge_" + badge.name.lowercase()
 
     // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
     // so a question has one control and its own tag is enough to reach it.

@@ -15,17 +15,22 @@ A ViewModel must not reach Room, Retrofit, or Supabase directly. It calls a use 
 a single `StateFlow<ScreenState>`, and emits one-shot events on a `SharedFlow`.
 
 **Enforcement:** review only. No lint rule, no detekt rule, no CI check. `detekt.yml` covers
-complexity, naming, and magic numbers — there is no import-boundary rule in it
-(`detekt.yml:1-49`).
+complexity, naming, and magic numbers — there is no import-boundary rule in it.
 
 **As-built:** the literal rule holds — no file under `ui/` imports `androidx.room`,
 `retrofit2`, or `io.github.jan.*`. The spirit is bent in two ViewModels that inject the
-data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:10`,
-`ui/verify/VerificationViewModel.kt:5`). It was four until `ManualCaptureViewModel` was deleted
+data-layer `FlaggedFrameStore` directly (the imports of `ui/capture/CaptureViewModel.kt` and
+`ui/verify/VerificationViewModel.kt`). It was four until `ManualCaptureViewModel` was deleted
 by the one-verification-screen merge (86d4ab4tq) and `VerificationQueueViewModel` moved to
 `ObserveVerificationQueueUseCase`. The composable that once rendered a wire DTO no
-longer does — `FrameWithBoxes` takes domain `Prediction` values
-(`ui/verify/FrameWithBoxes.kt:15`), and nothing under `ui/` imports from `data/remote/dto/`.
+longer does — `ui/verify/FrameWithBoxes.kt::FrameWithBoxes` takes UI `FrameBox` values, and
+nothing under `ui/` imports from `data/remote/dto/`.
+
+Three ViewModels skip the use-case layer and inject a `domain/repository/` interface directly:
+`PatientFormViewModel` (`PatientRepository`, `PsgcRepository` — it inserts and updates patients
+itself), `SessionsViewModel` and `DashboardViewModel`
+(`grep -n "import com.agarthavision.domain.repository" ui/*/*ViewModel.kt` lists them). That is
+not the data layer, so the literal rule holds, but it is the shape C1 exists to prevent.
 
 ## C2 — `domain/` stays Android-free
 
@@ -36,10 +41,12 @@ the JVM without Robolectric.
 Compose UI tests under `app/src/test/java/com/agarthavision/ui/verify/` use it deliberately
 so they run in `:app:testDebugUnitTest` instead of needing a device. See `commands.md`.
 
-**Enforcement:** review only. **This one actually holds** — zero files under
-`app/src/main/java/com/agarthavision/domain/` import `android.*`.
+**Enforcement:** review only, and **it is not quite holding.** Two files import
+`android.*`: `domain/usecase/sync/FetchRemoteDataUseCase.kt` (`SQLiteConstraintException`,
+`Log`) and `domain/usecase/sync/CacheSampleImagesUseCase.kt` (`Log`). Every other file under
+`domain/` is Android-free.
 
-**Caveat:** the domain layer *does* import the data layer in eleven files, which the same
+**Caveat:** the domain layer also imports the data layer in sixteen files, which the same
 architecture section forbids in spirit — see C3.
 
 ## C3 — Repository interfaces in `domain/`, implementations in `data/`
@@ -50,57 +57,95 @@ and mappers convert between them.
 
 **Enforcement:** the Hilt binding module is the only mechanical check, and it only proves the
 bindings exist, not that the boundary is respected
-(`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:79-127`).
+(`core/di/DatabaseModule.kt::RepositoryModule`).
 
 **As-built:** the interface/implementation split is clean. The layering below it is not:
 several `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
-directly rather than going through a repository —
-`domain/usecase/verify/SubmitVerificationUseCase.kt:3-8`,
-`domain/usecase/sync/SyncPendingDataUseCase.kt:4-11`,
-`domain/usecase/sync/FetchRemoteDataUseCase.kt:7-17`.
+directly rather than going through a repository. The imports of
+`domain/usecase/verify/SubmitVerificationUseCase.kt`,
+`domain/usecase/sync/SyncPendingDataUseCase.kt` and
+`domain/usecase/sync/FetchRemoteDataUseCase.kt` are the clearest cases; sixteen files under
+`domain/usecase/` import `com.agarthavision.data` in all.
 
 ## C4 — Use cases return `Result<T>`
 
 A use case has one public entry point (`operator fun invoke` or `suspend fun execute`) and
 returns `Result<T>` so the caller handles both branches. Never swallow an exception.
 
-**Enforcement:** review only, and **it is not holding.** Many of the roughly thirty
-files under `domain/usecase/` never mention `Result<` — for example
-`domain/usecase/reports/SessionEggCountUseCase.kt:19`, which returns a bare data class. Treat
+**Enforcement:** review only, and **it is not holding.** Most `Observe*` use cases return a
+`Flow`, which is a reasonable exception, but some one-shot use cases return a bare value too —
+for example `domain/usecase/capture/PersistFlaggedFrameUseCase.kt::invoke` returns a `String`
+and `domain/usecase/auth/DiscardUnsyncedDataUseCase.kt::invoke` a bare data class. Treat
 C4 as the target shape for new code, not a description of the existing code. Newer capture code
-follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<FrameSource>`.
+follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<CaptureOutcome>`.
 
 ## C5 — `@Singleton` is a closed list
 
-`@Singleton` is for the database, OkHttp, Retrofit, Gson, the Supabase client, and the
-app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `CameraManager`,
-`NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped, with one
-exception: `BoundaryRepository` (`data/repository/BoundaryRepositoryImpl.kt`), which parses
-~25-40k quantized points out of the bundled offline boundary assets once per process. An
-unscoped or lifecycle-scoped alternative would repeat that parse on every screen that touches
-province/town geometry.
+`@Singleton` is for the database, the settings DataStore, OkHttp, Retrofit, the inference API,
+Gson, the Supabase client, and the app-scoped services `SessionManager`, `FlaggedFrameStore`,
+`FrameSampler`, `CameraManager`, `NetworkMonitor`, `ConnectivityObserver`, `DeviceIdProvider`,
+`SampleImageStore` and `WorkManagerSyncScheduler`. The inference side adds the two engines
+(`RemoteInferenceEngine`, and `OnDeviceInferenceEngine` with its `ModelStore`,
+`FramePreprocessor` and `YoloOutputDecoder`), which hold a compiled model or a client and are
+expensive to build, `NetworkErrorMapper`, `WorkManagerInferenceQueue`, and
+`InferenceQueueProcessor`, which holds the circuit breaker, the retry schedule and the lock that
+keeps passes from overlapping: WorkManager builds a new worker per pass, so those must outlive
+it. Repositories and use cases are unscoped, with two exceptions that each parse a bundled asset
+once per process: `BoundaryRepository` (`data/repository/BoundaryRepositoryImpl.kt`), ~25-40k
+quantized points of offline boundary geometry, and `PsgcRepository`. An unscoped or
+lifecycle-scoped alternative would repeat that parse on every screen that needs it.
 
-**Enforcement:** review only. The scoped set is visible at
-`core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,
-`core/di/SupabaseModule.kt:23-33`, and on the classes themselves
-(`core/session/SessionManager.kt:29`, `core/camera/FrameSampler.kt:28`,
-`data/repository/FlaggedFrameStore.kt:40`). `SupabaseClient` is injected as
+**Enforcement:** review only. The scoped set is the `@Singleton` providers and binds in
+`core/di/` (`DatabaseModule`, `InferenceModule`, `SupabaseModule`, `PreferencesModule`,
+`SyncModule`) plus the classes annotated directly. `grep -rl "@Singleton" app/src/main` lists
+all of them; a new hit that is not named above is a C5 question for review. `ClockModule` is
+deliberately unscoped and says why. `SupabaseClient` is injected as
 `dagger.Lazy<SupabaseClient>` so resolving a ViewModel never constructs it on the main thread;
 the app warms it off-main in `AgarthaVisionApp.onCreate`.
 
 ## C6 — Migrations own the schema
 
-`supabase/migrations/0001_init.sql` is the authority for Postgres tables, nullability, defaults,
-foreign keys, CHECKs, and RLS on the consolidated `agarthavision` project; pre-patient migration
-history `0001`–`0013` is archived under `supabase/migrations/legacy-dev/` as the description of
-the dev and prod projects. Do not change schema behaviour without updating both the migration SQL
+`supabase/migrations/` is the authority for Postgres tables, nullability, defaults, foreign
+keys, CHECKs, and RLS: `0001_init.sql` and the numbered files after it describe the
+`agarthavision` project, and `legacy-dev/` describes the dev and prod projects (see
+[`file-tree.md`](file-tree.md#supabasemigrations)). Do not change schema behaviour without updating both the migration SQL
 **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in the Supabase
-dashboard SQL editor — never applied programmatically (`supabase/migrations/0001_init.sql:2`).
+dashboard SQL editor — never applied programmatically (`supabase/migrations/0001_init.sql:3`).
 Room is a separate mirror: a Room-shape change means bumping `AgarthaDatabase.version`
-(`core/database/AgarthaDatabase.kt:105`).
+(`core/database/AgarthaDatabase.kt`).
 
-**Enforcement:** review only. There is no migration runner and no schema-diff test.
-`schema.ts` is documentation and is never compiled (`schema.ts:4-5`).
+**This folder is the authority for what this repository owns, not for the whole database.** The
+Admin Console runs a second migration set against the same `agarthavision` database. It lives in
+its own repository at `supabase/migrations/admin/NNNN_*.sql`, with its own number sequence, and
+covers organizations, memberships, patient ownership and the audit log. That set is **additive
+only**: it adds tables, functions, triggers and permissive policies, and never alters or drops
+a table, column, function or policy this repository owns. Anything that changes an app-owned
+table's shape or policies is written here. It does reach app-owned tables in two ways: one
+`AFTER INSERT` trigger on `patients` that never raises, and org-admin `SELECT` policies. It also
+depends on app columns that a migration here must not rename without telling the console team.
+What it adds, and those columns:
+[`file-tree.md`](file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
+Never copy admin SQL into this repository.
+
+**Super admins live in `super_admins`, not on the profile** (`0014_super_admins.sql`, D22). A
+user is a super admin while they hold a row there with `revoked_at` null, and `is_admin()` is the
+one way to ask. `profiles.role` is retired and grants nothing. No signed-in caller reads or
+writes `super_admins`, and a revoke sets `revoked_at` rather than deleting the row (C8). Do not
+put authority back on `profiles`, and do not add a policy that lets a client touch
+`super_admins`. Details:
+[`Profile`](map/objects/Profile.md#super-admins).
+
+**From Room version 23, every bump ships a hand-written `Migration`.** Earlier bumps fell back
+to a destructive rebuild, which was acceptable while the local database held nothing Supabase
+did not. Version 23 added the inference queue: frames that are captured, waiting on a model
+and not yet verified exist on the phone only. `MIGRATION_22_23` (`core/database/Migrations.kt`)
+is the first. Add the next one to `ALL_MIGRATIONS` and export its schema JSON beside it.
+Destructive fallback remains only for installs older than 22.
+
+**Enforcement:** partly mechanical on the Room side. `AgarthaDatabaseSchemaTest` pins the Room
+version and the columns each branch added, and `Migration22To23Test` and `Migration23To24Test`
+each build the previous version from its committed `app/schemas/.../<n>.json` and migrate it. The Postgres side has no migration runner and no
+schema-diff test. `schema.ts` is documentation and is never compiled (its header comment).
 
 **Known drift, code wins:** `schema.ts` previously named Room entity names (`samples.timestamp`,
 `samples.image_path`, `samples.created_at`, `gps_*`) as if they were Postgres columns. The
@@ -113,9 +158,10 @@ No model output counts as a finding until a human confirms it. This is a clinica
 requirement, not a preference: the app is decision support, not a diagnostic authority. The
 inference server applies **no confidence filter** — the expert is the threshold. Every
 detection carries a per-box verdict from the medtech
-(`supabase/migrations/0002_verification_fields.sql:30-32`), computed from the questionnaire at
-`data/local/mapper/VerificationMapper.kt:10-17`. A frame only becomes a `Sample` when the
-medtech submits (`domain/usecase/verify/SubmitVerificationUseCase.kt:34-44`).
+(`supabase/migrations/0001_init.sql:237-238`), computed from the questionnaire by
+`data/local/mapper/VerificationMapper.kt::computeVerdict`. A frame only becomes a verified
+`Sample` when the medtech submits (`domain/usecase/verify/SubmitVerificationUseCase.kt::invoke`),
+and submit refuses a frame whose inference is still pending (`InferencePendingException`).
 
 **Enforcement:** structural — there is no code path that writes a `verified` sample without a
 submission. That is the strongest enforcement in this list; keep it that way.
@@ -126,14 +172,15 @@ A rejection is data, not a deletion. Rejected detections persist with
 `verdict = FALSE_POSITIVE` so the `detections` table doubles as the retraining corpus. There
 is no `REJECTED` sample state.
 
-**Enforcement:** structural, at the storage layer — `0003_storage_rls.sql` deliberately
-creates no DELETE policy for the `samples` bucket
-(`supabase/migrations/0003_storage_rls.sql:45-46`), and `0009_storage_admin_read.sql:32`
-restates the stance. That remains true and was not amended.
+**Enforcement:** structural, at the storage layer — the consolidated schema deliberately
+creates no DELETE policy for the `samples` bucket (`supabase/migrations/0001_init.sql:538-540`),
+carried over from `legacy-dev/0003_storage_rls.sql:45-46` and restated in
+`legacy-dev/0009_storage_admin_read.sql:32`. That remains true and was not amended.
 
 **A verified sample can be tombstoned, and that is not a deletion.** A medtech who captured
 the same egg twice needs the duplicate out of the queue, the counts and the report. Setting
-`samples.deleted_at` (`supabase/migrations/0013_sample_soft_delete.sql`) does exactly that
+`samples.deleted_at` (`supabase/migrations/0001_init.sql:202`, originally
+`legacy-dev/0013_sample_soft_delete.sql`) does exactly that
 and nothing more: the detections stay, the findings rows stay, the local JPEG stays, and the
 Storage object stays. Every query that lists or counts samples filters `deleted_at is null`,
 enforced by a naming rule and `SoftDeleteGuardTest` rather than by memory. Do not read the
@@ -146,8 +193,7 @@ the two a delete is, and it branches on `status`.
 
 **One softening, recorded rather than hidden.** Remote sample and detection writes are now
 upserts rather than inserts, because a verified sample is editable and syncs more than once
-(the citation that used to appear here, `SampleRemoteDataSource.kt:40-43`, described the old
-insert-only shape). So an edit overwrites a previously-synced label: correcting a
+(`data/supabase/SampleRemoteDataSource.kt::syncSample` upserts). So an edit overwrites a previously-synced label: correcting a
 `FALSE_POSITIVE` to `CONFIRMED` removes the old row from the corpus rather than adding beside
 it. That is the intended reading — the current expert opinion is the truth — but it is a real
 change to what C8 guarantees. Keeping both would need a `supersedes_detection_id` column and
@@ -156,6 +202,19 @@ its own ticket.
 **Findings rows are replaced wholesale on edit**, so a species logged in error disappears. A
 count is a current statement, like `samples.user_note`, not evidence — and the things this
 constraint exists to protect are untouched by it.
+
+**Authorship outlives the login** (`0011_profile_outlives_login.sql`, 14zcqntjph8,
+14zcqntjvjx). A medtech who leaves a laboratory is offboarded by deleting their login, which
+frees the email for the next laboratory that hires them, or for this one if it rehires them.
+Deleting the login never touches their work: `profiles.id` is the person's permanent id and no
+longer references `auth.users`, so nothing cascades. Their profile, every patient, session,
+sample and report they authored, their organization membership and their audit-log entries all
+stay, still naming them. Only `profiles.account_id` changes, to null, meaning "no login now".
+Every table that names a person references `profiles`, never `auth.users`, so this one link is
+the only thing a deleted login can reach. A rehire is not yet reconnected to the profile they
+already have: their new login gets a fresh one (see [`Profile`](map/objects/Profile.md)).
+Nothing in this repository deletes a login. Sign-out and the deactivation wipe act on the phone
+only, and the wipe keeps work that has not synced (`WipeLocalAccountDataUseCase`).
 
 **Patient PII and long-term retention:** While C8 mandates indefinite retention of microscopy
 images, bounding boxes, and model evaluation labels for the retraining corpus, clinical personal
@@ -205,7 +264,7 @@ developers to understand, verify, and decide how to solve.
 
 
 **Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
-above (`.husky/commit-msg:14-17`). Merge, revert, fixup, and squash subjects are skipped
+above (the `types` and `pattern` variables in `.husky/commit-msg`). Merge, revert, fixup, and squash subjects are skipped
 because git writes those itself; only the first line is checked, so bodies are free-form.
 A rejected commit prints the format, the type list with a gloss for each, and the subject
 that failed.
@@ -215,23 +274,27 @@ that failed.
 commits, so the log is mixed and that is expected, not drift.
 
 **Caveat:** `commitlint.config.js` is still committed and still extends
-`@commitlint/config-conventional` with a scope enum (`commitlint.config.js:1-16`) — a
+`@commitlint/config-conventional` with a scope enum — a
 *conventional-commit* shape that contradicts the bracket format above and is wired to no
 hook. `lint-staged.config.js` is likewise unreferenced by any hook. Both are dead
 configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
-Supabase URLs, anon keys, and the inference bearer token live in `local.properties`, which is
-gitignored (`.gitignore:3`, `.gitignore:15`). They reach the app as `BuildConfig` fields read
-at build time (`app/build.gradle.kts:19-21`, `app/build.gradle.kts:47-93`). A missing property
+Supabase URLs, publishable keys, and the inference bearer token live in `local.properties`, which is
+gitignored (`/local.properties` and `local.properties` in `.gitignore`). They reach the app as
+`BuildConfig` fields read at build time (`localProperties` and `buildTypes` in
+`app/build.gradle.kts`). A missing property
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
+The Turnstile site key and hostname (`TURNSTILE_SITE_KEY_*`, `TURNSTILE_HOSTNAME_*`) take the same
+path although a site key is public; the widget's secret key is never in the app or the repo, only
+in Supabase's CAPTCHA setting.
 
 **Enforcement:** `.gitignore` plus review. CI runs in `.github/workflows/build-and-test.yml`
 (verifying compile and Roborazzi screenshot tests without requiring secrets).
 
-**Drift, fixed in PB-01:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
+**Drift, fixed in PB-01:** the debug and release `buildTypes` read `INFERENCE_API_KEY_DEV` /
 `INFERENCE_API_KEY_PROD`. `local.properties.example` now documents both suffixed names.
 
 **Patient data privacy and at-rest security:** Like application secrets, patient Personally
@@ -240,6 +303,20 @@ history, test artifacts, or logs. Local on-device SQLite storage (Room) and repo
 storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
 validation mandate requiring synthetic patient profiles are documented in
 [`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
+**Super admins read patients de-identified (D19, 14zcqntjvjw).** A super admin, an active
+`super_admins` row since `0014` and `profiles.role = 'admin'` before it, is the AgarthaVision
+team, the clinics' processor, not their controller. Since
+`0013_super_admin_reads_deidentified.sql` the `patients`, `sessions` and `samples` SELECT
+policies have no `is_admin()` branch (`:38-56`), and neither has `can_read_session()` (`:60`),
+so a super admin reads no name, sex, birthdate, session label (it encodes initials, sex and
+age) or sample note, and no report file (`:113`). They read the non-identifying columns through
+`patients_deidentified`, `sessions_deidentified` and `samples_deidentified`
+(`0012_deidentified_reads.sql:50-89`), which return rows only to `is_admin(auth.uid())`.
+Detections, findings, predictions, report rows, patient links, frames and
+`barangay_prevalence()` are unchanged. **A new identifying column goes nowhere near those
+views**, and a new super admin read of clinical data goes through them. Medtechs and
+organization admins are unaffected.
 
 
 ## C11 — One design system
@@ -250,7 +327,7 @@ palette definition; screens read the mode-aware `AgarthaTheme.colors.*` rather t
 `AppColors.*` directly, so both modes resolve. Capture is exempt — it stays dark and
 immersive regardless of the toggle. No second theme and no charting library: small dataviz
 is hand-built inline SVG. Icons are mixed and deliberately so — `material-icons-extended`
-(`app/build.gradle.kts:121`) supplies utility glyphs inside screens (chevrons, back arrows,
+(in `app/build.gradle.kts` `dependencies`) supplies utility glyphs inside screens (chevrons, back arrows,
 filter, flag), while the bottom bar, brand marks and anything read as house identity come
 from `ui/icons/` as **Material Symbols (Rounded, fill 0)** exports generated into Compose
 `ImageVector`s (`ui/icons/AgarthaIcons.kt`). Match the neighbours: a new tab or brand icon is
@@ -273,10 +350,25 @@ with no `contentDescription`, so a capture back button and a sheet close button 
 invisible to TalkBack.
 
 **Drift, corrected in 86d4be3na:** this paragraph described house glyphs as "hand-authored
-1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds only
-`ic_launcher_background`, `ic_launcher_foreground` and `ic_logo`; every UI glyph is, and was,
-a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten, because
-the stale wording is what produced a hand-drawn tab icon (C13).
+1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds the launcher and logo
+vectors, the exported onboarding illustrations, and no hand-authored UI glyphs; every UI glyph is,
+and was, a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten
+(and updated again when the onboarding illustrations arrived), because the stale wording is what produced a
+hand-drawn tab icon (C13).
+
+**Illustrations are exported art, not drawn in code.** Non-interactive visuals - the onboarding illustrations, the
+empty-state illustrations (`res/drawable/ill_empty_{name}_{light,dark}.xml`) and the login hero pattern
+(`ill_login_pattern.xml`) - are custom vector artwork designed in Figma and shipped as vector drawables in
+`res/drawable/ill_*`. Their SVG source is given or planned (a Figma design or an SVG export), and converting it into a
+drawable is expected, including a scripted conversion (Android vectors cannot dash a stroke, so dashed or dotted
+strokes become real shapes). The rule above against hand-authored geometry is about icons, UI glyphs, buttons and
+anything clickable; it does not forbid a custom SVG/vector visual that is purely decorative. Two limits: never invent
+or redraw illustration geometry in Kotlin (`ImageVector`, `Canvas`), and never tint it; to change one, change the
+design and replace the file. Light and dark ship as separate files chosen with `AgarthaTheme.colors.isDark` (the
+in-app toggle, so no `drawable-night`), except a theme-neutral drawable such as the login pattern. Illustrations are
+decorative, so they take `contentDescription = null`. `res/drawable/ill_*` files are exempt from the raw-hex rule
+because they come from the design tool, not authored in code. Icons, UI glyphs and anything clickable are not covered
+by this exemption and must never be an `ill_*` drawable.
 
 **User-facing strings and localization:** All user-facing prose copy lives in `res/values/strings.xml` and is referenced via `stringResource` or `pluralStringResource`. Non-prose formatting glyphs (such as punctuation separators `" · "` or `"·"` and direction/trend symbols `"↑ "`) are explicitly exempt from `strings.xml` extraction as they carry no translatable prose content.
 
@@ -304,12 +396,13 @@ document in the same change. Never propagate a claim from a document into a card
 opening the file it describes.
 
 **Enforcement:** none mechanical — this is the working rule that makes the rest of the shelf
-trustworthy. Every load-bearing claim in `docs/` carries a `path:line` citation precisely so
-this rule is checkable.
+trustworthy. Every load-bearing claim in `docs/` carries a citation precisely so this rule is
+checkable: `path::symbol` for code, `path:line` only for SQL migrations (see
+`CONTEXT.md` house rules).
 
 **Live examples of documents losing:** the `schema.ts` column names in C6 (corrected in PB-24);
 the `INFERENCE_API_KEY` name in C10 (corrected in PB-01); the "flagged frames are transient / in-memory"
 claim, which is wrong — `FlaggedFrameStore` is Room-backed
-(`data/repository/FlaggedFrameStore.kt:33-34`, `:58-74`); and the LPF counting rule, where the
-query counts everything that is not a false positive
-(`data/local/dao/DetectionDao.kt:43`).
+(`data/repository/FlaggedFrameStore.kt::state`); and the LPF counting rule, where the query
+counts everything that is not a false positive
+(`data/local/dao/DetectionDao.kt::getConfirmedEggCountsForSession`).

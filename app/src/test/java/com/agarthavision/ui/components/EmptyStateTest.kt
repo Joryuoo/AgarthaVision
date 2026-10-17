@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import com.agarthavision.R
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Rule
 import org.junit.Test
@@ -124,5 +125,37 @@ class EmptyStateTest {
 
         composeRule.onNodeWithText("Short title").assertIsDisplayed()
         composeRule.onNodeWithText("Longer supporting sentence for the user.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `illustration variant still renders title and body`() {
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                EmptyState(
+                    title = "Nothing here",
+                    body = "Come back later.",
+                    illustrationLight = R.drawable.ill_empty_sessions_light,
+                    illustrationDark = R.drawable.ill_empty_sessions_dark,
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Nothing here").assertIsDisplayed()
+        composeRule.onNodeWithText("Come back later.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `icon is optional`() {
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                EmptyState(
+                    title = "Nothing here",
+                    body = "Come back later.",
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Nothing here").assertIsDisplayed()
+        composeRule.onNodeWithText("Come back later.").assertIsDisplayed()
     }
 }

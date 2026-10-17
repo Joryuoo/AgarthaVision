@@ -19,37 +19,37 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.ChevronRight
-import com.agarthavision.ui.icons.Download
-import com.agarthavision.ui.icons.RemoveCircle
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.RectangleShape
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.agarthavision.R
-import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.ui.components.ReadOnlyAuthorNote
+import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.DescriptionFilled
+import com.agarthavision.ui.icons.Download
 import com.agarthavision.ui.image.SampleImageRef
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -62,57 +62,87 @@ internal fun ReportsSection(
     state: SessionDetailContentState,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
+    // A report covers verified samples only, so with none there is nothing to report on
+    // (86d4bzm9k). A sample verified as negative still counts: that is a result.
+    val canGenerate = state.session.verifiedSamples.isNotEmpty()
+    val readOnlyAuthor = state.readOnlyAuthor
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(AgarthaTheme.colors.surfaceVariant, RoundedCornerShape(12.dp))
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .background(colors.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(16.dp),
     ) {
-        // A report covers verified samples only, so with none there is nothing to report on
-        // (86d4bzm9k). A sample verified as negative still counts: that is a result.
-        val canGenerate = state.session.verifiedSamples.isNotEmpty()
+        if (readOnlyAuthor != null) {
+            ReadOnlyAuthorNote(authorName = readOnlyAuthor.name)
+            Spacer(Modifier.height(8.dp))
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             // The subtitle can now be a full sentence; weight lets it wrap instead of pushing
             // the button out, and the gap keeps the two apart when it does.
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                 Text(
                     text = stringResource(R.string.report_section_title),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 18.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary,
                 )
                 Text(
                     text = when {
+                        readOnlyAuthor != null && state.totalReports == 0 ->
+                            stringResource(R.string.report_empty)
+                        readOnlyAuthor != null ->
+                            stringResource(R.string.report_generated_count, state.totalReports)
                         !canGenerate -> stringResource(R.string.report_needs_verified_sample)
                         state.totalReports == 0 -> stringResource(R.string.report_empty)
                         else -> stringResource(R.string.report_generated_count, state.totalReports)
                     },
-                    fontSize = 12.sp,
-                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    color = colors.textSecondary,
                 )
             }
             // Icon rather than a label: the text pill fought the subtitle for width and
             // lost its shape. The app bar's duplicate download button is gone, so this is
             // now the only way to generate from here.
-            GenerateReportButton(
-                isGenerating = state.isGenerating,
-                enabled = canGenerate,
-                onClick = state.onGenerate,
-            )
+            // Not on a colleague's session: its author generates its reports (14zcqntjph6).
+            if (readOnlyAuthor == null) {
+                GenerateReportButton(
+                    isGenerating = state.isGenerating,
+                    enabled = canGenerate,
+                    onClick = state.onGenerate,
+                )
+            }
         }
 
-        state.reports.forEach { report ->
-            ReportRow(report = report, onOpen = { state.onOpenReport(report) })
+        if (state.reports.isNotEmpty()) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                thickness = 1.dp,
+                color = colors.border,
+            )
+            state.reports.forEachIndexed { index, report ->
+                if (index > 0) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        thickness = 1.dp,
+                        color = colors.border,
+                    )
+                }
+                ReportRow(report = report, onOpen = { state.onOpenReport(report) })
+            }
         }
 
         // Only paginate once reports spill past a single page.
         if (state.totalReports > REPORTS_PER_PAGE) {
+            Spacer(Modifier.height(8.dp))
             ReportsPager(
                 currentPage = state.currentPage,
                 totalReports = state.totalReports,
@@ -125,80 +155,128 @@ internal fun ReportsSection(
 
 @Composable
 private fun ReportRow(report: Report, onOpen: () -> Unit) {
+    val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .clickable(
-                enabled = report.pdfFilePath != null || report.csvFilePath != null,
+                enabled = report.pdfFilePath != null,
                 onClick = onOpen,
             )
             .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(
+            modifier = Modifier
+                .size(width = 46.dp, height = 50.dp)
+                .background(colors.surfaceMuted, RoundedCornerShape(10.dp))
+                .border(1.dp, colors.border, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = AgarthaIcons.DescriptionFilled,
+                    contentDescription = null,
+                    tint = colors.brandFill,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = stringResource(R.string.report_format_pdf),
+                    fontSize = 9.sp,
+                    lineHeight = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textSecondary,
+                )
+            }
+        }
+
+        Spacer(Modifier.width(12.dp))
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = report.generatedAt.formatReportDateTime(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = AgarthaTheme.colors.textPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
             )
+            Spacer(Modifier.height(2.dp))
+            val andOthersLabel = stringResource(R.string.report_and_others)
+            val positiveSpeciesText = remember(report.positiveSpecies, andOthersLabel) {
+                formatReportPositiveSpecies(report.positiveSpecies, andOthersLabel)
+            }
             Text(
-                text = report.positiveSpecies.joinToString(", ").ifBlank {
+                text = positiveSpeciesText.ifBlank {
                     stringResource(R.string.report_no_positive_species)
                 },
-                fontSize = 12.sp,
-                color = AgarthaTheme.colors.textSecondary,
+                fontSize = 13.sp,
+                color = colors.textSecondary,
+                lineHeight = 17.sp,
             )
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (report.pdfFilePath != null) {
-                    FormatChip(stringResource(R.string.report_format_pdf))
-                }
-                if (report.csvFilePath != null) {
-                    FormatChip(stringResource(R.string.report_format_csv))
-                }
-            }
         }
+
+        Spacer(Modifier.width(8.dp))
+
         ReportStatusPill(status = report.supabaseStatus)
     }
 }
 
+internal fun formatReportPositiveSpecies(
+    species: List<String>,
+    andOthersLabel: String = "and others",
+): String {
+    val mainPresent = mutableListOf<String>()
+    var hasOther = false
+
+    for (name in species) {
+        val eggSpecies = EggSpecies.fromClassLabel(name)
+        if (eggSpecies != null && eggSpecies != EggSpecies.OTHER) {
+            val canonical = eggSpecies.canonicalClass ?: name
+            if (canonical !in mainPresent) {
+                mainPresent.add(canonical)
+            }
+        } else if (name.isNotBlank()) {
+            hasOther = true
+        }
+    }
+
+    val displayItems = if (hasOther) {
+        mainPresent + andOthersLabel
+    } else {
+        mainPresent
+    }
+    return displayItems.joinToString(", ")
+}
 
 @Composable
 private fun GenerateReportButton(
     isGenerating: Boolean,
     enabled: Boolean,
-    onClick: (ExportFormat) -> Unit,
+    onClick: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
-    var menuExpanded by remember { mutableStateOf(false) }
     val clickable = enabled && !isGenerating
-    Box {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .background(
-                    if (clickable) colors.accent else colors.borderStrong,
-                    RoundedCornerShape(999.dp),
-                )
-                .clickable(enabled = clickable, onClick = { menuExpanded = true }),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = AgarthaIcons.Download,
-                contentDescription = stringResource(
-                    if (isGenerating) R.string.report_generating else R.string.report_export
-                ),
-                tint = colors.onAccent,
-                modifier = Modifier.size(17.dp),
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .background(
+                if (clickable) colors.brandFill else colors.brandFill.copy(alpha = 0.4f),
+                CircleShape,
             )
-        }
-        ExportFormatMenu(
-            expanded = menuExpanded,
-            onDismiss = { menuExpanded = false },
-            onSelect = onClick,
+            .clip(CircleShape)
+            .clickable(enabled = clickable, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = AgarthaIcons.Download,
+            contentDescription = stringResource(
+                if (isGenerating) R.string.report_generating else R.string.report_generate,
+            ),
+            tint = Color.White,
+            modifier = Modifier.size(20.dp),
         )
     }
 }
@@ -228,23 +306,30 @@ internal fun SectionHeader(
 internal fun SampleTile(
     sample: SampleUi,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val species = sample.speciesLabel()
+    val colors = AgarthaTheme.colors
+    val eggCountText = pluralStringResource(
+        R.plurals.sessions_eggs_count,
+        sample.eggCount,
+        sample.eggCount,
+    )
+    val descriptionRes = if (sample.isManual) {
+        R.string.sample_tile_content_description_manual
+    } else {
+        R.string.sample_tile_content_description
+    }
+    val description = stringResource(descriptionRes, eggCountText)
+
     Box(
-        modifier = Modifier
+        modifier = modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(14.dp))
             .background(AppColors.MicroscopeBrush)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
-                // No confidence and not manual means the medtech rejected every box: no eggs,
-                // which the species label already says. It is not a manual capture.
-                val provenance = when {
-                    sample.confidence != null -> ", ${sample.confidence} percent confidence"
-                    sample.source == SampleSource.Manual -> ", manual capture"
-                    else -> ""
-                }
-                contentDescription = "Sample ${sample.id}, $species$provenance"
+                contentDescription = description
             },
     ) {
         SubcomposeAsyncImage(
@@ -259,185 +344,43 @@ internal fun SampleTile(
             error = {},
         )
 
-        sample.confidence?.let {
-            ConfidenceChip(
-                text = "$it%",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp),
-            )
-        }
-        SpeciesBadge(
-            text = species,
-            isManual = sample.source == SampleSource.Manual,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(6.dp),
+        TileBoxesOverlay(
+            boxes = sample.boxes,
+            modifier = Modifier.fillMaxSize(),
         )
-    }
-}
 
-@Composable
-internal fun SampleRow(
-    sample: SampleUi,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AgarthaTheme.colors
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.surface, RoundedCornerShape(10.dp))
-            .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+        if (sample.isManual) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .background(colors.gold, RoundedCornerShape(7.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
-                    text = sample.timeLabel,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.textSecondary,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                    text = stringResource(R.string.sample_tile_manual),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onGold,
                 )
-                val sourceLabel = if (sample.source == SampleSource.Ai) {
-                    sample.confidence?.let { "$it%" } ?: "AI"
-                } else {
-                    "Manual"
-                }
-                Box(
-                    modifier = Modifier
-                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = sourceLabel,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.textSecondary,
-                    )
-                }
-                if (sample.isEdited) {
-                    Box(
-                        modifier = Modifier
-                            .background(colors.warningTint, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.badge_edited),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.warningText,
-                        )
-                    }
-                }
             }
-            Spacer(Modifier.height(4.dp))
-            val species = sample.speciesLabel()
-            val fontStyle = if (species.isBinomial()) {
-                androidx.compose.ui.text.font.FontStyle.Italic
-            } else {
-                androidx.compose.ui.text.font.FontStyle.Normal
+        }
+
+        if (sample.eggCount > 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = eggCountText,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
             }
-            Text(
-                text = species,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontStyle = fontStyle,
-                color = colors.textPrimary,
-            )
         }
-        Icon(
-            imageVector = AgarthaIcons.ChevronRight,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = colors.textTertiary,
-        )
     }
 }
-
-@Composable
-private fun ConfidenceChip(text: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    ) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AppColors.White)
-    }
-}
-
-@Composable
-private fun SpeciesBadge(text: String, isManual: Boolean, modifier: Modifier = Modifier) {
-    // On-image badges: fixed maroon/amber fills with white text (mode-independent).
-    val bg = if (isManual) AppColors.Amber else AppColors.Maroon
-    Box(
-        modifier = modifier
-            .background(bg, RoundedCornerShape(999.dp))
-            .padding(horizontal = 7.dp, vertical = 3.dp),
-    ) {
-        // A binomial like "Ascaris lumbricoides" is wider than a grid tile; wrapping it
-        // turned the pill into a two-line block that hid most of the image. One line,
-        // ellipsized - the full name is on the sample detail screen.
-        Text(
-            text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AppColors.White,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-internal fun EmptyStateGraphic() {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .background(AgarthaTheme.colors.surfaceVariant, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = AgarthaIcons.RemoveCircle,
-                contentDescription = null,
-                tint = AgarthaTheme.colors.textTertiary,
-                modifier = Modifier.size(26.dp),
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "No verified samples yet",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AgarthaTheme.colors.textSecondary
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Captured frames will appear here once verified.",
-            fontSize = 13.sp,
-            color = AgarthaTheme.colors.textSecondary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-    }
-}
-
-/**
- * What a sample card calls the sample. A null species means the model boxed something and the
- * medtech rejected all of it, which is a negative result and says so rather than going blank.
- */
-@Composable
-private fun SampleUi.speciesLabel(): String =
-    species ?: stringResource(R.string.session_detail_sample_no_eggs)

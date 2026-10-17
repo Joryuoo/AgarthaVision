@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-30
+commit: b64271d2
+entity: app/src/main/java/com/agarthavision/data/local/entity/SessionEntity.kt
+---
+
 # Session
 
 **One sentence.** One fecal smear — the unit of work a medtech opens, captures into, and never ends,
@@ -17,16 +25,16 @@ patient, and unowned data is no longer possible.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0001_init.sql:150-163`)
+**Postgres** (`supabase/migrations/0001_init.sql:152-160`)
 
 | Field | Constraint |
 |---|---|
 | `id` | PK, default `uuid_generate_v4()` |
 | `user_id` | **NOT NULL**, FK → `profiles(id)` |
-| `patient_id` | **NOT NULL**, FK → `patients(id)` |
+| `patient_id` | **NOT NULL**, FK → `patients(id)`. Fixed once written: a trigger refuses any update that changes it, for every role (`0016_patient_report_own_patient_sessions.sql`, 14zcqntk68x) |
 | `device_id` | NOT NULL text |
 | `started_at` | NOT NULL timestamptz, default `now()` |
-| `label` | nullable text (auto-generated e.g. `C.G.-0730600000-001`) |
+| `label` | nullable text — auto-generated e.g. `LDNJ-M21-S01` (`SessionLabelGenerator`). Unique per patient in Room (index on `patient_id, label`). In Postgres no constraint, but a trigger renames a clashing arrival `<label>-<first 4 of its id>` and never rejects (`0009_session_label_collisions.sql:49-84`) |
 
 Indexes: `sessions_user_started_idx (user_id, started_at desc)` and
 `sessions_patient_idx (patient_id, started_at desc)` (`0001_init.sql:175-176`).
@@ -37,7 +45,7 @@ Indexes: `sessions_user_started_idx (user_id, started_at desc)` and
 - `psgc_barangay_code` — moved to [`Patient`](Patient.md), which is the unit surveillance aggregates on.
 - `claim_exempt` — removed. Login is mandatory.
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/SessionEntity.kt`)
+**Room** (`SessionEntity`)
 
 PK column is `session_id`, not `id`. Key details:
 
@@ -45,11 +53,17 @@ PK column is `session_id`, not `id`. Key details:
 - `supabase_status` is Room-only (`'synced'`, `'pending'`, `'sync_failed'`).
 - The `id` ↔ `session_id` translation happens in `data/supabase/SessionRemoteDataSource.kt`.
 
-Documented shape: `schema.ts:244-276`.
+Documented shape: `schema.ts` (`Session`).
 
 ## Connected to
 
 - **Owned by** [`Patient`](Patient.md) (`patient_id` FK) and [`Profile`](Profile.md) (`user_id` FK).
+- **Read by** the author and — since `0007_patient_shared_history.sql:157-159` —
+  every medtech assigned to the patient. A super admin reads `sessions_deidentified` instead,
+  without `label`, which spells the patient's initials, sex and age
+  (`0012_deidentified_reads.sql:62`, `0013_super_admin_reads_deidentified.sql:48`). `user_id` stays the author. On the phone a patient's Sessions list is `own OR
+  assigned` (`SessionDao.kt::SESSIONS_FILTER`); Home, the dashboard and the pending counts stay
+  the medtech's own work.
 - **Owns** [`Sample`](Sample.md), 1 → many, ON DELETE CASCADE (`supabase/migrations/0001_init.sql:183`).
   (Room declares `NO_ACTION` locally to prevent accidental cascading deletion per C8).
 - **Owns** [`Report`](Report.md), 1 → many, ON DELETE CASCADE (`0001_init.sql:311`). Multiple reports
@@ -62,18 +76,17 @@ Documented shape: `schema.ts:244-276`.
 ## If you change this
 
 **Hits**
-- `SessionManager` — start, resume, pause/resume inference, restore and detach all read and
-  write this row (`core/session/SessionManager.kt`).
+- `SessionManager` — `startSession`, `resumeSession`, `restoreActiveSession` and `clearActive`
+  all read and write this row. See [`session-lifecycle`](../processes/session-lifecycle.md).
 - The sync ordering. Patients push first, then sessions, because samples and reports FK to them
-  (`domain/usecase/sync/SyncPendingDataUseCase.kt:76-90`).
+  (`SyncPendingDataUseCase::invoke`).
 - The PDF header block, which prints session id, label, patient details, timestamps, and device id.
 - The New Session sheet, which creates a session for an already-selected patient.
-- The Patients list Recent sort (`PatientDao.observePatients`), which reads `sessions.started_at` to sort active patients to the top.
+- The Patients list Recent sort (`PatientDao::observePatients`), which reads `sessions.started_at` to sort active patients to the top.
+- A Room-shape change: the version bump plus a hand-written `Migration` — see [effects](../effects/CONTEXT.md).
 
 **Does not hit**
 - **Supabase**, if you are adding a Room-only column. `supabase_status` exists locally with no migration.
-- **The Room migration path.** `fallbackToDestructiveMigration(dropAllTables = true)` is in force
-  (`core/di/DatabaseModule.kt:54`), so a version bump wipes the device rather than migrating.
 
 ## Surfaces
 
@@ -84,6 +97,5 @@ Records screen, and the report generator. Pushed to Supabase by
 
 ## See
 
-`supabase/migrations/0001_init.sql:150-177`,
-`app/src/main/java/com/agarthavision/data/local/entity/SessionEntity.kt`,
-`schema.ts:244-276`.
+`supabase/migrations/0001_init.sql:152-176`, `data/local/entity/SessionEntity.kt`,
+`schema.ts` (`Session`).

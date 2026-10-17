@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -12,17 +13,22 @@ import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import java.time.Instant
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 
 /**
- * Writes persisted session reports to Supabase Postgres. Row-only sync — the
- * CSV file stays local on the device; only the metadata + aggregate stats are
- * mirrored to `public.reports`.
+ * Writes persisted session reports to Supabase Postgres. Metadata + aggregate stats are mirrored
+ * to `public.reports`; the PDF itself is uploaded separately to the `reports` bucket (see
+ * [uploadReportFile]). `csv_file_path`/`CSV_EXTENSION` are gone from generation (PDF-only
+ * reports); `csvFilePath` stays only as a legacy column for reports generated before this change.
  *
  * **`epg_per_species` is gone from both sides,** and `lpf_per_species` took its place on
  * both at once. `0001_init.sql` declares `lpf_per_species jsonb not null default '{}'` and
@@ -95,9 +101,14 @@ open class ReportRemoteDataSource @Inject constructor(
         val lpf: Map<String, LpfDensity> = runCatching {
             gson.fromJson<Map<String, LpfDensity>>(lpfPerSpeciesJson, stringLpfDensityMapType)
         }.getOrNull().orEmpty()
+        val sessionIds: List<String>? = runCatching {
+            sessionIdsJson?.let { gson.fromJson<List<String>>(it, stringListType) }
+        }.getOrNull()
         return ReportInsertRow(
             id = reportId,
             sessionId = sessionId,
+            patientId = patientId,
+            sessionIds = sessionIds,
             userId = userId,
             reportType = reportType,
             generatedAt = Instant.ofEpochMilli(generatedAt).toString(),
@@ -110,18 +121,52 @@ open class ReportRemoteDataSource @Inject constructor(
         )
     }
 
+    private val jsonDecoder = Json { ignoreUnknownKeys = true }
+
     // ── Pull (read from server) ────────────────────────────────────────────────
 
+    // Own reports plus every report on a session of a patient the user is assigned to (0007
+    // reversed 0003's owner-only rule), asked for in those two halves for the reason on
+    // `SessionRemoteDataSource.fetchOwnSessions` (14zcqntjt3p).
+
     /**
-     * Fetches a page of reports owned by [userId], ordered by generated_at ascending.
+     * Fetches a page of the reports [userId] generated, ordered by generated_at ascending.
      * Inclusive range: rows [offset, offset+limit-1].
      */
-    open suspend fun fetchReports(userId: String, offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
+    open suspend fun fetchOwnReports(userId: String, offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
         supabase.postgrest[REPORTS_TABLE].select {
             filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<ReportRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
+            }.onFailure { error ->
+                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
+            }.getOrNull()
+        }
+
+    /**
+     * Fetches a page of the reports on the given [sessionIds], whoever generated them, ordered by
+     * generated_at ascending. Inclusive range: rows [offset, offset+limit-1]. Callers chunk the
+     * ids and must guard against an empty list.
+     */
+    open suspend fun fetchReportsForSessions(
+        sessionIds: List<String>,
+        offset: Long = 0L,
+        limit: Long = 500L,
+    ): List<ReportEntity> =
+        supabase.postgrest[REPORTS_TABLE].select {
+            filter { isIn("session_id", sessionIds) }
+            order("generated_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
+            }.onFailure { error ->
+                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
+            }.getOrNull()
+        }
 
     private fun Map<String, LpfDensity>.toJsonObject(): JsonObject =
         buildJsonObject {
@@ -138,7 +183,11 @@ open class ReportRemoteDataSource @Inject constructor(
         @SerialName("id")
         val id: String,
         @SerialName("session_id")
-        val sessionId: String,
+        val sessionId: String?,
+        @SerialName("patient_id")
+        val patientId: String? = null,
+        @SerialName("session_ids")
+        val sessionIds: List<String>? = null,
         @SerialName("user_id")
         val userId: String,
         @SerialName("report_type")
@@ -159,63 +208,12 @@ open class ReportRemoteDataSource @Inject constructor(
         val pdfFilePath: String?,
     )
 
-    // ── Select DTO (read path) ────────────────────────────────────────────────
-
-    @Serializable
-    private data class ReportRow(
-        @SerialName("id") val id: String,
-        @SerialName("session_id") val sessionId: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("report_type") val reportType: String,
-        @SerialName("generated_at") val generatedAt: String,
-        @SerialName("total_samples") val totalSamples: Int,
-        @SerialName("total_eggs_confirmed") val totalEggsConfirmed: Int,
-        @SerialName("positive_species") val positiveSpecies: List<String>,
-        @SerialName("lpf_per_species") val lpfPerSpecies: JsonObject,
-        @SerialName("csv_file_path") val csvFilePath: String? = null,
-        @SerialName("pdf_file_path") val pdfFilePath: String? = null,
-    )
-
-    private fun ReportRow.toEntity(): ReportEntity {
-        val generatedAtMs = parseSupabaseInstant(generatedAt).toEpochMilli()
-        val positiveSpeciesJson = gson.toJson(positiveSpecies)
-        val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
-            val obj = v as JsonObject
-            // `mean` is not read even when an older row still carries it: PB-17 made the
-            // range the figure, and reviving a superseded number from storage is how the wrong
-            // definition comes back.
-            LpfDensity(
-                min = (obj["min"] as JsonPrimitive).content.toInt(),
-                max = (obj["max"] as JsonPrimitive).content.toInt(),
-            )
-        }
-        val lpfPerSpeciesJson = gson.toJson(lpfMap)
-        return ReportEntity(
-            reportId = id,
-            sessionId = sessionId,
-            userId = userId,
-            reportType = reportType,
-            generatedAt = generatedAtMs,
-            totalSamples = totalSamples,
-            totalEggsConfirmed = totalEggsConfirmed,
-            positiveSpeciesJson = positiveSpeciesJson,
-            lpfPerSpeciesJson = lpfPerSpeciesJson,
-            csvFilePath = csvFilePath,
-            pdfFilePath = pdfFilePath,
-            supabaseStatus = ReportSyncStatus.SYNCED.value,
-            createdAt = generatedAtMs,
-        )
-    }
-
     companion object {
         /** Storage bucket holding generated report files. Mirrors `samples` in layout. */
         const val REPORTS_BUCKET = "reports"
 
         /** File extension for a report PDF, as used by [objectPathFor]. */
         const val PDF_EXTENSION = "pdf"
-
-        /** File extension for a report CSV, as used by [objectPathFor]. */
-        const val CSV_EXTENSION = "csv"
 
         /**
          * The object path a report's file occupies: `{userId}/{reportId}.{extension}`.
@@ -232,4 +230,58 @@ open class ReportRemoteDataSource @Inject constructor(
         private val stringListType = object : TypeToken<List<String>>() {}.type
         private val stringLpfDensityMapType = object : TypeToken<Map<String, LpfDensity>>() {}.type
     }
+}
+
+// ── Select DTO (read path) ────────────────────────────────────────────────
+
+@Serializable
+internal data class ReportRow(
+    @SerialName("id") val id: String,
+    @SerialName("session_id") val sessionId: String? = null,
+    @SerialName("patient_id") val patientId: String? = null,
+    @SerialName("session_ids") val sessionIds: List<String>? = null,
+    @SerialName("user_id") val userId: String,
+    @SerialName("report_type") val reportType: String,
+    @SerialName("generated_at") val generatedAt: String,
+    @SerialName("total_samples") val totalSamples: Int,
+    @SerialName("total_eggs_confirmed") val totalEggsConfirmed: Int,
+    @SerialName("positive_species") val positiveSpecies: List<String>,
+    @SerialName("lpf_per_species") val lpfPerSpecies: JsonObject,
+    @SerialName("csv_file_path") val csvFilePath: String? = null,
+    @SerialName("pdf_file_path") val pdfFilePath: String? = null,
+)
+
+internal fun JsonPrimitive?.toIntFlexible(): Int =
+    this?.content?.let {
+        it.toIntOrNull() ?: it.toDoubleOrNull()?.roundToInt()
+    } ?: 0
+
+internal fun ReportRow.toEntity(): ReportEntity {
+    val generatedAtMs = parseSupabaseInstant(generatedAt).toEpochMilli()
+    val gson = Gson()
+    val positiveSpeciesJson = gson.toJson(positiveSpecies)
+    val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
+        val obj = v as? JsonObject
+        val min = (obj?.get("min") as? JsonPrimitive).toIntFlexible()
+        val max = (obj?.get("max") as? JsonPrimitive).toIntFlexible()
+        LpfDensity(min = min, max = max)
+    }
+    val lpfPerSpeciesJson = gson.toJson(lpfMap)
+    return ReportEntity(
+        reportId = id,
+        sessionId = sessionId,
+        patientId = patientId,
+        sessionIdsJson = sessionIds?.let { gson.toJson(it) },
+        userId = userId,
+        reportType = reportType,
+        generatedAt = generatedAtMs,
+        totalSamples = totalSamples,
+        totalEggsConfirmed = totalEggsConfirmed,
+        positiveSpeciesJson = positiveSpeciesJson,
+        lpfPerSpeciesJson = lpfPerSpeciesJson,
+        csvFilePath = csvFilePath,
+        pdfFilePath = pdfFilePath,
+        supabaseStatus = ReportSyncStatus.SYNCED.value,
+        createdAt = generatedAtMs,
+    )
 }

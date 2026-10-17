@@ -4,6 +4,7 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.mapper.effectiveInferenceState
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.domain.model.SampleStatus
@@ -73,6 +74,7 @@ class ObserveVerificationQueueUseCase @Inject constructor(
         capturedAt = Instant.ofEpochMilli(timestamp),
         imagePath = imagePath,
         source = if (isManual) FrameSource.MANUAL else FrameSource.MODEL,
+        inferenceState = effectiveInferenceState(),
     )
 }
 

@@ -4,7 +4,9 @@ import com.agarthavision.core.util.DeviceIdProvider
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.supabase.SessionRemoteDataSource
+import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SessionSyncStatus
+import com.agarthavision.domain.model.isColleagueRecord
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.sync.SyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -101,10 +103,17 @@ class SessionManager @Inject constructor(
     /**
      * Transitions to an existing active session (e.g. when the medtech taps a row
      * in the picker for a still-open smear). Does not touch Room or Supabase.
+     *
+     * A colleague's session is refused with [ReadOnlyRecordException] (14zcqntjph6). Being
+     * active is what lets capture add frames to it and the queue verify them, and a sample
+     * captured into someone else's smear is exactly the edit the server would refuse.
      */
     suspend fun resumeSession(sessionId: String): SessionEntity {
         val entity = sessionDao.getSessionById(sessionId)
             ?: error("Session $sessionId not found locally.")
+        if (isColleagueRecord(entity.userId, authRepository.currentLocalUserId())) {
+            throw ReadOnlyRecordException(sessionId)
+        }
         activate(entity, Instant.ofEpochMilli(entity.startedAt))
         return entity
     }

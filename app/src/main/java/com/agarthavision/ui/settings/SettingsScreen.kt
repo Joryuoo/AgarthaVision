@@ -43,6 +43,8 @@ data class SettingsActions(
     val onSignOutClick: () -> Unit,
     val onSyncNowClick: () -> Unit,
     val onSelectTheme: (ThemeMode) -> Unit,
+    val onChangePasswordClick: () -> Unit = {},
+    val onToggleBiometricLock: (Boolean) -> Unit = {},
 )
 
 /**
@@ -52,6 +54,7 @@ data class SettingsActions(
 fun SettingsScreen(
     onSignInClick: () -> Unit,
     onSignedOut: () -> Unit,
+    onChangePasswordClick: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -75,6 +78,8 @@ fun SettingsScreen(
             onSignOutClick = { showSignOutDialog = true },
             onSyncNowClick = viewModel::onSyncNow,
             onSelectTheme = viewModel::onSelectTheme,
+            onChangePasswordClick = onChangePasswordClick,
+            onToggleBiometricLock = viewModel::onToggleBiometricLock,
         ),
     )
 
@@ -139,6 +144,27 @@ private fun SettingsContent(
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
+            if (state.isSignedIn) {
+                item {
+                    Spacer(Modifier.height(10.dp))
+                    ChangePasswordRow(
+                        isOffline = state.isOffline,
+                        onClick = actions.onChangePasswordClick,
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                    )
+                }
+                if (state.isBiometricAvailable) {
+                    item {
+                        Spacer(Modifier.height(10.dp))
+                        BiometricLockCard(
+                            isBiometricLockEnabled = state.isBiometricLockEnabled,
+                            isBiometricAvailable = state.isBiometricAvailable,
+                            onToggleBiometricLock = actions.onToggleBiometricLock,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                    }
+                }
+            }
             item {
                 Spacer(Modifier.height(10.dp))
             }
@@ -154,6 +180,7 @@ private fun SettingsContent(
                             initialFetchDone = state.initialFetchDone,
                             isFetching = state.isSyncing,
                             lastFetchIncomplete = state.lastFetchIncomplete,
+                            lastSyncError = state.lastSyncError,
                         ),
                         lastSyncMillis = state.lastSyncCompletion?.completedAtMillis,
                         onSyncNowClick = actions.onSyncNowClick,

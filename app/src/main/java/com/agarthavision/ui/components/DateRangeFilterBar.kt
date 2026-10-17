@@ -170,7 +170,7 @@ private fun ClearChip(onClick: () -> Unit) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SingleDatePickerDialog(
+internal fun SingleDatePickerDialog(
     title: String,
     initialDate: LocalDate?,
     onDismiss: () -> Unit,

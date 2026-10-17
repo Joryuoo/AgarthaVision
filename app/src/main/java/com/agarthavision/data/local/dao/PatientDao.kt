@@ -167,6 +167,10 @@ interface PatientDao {
     @Query("SELECT * FROM patients WHERE patient_id = :patientId")
     suspend fun getPatientById(patientId: String): PatientEntity?
 
+    /** Whether the patient is on this device — the pull's parent check before a session. */
+    @Query("SELECT EXISTS (SELECT 1 FROM patients WHERE patient_id = :patientId)")
+    suspend fun patientExists(patientId: String): Boolean
+
     @Query("SELECT * FROM patients WHERE patient_id = :patientId")
     fun observePatientById(patientId: String): Flow<PatientEntity?>
 
@@ -266,6 +270,35 @@ interface PatientDao {
 
     @Query("SELECT * FROM patient_users WHERE user_id = :userId")
     suspend fun getLinksForUser(userId: String): List<PatientUserEntity>
+
+    /**
+     * Whether [userId] is assigned to the patient that [sessionId] belongs to, on this device.
+     *
+     * The local form of `can_read_session()` (`0007_patient_shared_history.sql`), minus the
+     * author branch the caller already checks: being assigned is what makes a patient's whole
+     * history readable, colleagues' records included (14zcqntjph5).
+     */
+    @Query(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM sessions se
+            JOIN patient_users pu ON pu.patient_id = se.patient_id
+            WHERE se.session_id = :sessionId AND pu.user_id = :userId
+        )
+        """,
+    )
+    suspend fun isSessionPatientLinkedToUser(sessionId: String, userId: String): Boolean
+
+    /**
+     * Removes one assignment from this device, after the server stopped returning it.
+     *
+     * This is an access row, not a record. The patient, its sessions, samples and reports all
+     * stay exactly where they are (C8); the medtech simply stops seeing a patient an admin has
+     * reassigned away from them, as the server already does. Only
+     * `FetchRemoteDataUseCase` calls it, and only for a link the server no longer holds.
+     */
+    @Query("DELETE FROM patient_users WHERE patient_id = :patientId AND user_id = :userId")
+    suspend fun unlinkPatientFromUser(patientId: String, userId: String)
 
     /**
      * Finds patients that are identity-equal to the supplied fields, scoped to this medtech.

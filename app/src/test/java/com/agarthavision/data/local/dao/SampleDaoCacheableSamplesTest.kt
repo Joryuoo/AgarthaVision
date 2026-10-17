@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.entity.PatientEntity
+import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.SampleStatus
@@ -89,7 +90,7 @@ class SampleDaoCacheableSamplesTest {
     }
 
     @Test
-    fun `another medtech's samples are not candidates`() = runTest {
+    fun `another medtech's samples are not candidates when the patient is not assigned`() = runTest {
         seedSession()
         sampleDao.upsertSample(
             sample(id = "smp-theirs", storagePath = "users/user-b/smp.jpg").copy(userId = "user-b"),
@@ -98,6 +99,24 @@ class SampleDaoCacheableSamplesTest {
         // A shared device holds more than one person's work. Spending this user's budget on
         // someone else's frames, or evicting them, is not this pass's business.
         assertTrue(sampleDao.getCacheableSamples(USER_ID).isEmpty())
+    }
+
+    @Test
+    fun `a colleague's sample is a candidate when the patient is assigned to this medtech`() = runTest {
+        seedSession()
+        patientDao.linkPatientToUser(
+            PatientUserEntity(patientId = PATIENT_ID, userId = USER_ID, linkedAt = 1_000L),
+        )
+        sampleDao.upsertSample(
+            sample(id = "smp-colleague", storagePath = "user-b/smp.jpg").copy(userId = "user-b"),
+        )
+
+        // The patient's full history is this medtech's to work from offline (14zcqntjph5), so a
+        // colleague's frame of an assigned patient is cached like their own.
+        assertEquals(
+            listOf("smp-colleague"),
+            sampleDao.getCacheableSamples(USER_ID).map { it.sampleId },
+        )
     }
 
     @Test

@@ -36,6 +36,7 @@ import com.agarthavision.domain.usecase.home.SessionListResult
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -174,6 +175,9 @@ class RecentSessionsRowTest {
             sampleRepository = sampleRepository,
             patientRepository = patientRepository,
             observeThemeModeUseCase = observeThemeModeUseCase,
+            observeSyncInProgressUseCase = mock<ObserveSyncInProgressUseCase>().also {
+                whenever(it.invoke()).thenReturn(flowOf(false))
+            },
             setThemeModeUseCase = setThemeModeUseCase,
             observeNeedsAttentionUseCase = observeNeedsAttentionUseCase,
             observeHomeKpisUseCase = observeHomeKpisUseCase,
@@ -259,5 +263,29 @@ class RecentSessionsRowTest {
         composeRule.onNodeWithTag("recentSessionCard_s-2").assertIsDisplayed()
         composeRule.onNodeWithText("Smear 1").assertIsDisplayed()
         composeRule.onNodeWithText("Smear 2").assertIsDisplayed()
+    }
+
+    @Test
+    fun `long session identifier does not wrap to second line`() {
+        val longLabel = "N.J.-0731300014-001"
+        whenever(sessionManager.state).thenReturn(MutableStateFlow(SessionState.Idle))
+        whenever(observeSessionListUseCase(any(), anyOrNull(), any())).thenReturn(
+            flowOf(
+                SessionListResult(
+                    listOf(sampleSummary("s-long", longLabel)),
+                    1,
+                ),
+            ),
+        )
+
+        val vm = createViewModel()
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                DashboardScreen(viewModel = vm)
+            }
+        }
+
+        composeRule.onNodeWithTag("recentSessionCard_s-long").assertIsDisplayed()
+        composeRule.onNodeWithText(longLabel).assertIsDisplayed()
     }
 }

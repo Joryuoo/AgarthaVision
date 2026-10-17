@@ -1,12 +1,15 @@
 package com.agarthavision.ui.settings
 
 import app.cash.turbine.test
+import com.agarthavision.core.auth.BiometricPromptManager
+import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.sync.LastSyncStore
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
@@ -76,6 +79,13 @@ class SettingsViewModelTest {
         whenever(it.observe(any())).thenReturn(MutableStateFlow(null))
     }
 
+    private val biometricLockRepository: BiometricLockRepository = mock<BiometricLockRepository>().also {
+        whenever(it.isBiometricLockEnabled).thenReturn(MutableStateFlow(false))
+    }
+    private val biometricPromptManager: BiometricPromptManager = mock<BiometricPromptManager>().also {
+        whenever(it.getBiometricStatus()).thenReturn(BiometricStatus.NOT_AVAILABLE)
+    }
+
     private fun viewModel() = SettingsViewModel(
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
         connectivityObserver = connectivityObserver,
@@ -88,6 +98,8 @@ class SettingsViewModelTest {
         initialFetchStateStore = initialFetchStateStore,
         fetchOutcomeStore = fetchOutcomeStore,
         lastSyncStore = lastSyncStore,
+        biometricLockRepository = biometricLockRepository,
+        biometricPromptManager = biometricPromptManager,
     )
 
     @Test

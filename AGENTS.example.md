@@ -5,6 +5,26 @@ Gitignored. This is the per-developer layer; project truth lives in `SESSION_INI
 
 ---
 
+## Project shelf — keep it current (every agent, every tool)
+
+Keep this section in your copy. It is written for any coding agent and any member, and needs no
+special skill or plugin.
+
+- **Start at `SESSION_INIT.md`.** Open its routing table, then **one** file under `docs/`, then
+  **one** card under `docs/map/`. Do not read all of `docs/`.
+- **When you change code, update the card that describes it in the same change.** Find it from
+  the routing table or `docs/map/effects/CONTEXT.md`. Then either:
+  - re-check the card against the code and set its frontmatter `verified:` to today and
+    `commit:` to the commit you checked, or
+  - if you cannot re-check it, set `status: stale`.
+- **Cite code by symbol, never by line:** `File.kt::functionName`. Only SQL migrations use
+  `path:line`. Rules: `docs/CONTEXT.md`, "House rules".
+- **The code wins.** If a card disagrees with the code, fix the card and say what was wrong in one
+  line. Never change code to match a card.
+- **New behaviour gets a home.** A new noun gets an object card, a new flow a process card, and
+  both get a row in `docs/map/objects/CONTEXT.md` or `processes/CONTEXT.md` and, if it changes
+  what something breaks, in `docs/map/effects/CONTEXT.md`. Copy the shape of a neighbouring card.
+
 ## Second brain / vault
 
 - **Location:** `<Path to your Obsidian Vault>`

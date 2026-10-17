@@ -1,5 +1,6 @@
 package com.agarthavision.ui.verify
 
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
@@ -22,6 +23,7 @@ class ModelOutputTest {
     private fun frame(
         source: FrameSource = FrameSource.MODEL,
         classes: List<String> = emptyList(),
+        inferenceState: InferenceState? = null,
     ) = FlaggedFrame(
         sampleId = "sample-1",
         sessionId = "session-1",
@@ -29,7 +31,7 @@ class ModelOutputTest {
         jpegBytes = ByteArray(0),
         predictions = classes.map { Prediction(it, 0.9f, 10f, 10f, 5f, 5f) },
         source = source,
-    )
+    ).let { if (inferenceState == null) it else it.copy(inferenceState = inferenceState) }
 
     @Test
     fun `a model frame with no detections is a read, not an absence`() {
@@ -52,6 +54,19 @@ class ModelOutputTest {
         val unreachable = frame(source = FrameSource.MANUAL).modelOutput()
 
         assertNotEquals(cleanField, unreachable)
+    }
+
+    /**
+     * A frame still in the inference queue has no boxes either, and it is neither a clean field
+     * nor an unreachable container (14zcqntj6ny). Reading it as a clean field is the failure mode.
+     */
+    @Test
+    fun `a frame awaiting inference is in progress, never a clean field`() {
+        listOf(InferenceState.QUEUED, InferenceState.IN_INFERENCE).forEach { pending ->
+            val output = frame(source = FrameSource.MODEL, inferenceState = pending).modelOutput()
+
+            assertEquals(ModelOutput.InProgress, output)
+        }
     }
 
     @Test
