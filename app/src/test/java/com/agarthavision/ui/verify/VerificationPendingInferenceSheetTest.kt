@@ -107,7 +107,7 @@ class VerificationPendingInferenceSheetTest {
 
         sheetNode(VerifyTestTags.ADD_SPECIES).assertIsNotEnabled()
         sheetNode(VerifyTestTags.NOTE_FIELD).assertIsNotEnabled()
-        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
     }
 
     @Test

@@ -742,7 +742,7 @@ class VerificationSheetContentTest {
 
         sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).assertIsDisplayed()
         composeRule.onNodeWithText("Ascaris").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("TOTAL").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("2 eggs detected").performScrollTo().assertIsDisplayed()
     }
 
     /**
@@ -755,6 +755,12 @@ class VerificationSheetContentTest {
         setContent(state(frame = frame(source = FrameSource.MODEL)))
 
         sheetNode(VerifyTestTags.AI_SUGGESTION_NOTE).assertIsDisplayed()
+        val panelBounds = sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).getBoundsInRoot()
+        val noteBounds = sheetNode(VerifyTestTags.AI_SUGGESTION_NOTE).getBoundsInRoot()
+        assertTrue(
+            "Note top (${noteBounds.top}) should be >= panel bottom (${panelBounds.bottom})",
+            noteBounds.top >= panelBounds.bottom,
+        )
     }
 
     @Test
@@ -1436,7 +1442,7 @@ class VerificationSheetContentTest {
             ).copy(expandedFindingIndex = 0),
         )
 
-        sheetNode(VerifyTestTags.removeFinding(0)).assertTextContains("Discard")
+        sheetNode(VerifyTestTags.removeFinding(0)).assertTextContains("Remove species")
         composeRule.onNodeWithContentDescription("Remove this species").assertDoesNotExist()
     }
 
@@ -1582,7 +1588,7 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `remove button is positioned at lower right beside the count field`() {
+    fun `remove button is positioned below the count field`() {
         setContent(
             noModelOutputState(
                 findings = listOf(
@@ -1591,17 +1597,37 @@ class VerificationSheetContentTest {
             ).copy(expandedFindingIndex = 0),
         )
 
-        val countBounds = sheetNode(VerifyTestTags.countField(0)).getBoundsInRoot()
-        val removeBounds = sheetNode(VerifyTestTags.removeFinding(0)).getBoundsInRoot()
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesForm(0)).performScrollTo()
+        val countBounds = composeRule.onNodeWithTag(VerifyTestTags.countField(0)).getBoundsInRoot()
+        val removeBounds = composeRule.onNodeWithTag(VerifyTestTags.removeFinding(0)).getBoundsInRoot()
 
         assertTrue(
-            "Remove left edge (${removeBounds.left}) should be >= count field right edge (${countBounds.right})",
-            removeBounds.left >= countBounds.right,
+            "Remove top edge (${removeBounds.top}) should be >= count field bottom edge (${countBounds.bottom})",
+            removeBounds.top >= countBounds.bottom,
         )
-        assertTrue(
-            "Remove top edge (${removeBounds.top}) should be >= count field top edge (${countBounds.top})",
-            removeBounds.top >= countBounds.top,
+    }
+
+    @Test
+    fun `selecting the suggested species in the dropdown confirms Q3 and checks the box`() {
+        val r = setContent(
+            state(
+                answers = listOf(
+                    VerificationAnswers(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        speciesConfirmed = false,
+                        species = null,
+                    ),
+                ),
+                frame = frame(predictions = 1),
+            ),
         )
+
+        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
+        composeRule.onNodeWithText("Choose the correct species").performClick()
+        composeRule.onNodeWithText(EggSpecies.ASCARIS.displayName).performClick()
+
+        assertEquals(listOf(true), r.speciesConfirmed)
     }
 
     @Test
@@ -1783,5 +1809,112 @@ class VerificationSheetContentTest {
         )
 
         composeRule.onNodeWithTag(VerifyTestTags.addedStageDropdown(0)).assertDoesNotExist()
+    }
+
+    // ── Edit mode, pinned action bar, and added species card redesign ────────
+
+    private fun setContentWithEditMode(state: VerificationUiState, isEditing: Boolean): Recorder {
+        val recorder = Recorder()
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(
+                    state = state,
+                    actions = actionsFor(recorder),
+                    isEditing = isEditing,
+                )
+            }
+        }
+        return recorder
+    }
+
+    @Test
+    fun `edit mode shows Save changes, Discard, and Editing title`() {
+        setContentWithEditMode(state(), isEditing = true)
+
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
+            .assertTextContains("Save changes")
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
+            .assertTextContains("Discard")
+        composeRule.onNodeWithText("Editing sample").assertIsDisplayed()
+        composeRule.onNodeWithText("Editing").assertDoesNotExist()
+    }
+
+    @Test
+    fun `submit mode shows Submit and Discard without Editing chip`() {
+        setContentWithEditMode(state(), isEditing = false)
+
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
+            .assertTextContains("Submit")
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
+            .assertTextContains("Discard")
+        composeRule.onNodeWithText("Editing").assertDoesNotExist()
+    }
+
+    @Test
+    fun `primary and secondary action nodes are displayed without scrolling with several detections`() {
+        val predictionsCount = 5
+        val manyPredictionsState = VerificationUiState(
+            frame = frame(predictions = predictionsCount),
+            frameIndexInQueue = 1,
+            queueSize = 1,
+            findings = List(predictionsCount) {
+                Finding(
+                    prediction = Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f),
+                    answers = answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = true),
+                )
+            },
+        )
+        setContent(manyPredictionsState)
+
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION).assertIsDisplayed()
+    }
+
+    @Test
+    fun `added species card shows Added species 1 and Added by you and collapses to summary after save`() {
+        val findingsState = mutableStateOf(
+            listOf(
+                Finding(
+                    answers = VerificationAnswers(
+                        species = EggSpecies.ASCARIS,
+                        fieldTotal = 1,
+                    ),
+                ),
+            ),
+        )
+        val expandedIndex = mutableStateOf<Int?>(0)
+
+        val recorder = Recorder()
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(
+                    state = VerificationUiState(
+                        frame = frame(source = FrameSource.MANUAL, predictions = 0),
+                        frameIndexInQueue = 1,
+                        queueSize = 1,
+                        findings = findingsState.value,
+                        expandedFindingIndex = expandedIndex.value,
+                    ),
+                    actions = VerificationSheetActions(
+                        onCollapseFinding = {
+                            recorder.collapsedFindings += it
+                            expandedIndex.value = null
+                        },
+                    ),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Added species 1").assertIsDisplayed()
+        composeRule.onNodeWithText("Added by you").assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesForm(0)).assertIsDisplayed()
+
+        sheetNode(VerifyTestTags.saveFinding(0)).performClick()
+
+        assertEquals(listOf(0), recorder.collapsedFindings)
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesSummary(0)).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesForm(0)).assertDoesNotExist()
+        composeRule.onNodeWithText("Ascaris lumbricoides").assertIsDisplayed()
+        composeRule.onNodeWithText("1 egg").assertIsDisplayed()
     }
 }

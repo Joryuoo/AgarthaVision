@@ -367,11 +367,15 @@ fun PatientsScreen(
 
                     if (hasOlderRecords) {
                         EmptyState(
-                            icon = Icons.Outlined.Inbox,
                             title = "No recent activity",
                             body = "No patient activity found for today or this week. " +
                                 "Switch to Earlier to view older records.",
-                            modifier = Modifier.padding(top = Spacing.xxl),
+                            illustrationLight = R.drawable.ill_empty_activity_light,
+                            illustrationDark = R.drawable.ill_empty_activity_dark,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .padding(top = Spacing.xxl),
                             action = {
                                 Button(
                                     onClick = { viewModel.onSortSelected(PatientSort.EARLIER) },
@@ -902,7 +906,10 @@ internal fun PatientsEmptyContent(
         icon = if (showIllustration) null else Icons.Outlined.Inbox,
         title = stringResource(titleRes),
         body = stringResource(bodyRes),
-        modifier = modifier.padding(top = Spacing.xxl),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(top = Spacing.xxl),
         illustrationLight = if (showIllustration) R.drawable.ill_empty_patients_light else null,
         illustrationDark = if (showIllustration) R.drawable.ill_empty_patients_dark else null,
         action = emptyAction,

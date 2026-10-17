@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -46,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -480,20 +483,26 @@ private fun SessionDetailTabBar(
     onTabSelected: (SessionDetailTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.xl, vertical = Spacing.xs),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = Spacing.xl, vertical = Spacing.xs)
+            .clip(CircleShape)
+            .background(colors.surface)
+            .border(1.dp, colors.border, CircleShape)
+            .padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        TabButton(
+        SessionDetailTabItem(
             text = stringResource(R.string.session_detail_tab_report),
             selected = selectedTab == SessionDetailTab.REPORT,
             onClick = { onTabSelected(SessionDetailTab.REPORT) },
             modifier = Modifier.weight(1f),
         )
-        TabButton(
-            text = "${stringResource(R.string.session_detail_tab_samples)} ($samplesCount)",
+        SessionDetailTabItem(
+            text = stringResource(R.string.session_detail_tab_samples),
+            count = samplesCount,
             selected = selectedTab == SessionDetailTab.SAMPLES,
             onClick = { onTabSelected(SessionDetailTab.SAMPLES) },
             modifier = Modifier.weight(1f),
@@ -502,32 +511,60 @@ private fun SessionDetailTabBar(
 }
 
 @Composable
-private fun TabButton(
+private fun SessionDetailTabItem(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    count: Int? = null,
 ) {
     val colors = AgarthaTheme.colors
-    val bg = if (selected) colors.brandFill else colors.surface
-    val border = if (selected) colors.brandFill else colors.border
+    val bg = if (selected) colors.brandFill else Color.Transparent
     val fg = if (selected) colors.onBrandFill else colors.textSecondary
 
     Box(
         modifier = modifier
-            .height(38.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .height(42.dp)
+            .clip(CircleShape)
             .background(bg)
-            .border(1.dp, border, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            color = fg,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = text,
+                color = fg,
+                fontSize = 15.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            )
+            if (count != null) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .sizeIn(minWidth = 22.dp, minHeight = 22.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (selected) {
+                                colors.onBrandFill.copy(alpha = 0.25f)
+                            } else {
+                                colors.surfaceVariant
+                            }
+                        )
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = count.toString(),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fg,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -568,11 +605,13 @@ private fun SessionDetailSamplesTab(
             modifier = modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp),
-            contentAlignment = Alignment.Center,
+            contentAlignment = BiasAlignment(horizontalBias = 0f, verticalBias = -0.25f),
         ) {
             EmptyState(
                 title = stringResource(R.string.session_detail_samples_empty),
                 body = stringResource(R.string.session_detail_samples_empty_body),
+                illustrationLight = R.drawable.ill_empty_samples_light,
+                illustrationDark = R.drawable.ill_empty_samples_dark,
             )
         }
     } else {

@@ -168,8 +168,15 @@
     <string name="verify_q1">There is a parasitic egg in this box</string>
     <string name="verify_q2">The bounding box is correctly placed</string>
     <string name="verify_q3">This egg is %1$s</string>
-    <string name="verify_species_picker_label">Which species is it?</string>
-    <string name="verify_stage_picker_label">Developmental stage</string>
+    <string name="verify_species_picker_label">Species</string>
+    <string name="verify_species_placeholder">Choose the correct species</string>
+    <string name="verify_stage_picker_label">Stage</string>
+    <string name="verify_stage_placeholder">Choose a stage</string>
+    <string name="verify_detection_subtitle">Answer for the highlighted box</string>
+    <plurals name="verify_model_eggs_detected">
+        <item quantity="one">%1$d egg detected</item>
+        <item quantity="other">%1$d eggs detected</item>
+    </plurals>
     <string name="verify_other_stage_label">Other stage</string>
     <string name="verify_other_stage_hint">Type the developmental stage</string>
     <string name="verify_yes">Yes</string>
@@ -181,10 +188,24 @@
 
     <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->
     <string name="verify_species_you_added">SPECIES YOU ADDED</string>
-    <string name="verify_add_species">+ Add species</string>
-    <string name="verify_remove_species">Discard</string>
-    <string name="verify_save_species">Save</string>
+    <string name="verify_add_species">Add a species the model missed</string>
+    <string name="verify_remove_species">Remove species</string>
+    <string name="verify_save_species">Save species</string>
+    <string name="verify_captured_at">Captured %1$s</string>
+    <string name="verify_editing_chip">Editing</string>
+    <string name="verify_ai_suggested_chip">AI suggested</string>
+    <string name="verify_added_by_you_chip">Added by you</string>
+    <string name="verify_added_species_title">Added species %1$d</string>
+    <string name="verify_added_species_subtitle">Not boxed by the model</string>
+    <string name="verify_show_boxes">Show boxes on image</string>
+    <string name="verify_action_discard">Discard</string>
+    <string name="verify_action_save_changes">Save changes</string>
+    <string name="verify_action_submit">Submit</string>
     <string name="verify_field_total_label">Egg count</string>
+    <string name="verify_eggs_of_this_species">Eggs of this species</string>
+    <string name="verify_seen_in_this_sample">Seen in this sample</string>
+    <string name="verify_decrement_egg_count">Decrease egg count</string>
+    <string name="verify_increment_egg_count">Increase egg count</string>
     <string name="verify_field_total_boxed">%1$d of them are already boxed by the model</string>
     <string name="verify_field_total_floor">Cannot be below %1$d — that many are already boxed or drawn</string>
     <string name="verify_locate_eggs_section">LOCATE EGGS</string>
@@ -428,6 +449,7 @@
     <string name="records_status_pending_sync">Pending sync</string>
     <string name="report_status_failed">Sync failed</string>
     <string name="report_no_positive_species">No positive species</string>
+    <string name="report_and_others">and others</string>
     <string name="report_generated_toast">Report saved to Documents/AgarthaVision</string>
     <string name="report_share_action">Share</string>
     <string name="report_share_missing_path">This report has no saved file.</string>
@@ -881,7 +903,7 @@
         <item quantity="other">%1$d awaiting review</item>
     </plurals>
     <string name="verify_queue_empty_title">Nothing captured yet</string>
-    <string name="verify_queue_empty_body">Tap the shutter to record a field. Frames wait here until you verify them.</string>
+    <string name="verify_queue_empty_body">Capture a sample frame to begin.</string>
     <string name="verify_queue_done_title">All frames verified</string>
     <string name="verify_queue_done_body">Every frame captured in this session has been checked.</string>
     <string name="verify_queue_view_records">View session records</string>

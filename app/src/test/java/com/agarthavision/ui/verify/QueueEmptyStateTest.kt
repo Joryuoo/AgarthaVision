@@ -50,7 +50,7 @@ class QueueEmptyStateTest {
         }
 
         composeRule.onNodeWithText(
-            "Tap the shutter to record a field. Frames wait here until you verify them."
+            "Capture a sample frame to begin."
         ).assertIsDisplayed()
     }
 
