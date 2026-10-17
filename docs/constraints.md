@@ -281,12 +281,15 @@ configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
-Supabase URLs, anon keys, and the inference bearer token live in `local.properties`, which is
+Supabase URLs, publishable keys, and the inference bearer token live in `local.properties`, which is
 gitignored (`/local.properties` and `local.properties` in `.gitignore`). They reach the app as
 `BuildConfig` fields read at build time (`localProperties` and `buildTypes` in
 `app/build.gradle.kts`). A missing property
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
+The Turnstile site key and hostname (`TURNSTILE_SITE_KEY_*`, `TURNSTILE_HOSTNAME_*`) take the same
+path although a site key is public; the widget's secret key is never in the app or the repo, only
+in Supabase's CAPTCHA setting.
 
 **Enforcement:** `.gitignore` plus review. CI runs in `.github/workflows/build-and-test.yml`
 (verifying compile and Roborazzi screenshot tests without requiring secrets).

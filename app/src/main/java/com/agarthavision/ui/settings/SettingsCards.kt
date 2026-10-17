@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Lock
@@ -46,6 +47,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
+import com.agarthavision.domain.sync.INACTIVE_MEMBER_REFUSAL
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Science
@@ -368,7 +370,11 @@ internal fun SyncCard(
             if (state.counts.failed > 0 && !state.lastSyncError.isNullOrBlank()) {
                 HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
                 Text(
-                    text = state.lastSyncError,
+                    text = if (state.lastSyncError == INACTIVE_MEMBER_REFUSAL) {
+                        stringResource(R.string.settings_sync_refused_inactive_member)
+                    } else {
+                        state.lastSyncError
+                    },
                     color = colors.dangerText,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 8.dp),
@@ -546,6 +552,65 @@ internal fun ChangePasswordRow(
 
 /** Test tag on [ChangePasswordRow]. */
 const val SETTINGS_CHANGE_PASSWORD_TAG = "settings_change_password"
+
+@Composable
+internal fun BiometricLockCard(
+    isBiometricLockEnabled: Boolean,
+    isBiometricAvailable: Boolean,
+    onToggleBiometricLock: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!isBiometricAvailable) return
+    val colors = AgarthaTheme.colors
+    SettingsCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Fingerprint,
+                    contentDescription = null,
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_biometric_lock_title),
+                        color = colors.textPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_biometric_lock_subtitle),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+            androidx.compose.material3.Switch(
+                checked = isBiometricLockEnabled,
+                onCheckedChange = onToggleBiometricLock,
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = colors.onBrandFill,
+                    checkedTrackColor = colors.brandFill,
+                    checkedBorderColor = colors.brandFill,
+                    uncheckedThumbColor = colors.textSecondary,
+                    uncheckedTrackColor = colors.surfaceVariant,
+                    uncheckedBorderColor = colors.borderStrong,
+                ),
+                modifier = Modifier.testTag("biometricLockSwitch"),
+            )
+        }
+    }
+}
 
 @Composable
 internal fun SignOutSection(

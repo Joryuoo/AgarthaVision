@@ -1,5 +1,6 @@
 package com.agarthavision.ui.login
 
+import com.agarthavision.domain.model.HumanCheckConfig
 import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
@@ -38,12 +39,18 @@ class LoginViewModelEdgeTest {
         whenever(it.invoke()).thenReturn(MutableStateFlow(null))
     }
 
-    private fun viewModel() = LoginViewModel(signInUseCase, connectivityObserver, completeSignInUseCase, notice)
+    private fun viewModel() = LoginViewModel(
+        signInUseCase = signInUseCase,
+        humanCheckConfig = HumanCheckConfig(siteKey = "", hostname = ""),
+        connectivityObserver = connectivityObserver,
+        completeSignInUseCase = completeSignInUseCase,
+        observeSignedOutNoticeUseCase = notice,
+    )
 
     @Test
     fun `a throwing completeSignIn still navigates and clears the stage`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(signInUseCase.invoke("user@example.com", "secret123")).thenReturn(Result.success(Unit))
+            whenever(signInUseCase.invoke("user@example.com", "secret123", null)).thenReturn(Result.success(Unit))
             runBlocking {
                 whenever(completeSignInUseCase.invoke()).thenThrow(IllegalStateException("scheduler blew up"))
             }

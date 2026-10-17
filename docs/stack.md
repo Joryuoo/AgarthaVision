@@ -134,10 +134,13 @@ no longer declares. `bun install` from the current `package.json` installs nothi
 
 ## Build-time configuration
 
-Three `BuildConfig` fields per build type — `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-`INFERENCE_URL` — populated from `local.properties`
+Five `BuildConfig` fields per build type — `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+`INFERENCE_URL`, `TURNSTILE_SITE_KEY`, `TURNSTILE_HOSTNAME` — populated from `local.properties`
 (`app/build.gradle.kts` `buildTypes`). Debug reads the `*_DEV` keys, release the `*_PROD` keys.
-Both suffixed keys are documented in `local.properties.example`. `INFERENCE_API_KEY` was removed
+Both suffixed keys are documented in `local.properties.example`. `SUPABASE_ANON_KEY` keeps its
+name but holds the project's publishable key (`sb_publishable_…`), not the legacy anon JWT, which
+is being disabled (14zcqntnqxg). supabase-kt sends it as `apikey`, and as the bearer token only
+before sign-in; every signed-in call carries the user's own token. `INFERENCE_API_KEY` was removed
 from `BuildConfig` and the client APK; cloud inference calls authenticate using the user's
 Supabase session access token (`InferenceModule.kt`).
 A missing key becomes an empty string.

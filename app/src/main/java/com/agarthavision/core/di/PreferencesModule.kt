@@ -11,9 +11,11 @@ import com.agarthavision.core.sync.DataStoreInitialFetchStateStore
 import com.agarthavision.core.sync.DataStoreLastSyncStore
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.data.repository.BiometricLockRepositoryImpl
 import com.agarthavision.data.repository.DataStoreSignedOutNoticeStore
 import com.agarthavision.data.repository.OnboardingPreferenceRepositoryImpl
 import com.agarthavision.data.repository.ThemePreferenceRepositoryImpl
+import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.repository.OnboardingPreferenceRepository
 import com.agarthavision.domain.repository.SignedOutNoticeStore
 import com.agarthavision.domain.repository.ThemePreferenceRepository
@@ -83,4 +85,9 @@ abstract class PreferencesRepositoryModule {
     abstract fun bindOnboardingPreferenceRepository(
         implementation: OnboardingPreferenceRepositoryImpl,
     ): OnboardingPreferenceRepository
+
+    @Binds
+    abstract fun bindBiometricLockRepository(
+        implementation: BiometricLockRepositoryImpl,
+    ): BiometricLockRepository
 }

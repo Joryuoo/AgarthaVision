@@ -44,6 +44,7 @@ data class SettingsActions(
     val onSyncNowClick: () -> Unit,
     val onSelectTheme: (ThemeMode) -> Unit,
     val onChangePasswordClick: () -> Unit = {},
+    val onToggleBiometricLock: (Boolean) -> Unit = {},
 )
 
 /**
@@ -78,6 +79,7 @@ fun SettingsScreen(
             onSyncNowClick = viewModel::onSyncNow,
             onSelectTheme = viewModel::onSelectTheme,
             onChangePasswordClick = onChangePasswordClick,
+            onToggleBiometricLock = viewModel::onToggleBiometricLock,
         ),
     )
 
@@ -150,6 +152,17 @@ private fun SettingsContent(
                         onClick = actions.onChangePasswordClick,
                         modifier = Modifier.padding(horizontal = 20.dp),
                     )
+                }
+                if (state.isBiometricAvailable) {
+                    item {
+                        Spacer(Modifier.height(10.dp))
+                        BiometricLockCard(
+                            isBiometricLockEnabled = state.isBiometricLockEnabled,
+                            isBiometricAvailable = state.isBiometricAvailable,
+                            onToggleBiometricLock = actions.onToggleBiometricLock,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                    }
                 }
             }
             item {

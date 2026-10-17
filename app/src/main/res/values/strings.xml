@@ -764,6 +764,7 @@
     <string name="settings_sync_nothing_to_sync">Nothing to sync</string>
     <string name="settings_sync_incomplete_badge">Sync incomplete</string>
     <string name="settings_sync_incomplete">Some data could not be downloaded. Retrying automatically.</string>
+    <string name="settings_sync_refused_inactive_member">Your account is no longer an active member of a laboratory, so your work cannot be uploaded. It stays saved on this phone. Ask your laboratory\'s admin to reactivate your account.</string>
     <string name="settings_appearance_dark_mode">Dark mode</string>
     <string name="settings_signed_in_as_label">Signed in as</string>
     <string name="settings_role_medtech">Medtech</string>
@@ -785,6 +786,16 @@
     <string name="settings_sign_out_warning_none">All items are synced. Signing out is safe.</string>
     <!-- Change password (14zcqntjph9) -->
     <string name="settings_change_password">Change password</string>
+    <!-- Security / Biometrics (86d4bywtk) -->
+    <string name="settings_security_section">Security</string>
+    <string name="settings_biometric_lock_title">Biometric Lock</string>
+    <string name="settings_biometric_lock_subtitle">Unlock app with fingerprint or face recognition</string>
+    <string name="login_biometric_button">Sign in with Biometrics</string>
+    <string name="biometric_prompt_title">Unlock AgarthaVision</string>
+    <string name="biometric_prompt_subtitle">Use fingerprint or face recognition to continue</string>
+    <string name="biometric_prompt_cancel">Cancel</string>
+    <string name="biometric_lock_overlay_title">AgarthaVision is Locked</string>
+    <string name="biometric_lock_overlay_subtitle">Biometric authentication is required to access your clinical records.</string>
     <string name="settings_change_password_offline">Needs an internet connection</string>
     <string name="change_password_title">Change password</string>
     <string name="change_password_intro">Enter your current password, then the new one twice. You stay signed in on this phone. Other phones and the Admin Console will ask for the new password.</string>
@@ -803,6 +814,9 @@
     <string name="change_password_failed_offline">Couldn\'t reach the server, so your password was not changed. Check your connection and try again.</string>
     <string name="change_password_failed_unconfirmed">The connection dropped before the server answered, so your password may already be changed. Once you\'re back online, try again with your new password as the current one if your old one is refused.</string>
     <string name="change_password_failed">Your password was not changed. Try again in a moment.</string>
+    <string name="change_password_failed_human_check">The security check expired or did not pass, so your password was not changed. Wait for the check to finish, then try again.</string>
+    <string name="human_check_failed">The security check could not load. Check your connection.</string>
+    <string name="human_check_retry">Try the security check again</string>
     <string name="change_password_done_title">Password changed</string>
     <string name="change_password_done_body">Use your new password the next time you sign in, on this phone, another phone or the Admin Console. Your unsynced work is untouched.</string>
     <string name="change_password_done">Done</string>

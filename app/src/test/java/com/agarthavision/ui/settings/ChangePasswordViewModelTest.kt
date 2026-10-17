@@ -1,5 +1,6 @@
 package com.agarthavision.ui.settings
 
+import com.agarthavision.domain.model.HumanCheckConfig
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.usecase.auth.ChangePasswordUseCase
@@ -15,6 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -33,7 +35,8 @@ class ChangePasswordViewModelTest {
         whenever(it.isOnline).thenReturn(online)
     }
 
-    private fun viewModel() = ChangePasswordViewModel(changePasswordUseCase, connectivityObserver)
+    private fun viewModel(humanCheck: HumanCheckConfig = HumanCheckConfig(siteKey = "", hostname = "")) =
+        ChangePasswordViewModel(changePasswordUseCase, connectivityObserver, humanCheck)
 
     private fun ChangePasswordViewModel.fill(current: String, new: String, confirm: String) {
         onCurrentPasswordChanged(current)
@@ -54,7 +57,7 @@ class ChangePasswordViewModelTest {
             assertEquals(PasswordFieldError.REQUIRED, state.currentError)
             assertEquals(PasswordFieldError.REQUIRED, state.newError)
             assertEquals(PasswordFieldError.REQUIRED, state.confirmError)
-            verify(changePasswordUseCase, never()).invoke(any(), any())
+            verify(changePasswordUseCase, never()).invoke(any(), any(), anyOrNull())
         }
 
     @Test
@@ -67,13 +70,13 @@ class ChangePasswordViewModelTest {
             advanceUntilIdle()
 
             assertEquals(PasswordFieldError.MISMATCH, viewModel.state.value.confirmError)
-            verify(changePasswordUseCase, never()).invoke(any(), any())
+            verify(changePasswordUseCase, never()).invoke(any(), any(), anyOrNull())
         }
 
     @Test
     fun `a wrong current password lands on the current-password field`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(changePasswordUseCase.invoke("bad-pass", "new-pass"))
+            whenever(changePasswordUseCase.invoke("bad-pass", "new-pass", null))
                 .thenReturn(PasswordChangeResult.WrongCurrentPassword)
             val viewModel = viewModel()
             viewModel.fill(current = "bad-pass", new = "new-pass", confirm = "new-pass")
@@ -90,7 +93,7 @@ class ChangePasswordViewModelTest {
     @Test
     fun `a weak password shows the provider's reason under the new password`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(changePasswordUseCase.invoke("old-pass", "short"))
+            whenever(changePasswordUseCase.invoke("old-pass", "short", null))
                 .thenReturn(PasswordChangeResult.WeakPassword("At least 8 characters."))
             val viewModel = viewModel()
             viewModel.fill(current = "old-pass", new = "short", confirm = "short")
@@ -105,7 +108,8 @@ class ChangePasswordViewModelTest {
     @Test
     fun `success shows the done panel and forgets the passwords`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(changePasswordUseCase.invoke("old-pass", "new-pass")).thenReturn(PasswordChangeResult.Changed)
+            whenever(changePasswordUseCase.invoke("old-pass", "new-pass", null))
+                .thenReturn(PasswordChangeResult.Changed)
             val viewModel = viewModel()
             viewModel.fill(current = "old-pass", new = "new-pass", confirm = "new-pass")
 
@@ -132,7 +136,7 @@ class ChangePasswordViewModelTest {
 
             assertTrue(viewModel.state.value.isOffline)
             assertFalse(viewModel.state.value.canSubmit)
-            verify(changePasswordUseCase, never()).invoke(any(), any())
+            verify(changePasswordUseCase, never()).invoke(any(), any(), anyOrNull())
         }
 
     @Test
@@ -145,13 +149,14 @@ class ChangePasswordViewModelTest {
             advanceUntilIdle()
 
             assertEquals(PasswordFieldError.REQUIRED, viewModel.state.value.newError)
-            verify(changePasswordUseCase, never()).invoke(any(), any())
+            verify(changePasswordUseCase, never()).invoke(any(), any(), anyOrNull())
         }
 
     @Test
     fun `a connection lost after the new password was sent does not say nothing changed`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(changePasswordUseCase.invoke("old-pass", "new-pass")).thenReturn(PasswordChangeResult.Unconfirmed)
+            whenever(changePasswordUseCase.invoke("old-pass", "new-pass", null))
+                .thenReturn(PasswordChangeResult.Unconfirmed)
             val viewModel = viewModel()
             viewModel.fill(current = "old-pass", new = "new-pass", confirm = "new-pass")
 
@@ -163,9 +168,33 @@ class ChangePasswordViewModelTest {
         }
 
     @Test
+    fun `with the human check on, the button waits for it and its token goes with the check`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(changePasswordUseCase.invoke("old-pass", "new-pass", "token-1"))
+                .thenReturn(PasswordChangeResult.HumanCheckRejected)
+            val viewModel = viewModel(HumanCheckConfig(siteKey = "0x4AAAAAAA-test", hostname = "example.test"))
+            viewModel.fill(current = "old-pass", new = "new-pass", confirm = "new-pass")
+
+            assertFalse(viewModel.state.value.canSubmit)
+            viewModel.onHumanCheckToken("token-1")
+            assertTrue(viewModel.state.value.canSubmit)
+
+            viewModel.onSubmit()
+            advanceUntilIdle()
+
+            verify(changePasswordUseCase).invoke("old-pass", "new-pass", "token-1")
+            assertEquals(ChangePasswordFailure.HUMAN_CHECK_REJECTED, viewModel.state.value.failure)
+            assertNull(viewModel.state.value.currentError)
+            // The token is spent; the next try needs a fresh check.
+            assertNull(viewModel.state.value.humanCheck.token)
+            assertFalse(viewModel.state.value.canSubmit)
+        }
+
+    @Test
     fun `a dropped connection mid-request says nothing changed`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(changePasswordUseCase.invoke("old-pass", "new-pass")).thenReturn(PasswordChangeResult.NoConnection)
+            whenever(changePasswordUseCase.invoke("old-pass", "new-pass", null))
+                .thenReturn(PasswordChangeResult.NoConnection)
             val viewModel = viewModel()
             viewModel.fill(current = "old-pass", new = "new-pass", confirm = "new-pass")
 

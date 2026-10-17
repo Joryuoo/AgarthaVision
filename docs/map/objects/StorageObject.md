@@ -36,6 +36,9 @@ owns only the buckets' policies (and, for `reports`, the bucket row itself).
 | SELECT (admin) | `bucket_id = 'samples'` and `is_admin(auth.uid())` | `0001_init.sql:534-536` |
 | SELECT (assigned) | `bucket_id = 'samples'` and `can_read_sample_object(name)`: a sample row with this exact `storage_path` whose patient the reader is assigned to | `0007_patient_shared_history.sql:187-189` |
 | DELETE | **deliberately absent** | `0001_init.sql:538-540` |
+| INSERT, UPDATE (restrictive) | in the `samples` and `reports` buckets, the writer is an active member of an active laboratory (`app_private.require_active_lab_member()`); ANDed with the rows above | `0018_writes_need_active_lab_member.sql` |
+
+Since 0018 every `reports` policy is `TO authenticated`; before it, three were `TO public`.
 
 **`reports` bucket** — created and policied by `supabase/migrations/0003_reports_bucket.sql`:
 private, 10 MB limit, PDF and CSV only. Reads mirror the `reports` row: the author or — since `0007_patient_shared_history.sql:191-193` — anyone assigned to the report's

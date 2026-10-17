@@ -1,14 +1,17 @@
 package com.agarthavision.ui.settings
 
-import com.agarthavision.core.util.Logger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.auth.BiometricPromptManager
+import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.core.util.Logger
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
@@ -45,6 +48,8 @@ data class SettingsUiState(
     val isOffline: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.LIGHT,
     val isDarkMode: Boolean = false,
+    val isBiometricLockEnabled: Boolean = false,
+    val isBiometricAvailable: Boolean = false,
     val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
     val isSyncing: Boolean = false,
     val initialFetchDone: Boolean = true,
@@ -56,6 +61,11 @@ data class SettingsUiState(
     val canSyncNow: Boolean
         get() = isSignedIn && !isOffline && !isSyncing
 }
+
+private data class PreferencesTuple(
+    val themeMode: ThemeMode,
+    val biometricEnabled: Boolean,
+)
 
 private data class SyncTuple(
     val syncing: Boolean,
@@ -85,6 +95,8 @@ class SettingsViewModel @Inject constructor(
     private val initialFetchStateStore: InitialFetchStateStore,
     private val fetchOutcomeStore: FetchOutcomeStore,
     private val lastSyncStore: LastSyncStore,
+    private val biometricLockRepository: BiometricLockRepository,
+    private val biometricPromptManager: BiometricPromptManager,
 ) : ViewModel() {
 
     private val events = MutableSharedFlow<SettingsEvent>()
@@ -127,7 +139,7 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = combine(
         identityFlow,
         connectivityObserver.isOnline,
-        observeThemeModeUseCase(),
+        combine(observeThemeModeUseCase(), biometricLockRepository.isBiometricLockEnabled, ::PreferencesTuple),
         pendingSyncFlow,
         combine(
             isSyncingFlow,
@@ -137,14 +149,16 @@ class SettingsViewModel @Inject constructor(
             lastSyncErrorFlow,
             ::SyncTuple,
         ),
-    ) { identity, online, themeMode, pendingSync, tuple ->
+    ) { identity, online, prefTuple, pendingSync, tuple ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
             isSignedIn = identity != null,
             isOffline = !online,
-            themeMode = themeMode,
-            isDarkMode = themeMode == ThemeMode.DARK,
+            themeMode = prefTuple.themeMode,
+            isDarkMode = prefTuple.themeMode == ThemeMode.DARK,
+            isBiometricLockEnabled = prefTuple.biometricEnabled,
+            isBiometricAvailable = biometricPromptManager.getBiometricStatus() == BiometricStatus.READY,
             pendingSyncCounts = pendingSync,
             isSyncing = tuple.syncing,
             initialFetchDone = tuple.initialFetchDone,
@@ -157,6 +171,12 @@ class SettingsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = SettingsUiState(),
     )
+
+    fun onToggleBiometricLock(enabled: Boolean) {
+        viewModelScope.launch {
+            biometricLockRepository.setBiometricLockEnabled(enabled)
+        }
+    }
 
     /** Persists the chosen theme mode. */
     fun onSelectTheme(mode: ThemeMode) {

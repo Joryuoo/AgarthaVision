@@ -2,6 +2,7 @@ package com.agarthavision
 
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.model.SignedOutNotice
+import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.repository.OnboardingPreferenceRepository
 import com.agarthavision.domain.usecase.auth.AuthGate
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
@@ -41,6 +42,9 @@ class MainViewModelTest {
     private val hasSeenOnboardingFlow = MutableStateFlow(false)
     private val onboardingPreferenceRepository: OnboardingPreferenceRepository =
         mock<OnboardingPreferenceRepository>().also { whenever(it.hasSeenOnboarding).thenReturn(hasSeenOnboardingFlow) }
+    private val biometricLockRepository: BiometricLockRepository = mock<BiometricLockRepository>().also {
+        whenever(it.isBiometricLockEnabled).thenReturn(MutableStateFlow(false))
+    }
 
     private fun viewModel() =
         MainViewModel(
@@ -48,6 +52,7 @@ class MainViewModelTest {
             resolveAuthGateUseCase,
             observeSignedOutNoticeUseCase,
             onboardingPreferenceRepository,
+            biometricLockRepository,
         )
 
     @Test

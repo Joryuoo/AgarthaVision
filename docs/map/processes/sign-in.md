@@ -37,10 +37,21 @@ the same identity signing in with a new password.
 
 1. **Online only.** `LoginViewModel` blocks submit without connectivity (`ConnectivityObserver`).
    There is no sign-up flow; accounts are made in the Supabase dashboard.
-2. **Authenticate, then cache.** `SignInUseCase` → `SupabaseAuthRepository.kt::signIn` signs in
-   with email and password, then `::cacheIdentity` writes user id, email and display name
-   (`full_name` from auth metadata) to DataStore.
-3. **Await the patient list only, then leave the screen.** `LoginViewModel` calls
+2. **Pass the human check** (14zcqntnqxf). When the build carries a Turnstile site key and
+   hostname (`HumanCheckConfig`, from `local.properties`), the form shows
+   `ui/components/HumanCheckWidget.kt`: Turnstile in a WebView, loaded with
+   `https://<hostname>/` as its base URL so Cloudflare sees the hostname the widget is registered
+   for. Submit stays disabled until it hands back a token. A token is single-use, so every failed
+   attempt drops it and the widget runs again; an expired one is replaced by the widget itself.
+   Without a site key there is no widget and no token, which only works while Supabase's CAPTCHA
+   protection is off.
+3. **Authenticate, then cache.** `SignInUseCase` → `SupabaseAuthRepository.kt::signIn` signs in
+   with email, password and the token (`captchaToken`), then `::cacheIdentity` writes user id,
+   email and display name (`full_name` from auth metadata) to DataStore. Supabase checks the
+   token with Cloudflare; a refused one (`captcha_failed`) becomes `HumanCheckRejectedException`,
+   and the screen says the security check expired or did not pass, never that the password was
+   wrong.
+4. **Await the patient list only, then leave the screen.** `LoginViewModel` calls
    `CompleteSignInUseCase`, which awaits `FetchRemoteDataUseCase::pullPatientsOnly` (about a
    second or two) and then calls `SyncScheduler::requestSyncAfterSignIn`, even if the pull failed.
    The login screen shows staged text meanwhile (`LoginStage`: signing in, then downloading
@@ -109,8 +120,10 @@ the medtech changes it from Settings.
    `change_password_offline_notice`.
 3. **Online only.** `ChangePasswordUseCase` answers `NoConnection` offline without trying.
 4. **Current password, then new.** `SupabaseAuthRepository.kt::changePassword` signs in again
-   with the session's email and the current password. A wrong one is
-   `WrongCurrentPassword` (`passwordCheckFailure`) and nothing changes. Then `updateUser` sets
+   with the session's email and the current password, and so passes the same human check as
+   sign-in (14zcqntnqxf): the screen shows the widget and sends its token, and a refused one is
+   `HumanCheckRejected`. A wrong password is `WrongCurrentPassword` (`passwordCheckFailure`) and
+   nothing changes. Then `updateUser` sets
    the new one; the provider's strength rules, and its `same_password`, come back through
    `passwordUpdateFailure`. A connection lost on the update is `Unconfirmed`, not "nothing
    changed": the server may have set it. Supabase does not require the current password, so
