@@ -903,7 +903,7 @@
         <item quantity="other">%1$d awaiting review</item>
     </plurals>
     <string name="verify_queue_empty_title">Nothing captured yet</string>
-    <string name="verify_queue_empty_body">Tap the shutter to record a field. Frames wait here until you verify them.</string>
+    <string name="verify_queue_empty_body">Capture a sample frame to begin.</string>
     <string name="verify_queue_done_title">All frames verified</string>
     <string name="verify_queue_done_body">Every frame captured in this session has been checked.</string>
     <string name="verify_queue_view_records">View session records</string>
