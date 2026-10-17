@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-10-01
+commit: 6590f32f
+entity: app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt
+---
+
 # Patient
 
 **One sentence.** The primary clinical unit a medtech works from — an individual who owns
@@ -24,6 +32,24 @@ had no way to track multiple smears from the same person across time.
   second medtech. The `on_patient_created` trigger writes the creator's own row server-side,
   because the SELECT policy reads that table and PostgREST returns the inserted row on insert —
   without the trigger link, the creating medtech cannot read back the patient they just made.
+- **A super admin never reads this table** (`0013_super_admin_reads_deidentified.sql:38`).
+  They read `patients_deidentified` (`0012_deidentified_reads.sql:50`): every column but
+  `lastname`, `firstname`, `middle_name`, `sex` and `birthdate`. The clinic's organization
+  admin reads it in full through the Admin Console's own policies.
+- **Assignment opens the whole history.** Since `0007_patient_shared_history.sql` a medtech
+  linked through `patient_users` reads every session, sample, detection, finding, prediction and
+  report on the patient, whoever wrote them (`is_linked_to_patient`, `:44-56`). `user_id` on
+  those rows stays the author. The phone mirrors the rule through its local links
+  (`PatientAccessRepository`), and the pull removes a link the server no longer returns, so an
+  unassigned patient leaves the list (`FetchRemoteDataUseCase.kt::removeRevokedLinks`).
+- **A second trigger, from the Admin Console, files the patient under a laboratory.**
+  `console_on_patient_created` (`AFTER INSERT`) comes from the console's own migration set, not
+  this repository. It writes `patient_organizations` from the organization of `created_by`'s
+  membership, because the laboratory owns the patient (D11). It catches every error and leaves
+  the patient unassigned rather than fail the app's insert (R4). If `created_by` stops meaning
+  "the creating medtech", or is renamed, new patients silently stop being assigned. The same set
+  adds an org-admin `SELECT` policy on `patients`. See
+  [`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
 - **There is no delete.** Removing a patient is an admin-side action only; no client path,
   DAO method, or client RLS policy allows deletion.
 - **Editing does not cascade.** Existing session labels keep the initials and barangay they were
@@ -32,13 +58,13 @@ had no way to track multiple smears from the same person across time.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0001_init.sql:91-112`)
+**Postgres** (`supabase/migrations/0001_init.sql:78-116`, then `0002_optional_patient_firstname.sql`)
 
 | Field | Constraint |
 |---|---|
 | `id` | PK, default `uuid_generate_v4()` |
 | `lastname` | NOT NULL text, `CHECK (length(btrim(lastname)) > 0)` |
-| `firstname` | NOT NULL text, `CHECK (length(btrim(firstname)) > 0)` |
+| `firstname` | NOT NULL text. `0002` dropped the non-blank CHECK, because a **codenamed** patient stores `''` here |
 | `middle_name` | nullable text |
 | `sex` | NOT NULL text, `CHECK (sex in ('M', 'F'))` |
 | `birthdate` | NOT NULL date, `CHECK (birthdate <= current_date)` |
@@ -50,23 +76,30 @@ had no way to track multiple smears from the same person across time.
 Indexes on `psgc_barangay_code` (`patients_barangay_idx`) and `(lower(lastname), lower(firstname))`
 (`patients_lastname_idx`).
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt:38-82`)
+**Room** (`PatientEntity`)
 
 PK column is `patient_id`. Key details:
 
 - `sex` maps through `domain/model/Sex.kt` (`M` / `F`).
+- **Codenamed patients.** A patient can be recorded without a name: the codename
+  (`ALPHA-M24`, from `domain/patient/CodenameGenerator.kt`) goes in `lastname` and `firstname`
+  is `''`. The New Patient form starts in codename mode. `CodenameGenerator.isCodename` is how
+  every screen tells the two apart, so a real surname shaped like `M24` would read as a codename.
 - `birthdate` is stored as epoch millis at Philippine midnight.
 - `supabase_status` is Room-only (`pending` / `synced` / `sync_failed`).
 - The join table is mirrored locally by `PatientUserEntity` (`data/local/entity/PatientUserEntity.kt`),
   written alongside the patient so offline-created patients are visible immediately.
 
-Documented shape: `schema.ts:173-222`.
+Documented shape: `schema.ts` (`Patient`).
 
 ## Connected to
 
 - **Owns** [`Session`](Session.md), 1 → many (`sessions.patient_id` FK).
 - **Joined to** [`Profile`](Profile.md) via `patient_users` join table (`0001_init.sql:117-122`).
 - **References** [`PsgcBarangay`](PsgcBarangay.md) by canonical 10-digit code.
+- **Owned by** a laboratory organization through `patient_organizations`, 1 row per patient.
+  That table and the organizations live in the Admin Console's migration set and have no Room
+  mirror. The app never reads them.
 
 ## If you change this
 
@@ -79,11 +112,15 @@ Documented shape: `schema.ts:173-222`.
   the Recent sort (`PatientDao.observePatients`) reads `sessions.started_at` and
   `samples.timestamp`/`verified_at`; `updated_at` alone is only the patient's own last-edit time.
 - `barangay_prevalence()` surveillance RPC in Postgres.
+- The Admin Console's `patients` trigger and org-admin policy, through `patients.id` and
+  `created_by`. They break without an error on this side, so tell the console team first.
 
 **Does not hit**
 
 - **Existing session labels or reports.** A patient edit does not cascade to past smears.
-- **Room migration.** Handled by destructive fallback in Phase 1 (`core/di/DatabaseModule.kt:54`).
+- **Supabase.** A Room-only change (a new local column) never reaches Postgres unless
+  `PatientRemoteDataSource`'s insert row names it. A Room change does need a hand-written
+  `Migration` — see [effects](../effects/CONTEXT.md).
 
 ## Surfaces
 
@@ -92,6 +129,6 @@ Written by `PatientFormScreen` on create/edit. Read by `PatientsScreen`, the New
 
 ## See
 
-`supabase/migrations/0001_init.sql:91-149`,
-`app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt`,
-`domain/model/Patient.kt`, `schema.ts:173-222`.
+`supabase/migrations/0001_init.sql:78-149`,
+`data/local/entity/PatientEntity.kt`, `domain/model/Patient.kt`, `schema.ts` (`Patient`).
+Registration flow: [`register-patient`](../processes/register-patient.md).

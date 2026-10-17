@@ -12,6 +12,7 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.data.supabase.SyncSessionUseCase
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.sync.INACTIVE_MEMBER_REFUSAL
 import com.agarthavision.domain.sync.LastSyncStore
 import com.agarthavision.domain.sync.SyncCompletion
 import java.time.Clock
@@ -120,6 +121,46 @@ class SyncPendingDataUseCaseTest {
 
         assertEquals(0, summary.patientsSynced)
         assertEquals(1, summary.sessionsSynced)
+    }
+
+    // ── The message Settings shows ────────────────────────────────────────────
+
+    @Test
+    fun `a failed pass records the first failure with its row`() = runTest {
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(patientEntity()))
+        whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.failure(IllegalStateException("offline")))
+
+        useCase()
+
+        verify(lastSyncStore).recordLastError(USER_ID, "[Patient:$PATIENT_ID] offline")
+    }
+
+    @Test
+    fun `a write refused because the account is no longer an active member outranks other failures`() = runTest {
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(patientEntity()))
+        whenever(sessionDao.getSessionsPendingSync(USER_ID)).thenReturn(listOf(sessionEntity()))
+        whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.failure(IllegalStateException("offline")))
+        whenever(syncSessionUseCase(SESSION_ID)).thenReturn(
+            Result.failure(
+                IllegalStateException(
+                    "not_active_lab_member: this account is not an active member of an active laboratory",
+                ),
+            ),
+        )
+
+        useCase()
+
+        verify(lastSyncStore).recordLastError(USER_ID, INACTIVE_MEMBER_REFUSAL)
+    }
+
+    @Test
+    fun `a clean pass clears the last error`() = runTest {
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(patientEntity()))
+        whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.success(Unit))
+
+        useCase()
+
+        verify(lastSyncStore).recordLastError(USER_ID, "")
     }
 
     /**

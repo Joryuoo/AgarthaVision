@@ -136,4 +136,26 @@ data class SampleEntity(
     /** Set to `true` when a sample's findings are modified post-verification. */
     @ColumnInfo(name = "is_edited", defaultValue = "0")
     val isEdited: Boolean = false,
+
+    /**
+     * Where this frame is in getting its model output: `queued`, `in_inference`, `ready` or
+     * `manual`. See [com.agarthavision.domain.inference.InferenceState].
+     *
+     * **Read it through `effectiveInferenceState()`, not raw.** [isManual] wins over this column:
+     * rows written before version 23, and rows pulled from Supabase, carry the `ready` default
+     * whatever their source, and a manual sample must never read as having a model output.
+     *
+     * **Room-only.** Supabase never sees it: only a `ready` or `manual` sample can be verified,
+     * and only verified samples sync. Added by `MIGRATION_22_23`.
+     */
+    @ColumnInfo(name = "inference_state", defaultValue = "'ready'")
+    val inferenceState: String = "ready",
+
+    /**
+     * How many times both inference engines have failed on this frame. At the queue's limit the
+     * frame becomes manual. Kept on the row, not in memory, so a crash loop cannot reset it.
+     * **Room-only.**
+     */
+    @ColumnInfo(name = "inference_attempts", defaultValue = "0")
+    val inferenceAttempts: Int = 0,
 )

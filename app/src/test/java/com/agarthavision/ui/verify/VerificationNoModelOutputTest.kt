@@ -4,6 +4,7 @@ import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.inference.CancelInferenceUseCase
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
@@ -63,6 +64,7 @@ class VerificationNoModelOutputTest {
         flaggedFrameStore,
         submitVerificationUseCase,
         searchSpeciesSuggestions,
+        mock<CancelInferenceUseCase>(),
     )
 
     private fun noModelOutputFrame() = FlaggedFrame(

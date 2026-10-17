@@ -32,7 +32,9 @@ interface SampleSpeciesFindingDao {
         SELECT f.* FROM sample_species_findings f
         JOIN samples s ON s.sample_id = f.sample_id
         WHERE s.session_id = :sessionId
-          AND (s.user_id = :userId OR s.user_id IS NULL)
+          AND (s.user_id = :userId OR s.user_id IS NULL
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
           AND s.deleted_at is null
         """,
     )

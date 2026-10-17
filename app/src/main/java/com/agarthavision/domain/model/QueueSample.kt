@@ -1,5 +1,6 @@
 package com.agarthavision.domain.model
 
+import com.agarthavision.domain.inference.InferenceState
 import java.time.Instant
 
 /**
@@ -37,10 +38,14 @@ import java.time.Instant
  * @property source whether the inference container answered or was unreachable. A
  *   [FrameSource.MANUAL] row has no model output at all, which is the one thing about an
  *   unverified sample the medtech cannot see from the thumbnail.
+ * @property inferenceState where the sample is in getting its model output. Defaults from
+ *   [source], which is what every row was before inference moved to the background queue.
  */
 data class QueueSample(
     val sampleId: String,
     val capturedAt: Instant,
     val imagePath: String,
     val source: FrameSource,
+    val inferenceState: InferenceState =
+        if (source == FrameSource.MANUAL) InferenceState.MANUAL else InferenceState.READY,
 )

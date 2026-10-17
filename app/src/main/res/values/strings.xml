@@ -8,20 +8,35 @@
     <string name="login_email_placeholder">m.santos@laguna-rhu.ph</string>
     <string name="login_email_error">Enter a valid email address.</string>
     <string name="login_password_label">Password</string>
-    <string name="login_password_placeholder">..........</string>
+    <string name="login_password_placeholder">Password</string>
     <string name="login_password_error">Password is required.</string>
     <string name="login_forgot_password">Forgot?</string>
+    <string name="login_forgot_password_link">Forgot password?</string>
+    <string name="login_tagline">Smear screening, in the field.</string>
+    <string name="login_logo_description">AgarthaVision logo</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
     <string name="login_security_note">Access is restricted to medical technologists provisioned by your facility\'s administrator.</string>
     <string name="login_submit">Log in</string>
+    <string name="login_stage_signing_in">Logging in…</string>
+    <string name="login_stage_downloading_patients">Downloading your patients…</string>
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
     <string name="login_offline_notice">You\'re offline. Signing in requires an internet connection.</string>
+    <string name="login_signed_out_by_server_title">You were signed out</string>
+    <string name="login_signed_out_by_server_body">The server ended this phone\'s sign-in, so uploaded records were removed from it. They come back when you sign in. If your password was changed, sign in with the new one. If you can\'t sign in, ask your laboratory\'s admin.</string>
+    <plurals name="login_signed_out_unsynced_kept">
+        <item quantity="one">%d item that hadn\'t uploaded is still on this phone. It uploads after you sign back in.</item>
+        <item quantity="other">%d items that hadn\'t uploaded are still on this phone. They upload after you sign back in.</item>
+    </plurals>
 
     <!-- Dashboard account / sync banner (ADR-007 offline access) -->
     <string name="dashboard_signed_out">Not signed in</string>
     <string name="dashboard_sign_in">Sign in</string>
     <string name="dashboard_sync_now">Sync now</string>
     <string name="dashboard_syncing">Syncing…</string>
+    <string name="dashboard_initial_download_in_progress">Downloading your records…</string>
+    <string name="dashboard_initial_download_incomplete">Your records haven\'t finished downloading. Connect to the internet before working offline.</string>
     <plurals name="dashboard_pending_upload">
         <item quantity="one">%1$d item pending upload</item>
         <item quantity="other">%1$d items pending upload</item>
@@ -153,8 +168,15 @@
     <string name="verify_q1">There is a parasitic egg in this box</string>
     <string name="verify_q2">The bounding box is correctly placed</string>
     <string name="verify_q3">This egg is %1$s</string>
-    <string name="verify_species_picker_label">Which species is it?</string>
-    <string name="verify_stage_picker_label">Developmental stage</string>
+    <string name="verify_species_picker_label">Species</string>
+    <string name="verify_species_placeholder">Choose the correct species</string>
+    <string name="verify_stage_picker_label">Stage</string>
+    <string name="verify_stage_placeholder">Choose a stage</string>
+    <string name="verify_detection_subtitle">Answer for the highlighted box</string>
+    <plurals name="verify_model_eggs_detected">
+        <item quantity="one">%1$d egg detected</item>
+        <item quantity="other">%1$d eggs detected</item>
+    </plurals>
     <string name="verify_other_stage_label">Other stage</string>
     <string name="verify_other_stage_hint">Type the developmental stage</string>
     <string name="verify_yes">Yes</string>
@@ -166,10 +188,24 @@
 
     <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->
     <string name="verify_species_you_added">SPECIES YOU ADDED</string>
-    <string name="verify_add_species">+ Add species</string>
-    <string name="verify_remove_species">Discard</string>
-    <string name="verify_save_species">Save</string>
+    <string name="verify_add_species">Add a species the model missed</string>
+    <string name="verify_remove_species">Remove species</string>
+    <string name="verify_save_species">Save species</string>
+    <string name="verify_captured_at">Captured %1$s</string>
+    <string name="verify_editing_chip">Editing</string>
+    <string name="verify_ai_suggested_chip">AI suggested</string>
+    <string name="verify_added_by_you_chip">Added by you</string>
+    <string name="verify_added_species_title">Added species %1$d</string>
+    <string name="verify_added_species_subtitle">Not boxed by the model</string>
+    <string name="verify_show_boxes">Show boxes on image</string>
+    <string name="verify_action_discard">Discard</string>
+    <string name="verify_action_save_changes">Save changes</string>
+    <string name="verify_action_submit">Submit</string>
     <string name="verify_field_total_label">Egg count</string>
+    <string name="verify_eggs_of_this_species">Eggs of this species</string>
+    <string name="verify_seen_in_this_sample">Seen in this sample</string>
+    <string name="verify_decrement_egg_count">Decrease egg count</string>
+    <string name="verify_increment_egg_count">Increase egg count</string>
     <string name="verify_field_total_boxed">%1$d of them are already boxed by the model</string>
     <string name="verify_field_total_floor">Cannot be below %1$d — that many are already boxed or drawn</string>
     <string name="verify_locate_eggs_section">LOCATE EGGS</string>
@@ -191,7 +227,15 @@
       Kept distinct on purpose: "no signal was collected" and "the model looked and found
       nothing" are different facts, and the second is itself a labelled datapoint.
     -->
-    <string name="verify_model_unavailable">No model output. The inference server could not be reached, so this field was recorded without it. Add the eggs you see below.</string>
+    <string name="verify_model_unavailable">No model output. This field is verified by hand: inference was cancelled, or no model could read it. Add the eggs you see below.</string>
+    <string name="verify_model_in_inference">Frame is in inference</string>
+    <string name="verify_model_queued">Queued for inference</string>
+    <string name="verify_annotation_locked">Annotation unlocks when the model output arrives, or when you cancel inference.</string>
+    <string name="verify_cancel_inference">Cancel inference</string>
+    <string name="verify_cancel_inference_title">Cancel inference?</string>
+    <string name="verify_cancel_inference_body">This sample will never get a model output. You will verify it by hand. To get a model output again, discard the sample and capture the field again.</string>
+    <string name="verify_cancel_inference_confirm">Cancel inference</string>
+    <string name="verify_cancel_inference_dismiss">Keep waiting</string>
     <string name="verify_model_no_eggs">No eggs detected.</string>
     <string name="verify_model_total">TOTAL</string>
     <string name="verify_sample_indicator">Sample %1$d of %2$d</string>
@@ -201,7 +245,7 @@
     <string name="verify_discard_changes_title">Discard changes?</string>
     <string name="verify_discard_changes_body">You have unsaved changes that will be lost if you leave without saving.</string>
     <string name="verify_discard_changes_confirm">Discard</string>
-    <string name="verify_discard_changes_keep">Keep</string>
+    <string name="verify_discard_changes_keep">Keep editing</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
@@ -212,12 +256,12 @@
     </plurals>
 
     <!--
-      The banner must not claim capture has stopped. Since 86d4a6prb removed the 2-second
-      timer, a shutter tap while this is showing still records the frame - as a Manual
-      Capture, which is the designed behaviour. See ticket 86d4akgmh.
+      The banner must not claim capture has stopped (86d4akgmh). Since the background
+      inference queue (14zcqntj6ny), a shutter tap while this is showing is queued like any
+      other, and the on-device model reads it when the cloud cannot. It is not Manual.
     -->
-    <string name="connection_lost_title">Model unreachable</string>
-    <string name="connection_lost_body">Captures are still recorded, as Manual. Verify them as usual.</string>
+    <string name="connection_lost_title">Cloud model unreachable</string>
+    <string name="connection_lost_body">Captures are still recorded. This phone reads them instead, more slowly.</string>
     <string name="connection_lost_resume">Retry</string>
     <string name="connection_lost_probing">Checking connection…</string>
     <string name="connection_lost_collapse">Hide this message</string>
@@ -258,8 +302,10 @@
     <string name="verify_sheet_kebab_desc">Sample actions</string>
     <string name="verify_user_note_label">Notes (optional)</string>
     <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
-    <string name="badge_ai_suggested">AI-suggested</string>
     <string name="badge_manual">Manual</string>
+    <string name="badge_inference_queued">Queued</string>
+    <string name="badge_inference_running">In inference</string>
+    <string name="badge_inference_ready">Ready</string>
     <string name="badge_edited">Edited</string>
     <string name="queue_filter_all">All</string>
     <string name="queue_filter_ai">AI Assisted</string>
@@ -333,11 +379,9 @@
     <string name="capture_records_action_desc">View session records</string>
     <string name="capture_back_desc">Back</string>
     <string name="capture_shutter_desc">Capture sample</string>
-    <string name="capture_shutter_busy_desc">Capturing sample</string>
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
     <string name="capture_frame_captured_message">Frame captured</string>
-    <string name="capture_frame_captured_no_model_message">Frame captured · model unavailable</string>
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
@@ -371,14 +415,11 @@
     <string name="reports_no_match_body">Try adjusting your filters or search query.</string>
     <string name="reports_search_placeholder">Search by ID, session, or species</string>
     <string name="reports_open_pdf">Open PDF</string>
-    <string name="reports_open_csv">Open CSV</string>
-    <string name="reports_share_pdf">Share PDF</string>
-    <string name="reports_share_csv">Share CSV</string>
     <string name="reports_format_pdf">PDF</string>
-    <string name="reports_format_csv">CSV</string>
     <string name="reports_total_count">%1$d reports</string>
     <string name="reports_session_link">Session %1$s</string>
     <string name="reports_species_more">+%1$d more</string>
+    <string name="report_card_patient_title">Patient report · %1$s</string>
 
     <string name="records_session_title">Session %1$s</string>
     <string name="records_session_summary">%1$d verified samples · %2$s</string>
@@ -395,11 +436,8 @@
     <string name="session_detail_samples_empty_body">Verified samples for this session will appear here.</string>
     <string name="report_section_title">Reports</string>
     <string name="report_generating">Generating…</string>
-    <string name="report_export">Export report</string>
-    <string name="report_export_as_pdf">Export as PDF</string>
-    <string name="report_export_as_csv">Export as CSV</string>
+    <string name="report_generate">Generate PDF report</string>
     <string name="report_format_pdf">PDF</string>
-    <string name="report_format_csv">CSV</string>
     <string name="report_generated_count">%1$d generated</string>
     <string name="report_pager_page">Page %1$d of %2$d</string>
     <string name="report_pager_previous">Previous page</string>
@@ -411,6 +449,7 @@
     <string name="records_status_pending_sync">Pending sync</string>
     <string name="report_status_failed">Sync failed</string>
     <string name="report_no_positive_species">No positive species</string>
+    <string name="report_and_others">and others</string>
     <string name="report_generated_toast">Report saved to Documents/AgarthaVision</string>
     <string name="report_share_action">Share</string>
     <string name="report_share_missing_path">This report has no saved file.</string>
@@ -421,21 +460,61 @@
     <string name="report_restoring">Fetching the report file\u2026</string>
     <string name="report_restore_failed">This report\'s file could not be fetched. Check your connection and try again.</string>
     <string name="report_pdf_document_title">AgarthaVision Session Report</string>
+    <string name="report_pdf_patient_section_title">Patient</string>
+    <string name="report_pdf_patient_name_label">Patient</string>
+    <string name="report_pdf_sex_label">Sex</string>
+    <string name="report_pdf_age_label">Age</string>
+    <string name="report_pdf_age_value">%1$d years</string>
+    <string name="report_pdf_barangay_label">Barangay</string>
     <string name="report_pdf_session_label">Session</string>
-    <string name="report_pdf_device_label">Device</string>
+    <string name="report_pdf_fields_examined_label">Fields examined</string>
     <string name="report_pdf_generated_by_label">Generated by</string>
     <string name="report_pdf_generated_at_label">Generated at</string>
     <string name="report_pdf_summary_title">Summary</string>
-    <string name="report_pdf_total_samples_label">Total samples</string>
     <string name="report_pdf_total_eggs_label">Total eggs confirmed</string>
     <string name="report_pdf_positive_species_label">Positive species</string>
     <string name="report_pdf_species_table_title">Findings by species</string>
     <string name="report_pdf_column_species">Species</string>
-    <string name="report_pdf_column_lpf">LPF Range</string>
+    <string name="report_pdf_column_lpf">Eggs per LPF (range)</string>
     <string name="report_pdf_column_reading">Reading</string>
-    <string name="report_pdf_no_parasites">No parasites found in the fields examined.</string>
-    <string name="report_pdf_lpf_unit_note">LPF = Low Power Field (Direct Smear)</string>
+    <plurals name="report_pdf_no_parasites_fields">
+        <item quantity="one">No parasites found across %1$d field examined.</item>
+        <item quantity="other">No parasites found across %1$d fields examined.</item>
+    </plurals>
+    <string name="report_pdf_lpf_unit_note">LPF = Low Power Field (Direct Fecal Smear)</string>
     <string name="report_pdf_footer">Generated by AgarthaVision · Page %1$d</string>
+
+    <!-- Patient report (14zcqntj2uz): pools several sessions' findings into one document. -->
+    <string name="patient_report_pdf_document_title">AgarthaVision Patient Report</string>
+    <string name="patient_report_pdf_patient_name_label">Patient</string>
+    <string name="patient_report_pdf_sex_label">Sex</string>
+    <string name="patient_report_pdf_age_label">Age</string>
+    <string name="patient_report_pdf_address_label">Address</string>
+    <string name="patient_report_pdf_scope_label">Scope</string>
+    <string name="patient_report_pdf_scope_all_sessions">All sessions</string>
+    <string name="patient_report_pdf_scope_range">%1$s – %2$s</string>
+    <string name="patient_report_pdf_scope_from">From %1$s</string>
+    <string name="patient_report_pdf_scope_until">Through %1$s</string>
+    <string name="patient_report_pdf_generated_by_label">Generated by</string>
+    <string name="patient_report_pdf_generated_at_label">Generated at</string>
+    <string name="patient_report_pdf_summary_title">Summary</string>
+    <string name="patient_report_pdf_total_sessions_label">Sessions included</string>
+    <string name="patient_report_pdf_total_samples_label">Total fields examined</string>
+    <string name="patient_report_pdf_total_eggs_label">Total eggs confirmed</string>
+    <string name="patient_report_pdf_positive_species_label">Positive species</string>
+    <string name="patient_report_pdf_species_table_title">Findings by species (all sessions)</string>
+    <string name="patient_report_pdf_session_table_title">Findings by session</string>
+    <string name="patient_report_pdf_column_date">Date</string>
+    <string name="patient_report_pdf_column_session">Session</string>
+    <string name="patient_report_pdf_column_samples">Samples</string>
+    <string name="patient_report_pdf_column_eggs">Eggs</string>
+    <string name="patient_report_pdf_column_findings">Findings</string>
+    <string name="patient_report_pdf_session_negative">Negative</string>
+    <plurals name="patient_report_pdf_no_parasites_sessions">
+        <item quantity="one">No parasites found across %1$d session examined.</item>
+        <item quantity="other">No parasites found across %1$d sessions examined.</item>
+    </plurals>
+    <string name="patient_report_pdf_footer">Generated by AgarthaVision · Page %1$d</string>
     <string name="session_detail_unknown_detection">No detection</string>
     <string name="session_detail_confidence">Source: %1$s</string>
     <string name="session_detail_captured">Captured: %1$s</string>
@@ -446,10 +525,44 @@
     <string name="session_detail_no_parasites">No parasites found</string>
     <!-- En dash, not a hyphen: this is a numeric range. -->
     <string name="lpf_range_value">%1$d\u2013%2$d LPF</string>
+    <string name="lpf_single_value">%1$d LPF</string>
+    <plurals name="session_detail_species_count">
+        <item quantity="one">%d species</item>
+        <item quantity="other">%d species</item>
+    </plurals>
+    <plurals name="session_detail_fields_count">
+        <item quantity="one">%d field</item>
+        <item quantity="other">%d fields</item>
+    </plurals>
+    <string name="session_detail_per_field_density">PER-FIELD DENSITY (LPF)</string>
+    <string name="session_detail_total_eggs">TOTAL EGGS CONFIRMED</string>
+    <string name="report_empty_title">No reports yet</string>
+    <string name="report_empty_body">Generated PDF reports will show up here.</string>
+    <plurals name="session_detail_captured_samples">
+        <item quantity="one">%d captured sample</item>
+        <item quantity="other">%d captured samples</item>
+    </plurals>
+    <string name="sample_tile_manual">Manual</string>
+    <plurals name="sample_detail_detection_count">
+        <item quantity="one">%d detection</item>
+        <item quantity="other">%d detections</item>
+    </plurals>
+    <plurals name="sample_detail_species_count">
+        <item quantity="one">%d species</item>
+        <item quantity="other">%d species</item>
+    </plurals>
+    <string name="sample_detail_auto_detected">Auto-detected</string>
+    <string name="sample_detail_manual_capture">Manual capture</string>
+    <string name="sample_detail_confidence">%1$d%% confidence</string>
+    <string name="sample_detail_hidden_suffix">" · hidden"</string>
     <string name="lpf_descriptor_rare">rare</string>
     <string name="lpf_descriptor_few">few</string>
     <string name="lpf_descriptor_moderate">moderate</string>
     <string name="lpf_descriptor_numerous">numerous</string>
+    <!-- Parasite Burden Level (86d4bzmah) -->
+    <string name="parasite_burden_low">Low Burden</string>
+    <string name="parasite_burden_moderate">Moderate Burden</string>
+    <string name="parasite_burden_high">High Burden</string>
     <string name="session_detail_eggs_total_label">Total eggs: %1$d</string>
     <string name="session_detail_eggs_empty">No confirmed eggs yet</string>
     <plurals name="session_detail_no_confirmed_eggs_fields">
@@ -545,6 +658,8 @@
     <string name="patients_search_placeholder">Search by name…</string>
     <string name="patients_empty_title">No patients yet</string>
     <string name="patients_empty_body">Add a patient to start recording their smears.</string>
+    <string name="patients_empty_downloading">Your patients are still downloading</string>
+    <string name="patients_empty_downloading_body">They will appear here once the download finishes. You can still add a new patient.</string>
     <string name="patients_empty_search_title">No matches</string>
     <string name="patients_empty_search_body">No patient matches that name.</string>
     <string name="patients_new">New patient</string>
@@ -591,7 +706,8 @@
     <string name="session_picker_create">New session</string>
     <string name="session_picker_row_active">Active</string>
     <string name="session_picker_row_untitled">Untitled smear</string>
-    <string name="session_picker_row_kebab_desc">Session actions</string>
+    <string name="session_card_long_press_label">Show session actions</string>
+    <string name="sessions_rename_session_action">Rename session</string>
     <string name="session_picker_row_end_session">End session</string>
     <string name="session_picker_dialog_title">New session</string>
     <string name="session_picker_dialog_label">Smear label</string>
@@ -648,6 +764,7 @@
     <string name="settings_sync_nothing_to_sync">Nothing to sync</string>
     <string name="settings_sync_incomplete_badge">Sync incomplete</string>
     <string name="settings_sync_incomplete">Some data could not be downloaded. Retrying automatically.</string>
+    <string name="settings_sync_refused_inactive_member">Your account is no longer an active member of a laboratory, so your work cannot be uploaded. It stays saved on this phone. Ask your laboratory\'s admin to reactivate your account.</string>
     <string name="settings_appearance_dark_mode">Dark mode</string>
     <string name="settings_signed_in_as_label">Signed in as</string>
     <string name="settings_role_medtech">Medtech</string>
@@ -667,6 +784,42 @@
     <string name="settings_sign_out_warning_items">%1$d items haven\’t uploaded yet. Signing out now would discard them, so sync first.</string>
     <string name="settings_sign_out_warning_one">1 item hasn\’t uploaded yet. Signing out now would discard it, so sync first.</string>
     <string name="settings_sign_out_warning_none">All items are synced. Signing out is safe.</string>
+    <!-- Change password (14zcqntjph9) -->
+    <string name="settings_change_password">Change password</string>
+    <!-- Security / Biometrics (86d4bywtk) -->
+    <string name="settings_security_section">Security</string>
+    <string name="settings_biometric_lock_title">Biometric Lock</string>
+    <string name="settings_biometric_lock_subtitle">Unlock app with fingerprint or face recognition</string>
+    <string name="login_biometric_button">Sign in with Biometrics</string>
+    <string name="biometric_prompt_title">Unlock AgarthaVision</string>
+    <string name="biometric_prompt_subtitle">Use fingerprint or face recognition to continue</string>
+    <string name="biometric_prompt_cancel">Cancel</string>
+    <string name="biometric_lock_overlay_title">AgarthaVision is Locked</string>
+    <string name="biometric_lock_overlay_subtitle">Biometric authentication is required to access your clinical records.</string>
+    <string name="settings_change_password_offline">Needs an internet connection</string>
+    <string name="change_password_title">Change password</string>
+    <string name="change_password_intro">Enter your current password, then the new one twice. You stay signed in on this phone. Other phones and the Admin Console will ask for the new password.</string>
+    <string name="change_password_offline_notice">You\'re offline. Changing your password needs an internet connection.</string>
+    <string name="change_password_current_label">Current password</string>
+    <string name="change_password_new_label">New password</string>
+    <string name="change_password_confirm_label">Confirm new password</string>
+    <string name="change_password_show">Show password</string>
+    <string name="change_password_hide">Hide password</string>
+    <string name="change_password_submit">Change password</string>
+    <string name="change_password_error_required">Required.</string>
+    <string name="change_password_error_wrong_current">That isn\'t your current password.</string>
+    <string name="change_password_error_mismatch">The new passwords don\'t match.</string>
+    <string name="change_password_error_same">Choose a password different from your current one.</string>
+    <string name="change_password_error_weak">Choose a stronger password.</string>
+    <string name="change_password_failed_offline">Couldn\'t reach the server, so your password was not changed. Check your connection and try again.</string>
+    <string name="change_password_failed_unconfirmed">The connection dropped before the server answered, so your password may already be changed. Once you\'re back online, try again with your new password as the current one if your old one is refused.</string>
+    <string name="change_password_failed">Your password was not changed. Try again in a moment.</string>
+    <string name="change_password_failed_human_check">The security check expired or did not pass, so your password was not changed. Wait for the check to finish, then try again.</string>
+    <string name="human_check_failed">The security check could not load. Check your connection.</string>
+    <string name="human_check_retry">Try the security check again</string>
+    <string name="change_password_done_title">Password changed</string>
+    <string name="change_password_done_body">Use your new password the next time you sign in, on this phone, another phone or the Admin Console. Your unsynced work is untouched.</string>
+    <string name="change_password_done">Done</string>
     <string name="settings_about_version">Version</string>
     <string name="settings_about_environment">Environment</string>
     <string name="settings_about_environment_dev">Development</string>
@@ -684,16 +837,73 @@
     <string name="session_label_placeholder">GARCIAM-S01</string>
     <string name="session_label_helper">Generated from the patient\'s last name, first initial, and smear count (e.g. GARCIAM-S01). Edit it if your lab labels smears differently — but each label must be unique for this patient.</string>
     <string name="session_duplicate_label">A smear with this label already exists for this patient.</string>
+    <string name="sessions_rename_action">Rename</string>
+    <string name="session_rename_sheet_title">Rename session</string>
+    <string name="session_rename_sheet_subtitle">Edit the label for this smear</string>
+    <string name="session_rename_save">Save</string>
     <string name="sessions_empty_title">No sessions yet</string>
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
+    <!-- Patient report sheet (14zcqntj2uz) -->
+    <string name="patient_report_generate_action">Generate report</string>
+    <string name="patient_report_sheet_title">Generate report</string>
+    <plurals name="patient_report_sheet_subtitle">
+        <item quantity="one">%1$s · %2$d session</item>
+        <item quantity="other">%1$s · %2$d sessions</item>
+    </plurals>
+    <string name="patient_report_sheet_date_range">DATE RANGE</string>
+    <string name="date_range_from">From</string>
+    <string name="date_range_to">To</string>
+    <string name="date_range_select_start">Select start date</string>
+    <string name="date_range_select_end">Select end date</string>
+    <string name="date_range_select_date">Select date</string>
+    <string name="sample_tile_content_description">Sample, %1$s</string>
+    <string name="sample_tile_content_description_manual">Sample, %1$s, manual capture</string>
+    <string name="patient_report_range_all_time">All time</string>
+    <string name="patient_report_range_last_30">Last 30 days</string>
+    <string name="patient_report_range_last_7">Last 7 days</string>
+    <string name="patient_report_sheet_sessions_title">SESSIONS</string>
+    <string name="patient_report_select_all">Select all</string>
+    <string name="patient_report_sheet_session_no_verified">No verified samples</string>
+    <string name="patient_report_sheet_session_out_of_range">Outside date range</string>
+    <plurals name="patient_report_sheet_summary_sessions">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="patient_report_sheet_summary_samples">
+        <item quantity="one">%d verified sample</item>
+        <item quantity="other">%d verified samples</item>
+    </plurals>
+    <string name="patient_report_sheet_summary_suffix">" will be included"</string>
+    <string name="patient_report_sheet_generate_button">Generate report</string>
+    <string name="patient_report_sheet_close">Close</string>
+    <string name="patient_report_sheet_no_candidates">This patient has no sessions to report on yet.</string>
+    <string name="patient_report_generated_snackbar">Patient report saved to Documents/AgarthaVision</string>
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
     <string name="verify_queue_title">Verify Queue</string>
+    <!-- Onboarding (86d4amrbk) -->
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_finish">Get started</string>
+    <string name="onboarding_step1_title">A second pair of eyes on every smear</string>
+    <string name="onboarding_step1_body">Photograph each smear field and the app marks the Ascaris, Trichuris, and hookworm eggs it sees.</string>
+    <string name="onboarding_step2_title">You make the final call</string>
+    <string name="onboarding_step2_body">Confirm, correct, or reject each marked egg. Nothing counts until you check it.</string>
+    <string name="onboarding_step3_title">Keep working without signal</string>
+    <string name="onboarding_step3_body">After your first sign-in, your work saves on this phone and uploads once you are back online.</string>
+    <string name="onboarding_step4_title">Reports you can share</string>
+    <string name="onboarding_step4_body">Make a PDF report with egg density per low power field, and see which provinces your cases come from.</string>
+    <string name="onboarding_step1_illustration">Microscope field with three eggs, each marked by a box, and a phone camera framing an egg</string>
+    <string name="onboarding_step2_illustration">Checklist where two marked eggs are confirmed with checks and one is rejected with a cross</string>
+    <string name="onboarding_step3_illustration">Phone saving items without signal, with a dashed arrow to a cloud that confirms the upload</string>
+    <string name="onboarding_step4_illustration">PDF report with density bars and a location pin</string>
+    <string name="onboarding_step_progress">Step %1$d of %2$d</string>
     <plurals name="verify_queue_subtitle">
         <item quantity="one">%1$d awaiting review</item>
         <item quantity="other">%1$d awaiting review</item>
     </plurals>
     <string name="verify_queue_empty_title">Nothing captured yet</string>
-    <string name="verify_queue_empty_body">Tap the shutter to record a field. Frames wait here until you verify them.</string>
+    <string name="verify_queue_empty_body">Capture a sample frame to begin.</string>
     <string name="verify_queue_done_title">All frames verified</string>
     <string name="verify_queue_done_body">Every frame captured in this session has been checked.</string>
     <string name="verify_queue_view_records">View session records</string>
@@ -715,5 +925,17 @@
         <item quantity="one">%1$d year old</item>
         <item quantity="other">%1$d years old</item>
     </plurals>
-    <string name="patient_preview_age_sex">%1$s | %2$s</string>
+    <plurals name="patient_preview_sessions_chip">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="patient_preview_unverified_chip">
+        <item quantity="one">%d unverified</item>
+        <item quantity="other">%d unverified</item>
+    </plurals>
+    <string name="patient_preview_age_sex">%1$s · %2$s</string>
+    <!-- A colleague's record, read-only on this phone (14zcqntjph6) -->
+    <string name="record_recorded_by">Recorded by %1$s</string>
+    <string name="record_recorded_by_unnamed">Recorded by another medtech</string>
+    <string name="record_read_only_body">Only the medtech who recorded it can change it.</string>
 </resources>

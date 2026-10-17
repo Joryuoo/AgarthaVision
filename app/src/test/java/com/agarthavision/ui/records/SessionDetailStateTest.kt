@@ -1,8 +1,14 @@
 package com.agarthavision.ui.records
 
+import com.agarthavision.domain.model.Detection
+import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -97,7 +103,85 @@ class SessionDetailStateTest {
         assertFalse(state.canOpenVerifyQueue)
     }
 
+    // ---------- mapToUiModel gallery data tests ----------
+
+    @Test
+    fun `mapToUiModel sets isManual true for manual sample`() {
+        val sample = sampleWith(isManual = true)
+        val state = stateWithSamples(listOf(SampleRecordItem(sample = sample, detections = emptyList())))
+        val uiModel = mapToUiModel(state)
+        assertNotNull(uiModel)
+        assertTrue(uiModel!!.verifiedSamples.first().isManual)
+    }
+
+    @Test
+    fun `mapToUiModel sets eggCount to 2 and 2 boxes when 2 confirmed and 1 rejected`() {
+        val sample = sampleWith(isManual = false)
+        val detections = listOf(
+            detection(verdict = DetectionVerdict.CONFIRMED, cx = 100f, cy = 100f, w = 50f, h = 50f),
+            detection(verdict = DetectionVerdict.CONFIRMED, cx = 200f, cy = 200f, w = 60f, h = 60f),
+            detection(verdict = DetectionVerdict.FALSE_POSITIVE, cx = 300f, cy = 300f, w = 40f, h = 40f),
+        )
+        val state = stateWithSamples(listOf(SampleRecordItem(sample = sample, detections = detections)))
+        val uiModel = mapToUiModel(state)
+        assertNotNull(uiModel)
+        val sampleUi = uiModel!!.verifiedSamples.first()
+        assertEquals(2, sampleUi.eggCount)
+        assertEquals(2, sampleUi.boxes.size)
+    }
+
+    @Test
+    fun `mapToUiModel sets isManual false for AI sample with zero detections`() {
+        val sample = sampleWith(isManual = false)
+        val state = stateWithSamples(listOf(SampleRecordItem(sample = sample, detections = emptyList())))
+        val uiModel = mapToUiModel(state)
+        assertNotNull(uiModel)
+        assertFalse(uiModel!!.verifiedSamples.first().isManual)
+    }
+
     // ---------- helpers ----------
+
+    private fun sampleWith(isManual: Boolean): Sample = Sample(
+        id = "sample-1",
+        userId = "user-1",
+        deviceId = "device-1",
+        sessionId = "session-1",
+        filePath = "/path/sample.jpg",
+        isManual = isManual,
+    )
+
+    private fun detection(
+        verdict: DetectionVerdict,
+        cx: Float,
+        cy: Float,
+        w: Float,
+        h: Float,
+    ): Detection = Detection(
+        id = "det-1",
+        sampleId = "sample-1",
+        classLabel = "Ascaris lumbricoides",
+        confidence = 0.9f,
+        bboxX = cx,
+        bboxY = cy,
+        bboxW = w,
+        bboxH = h,
+        verdict = verdict,
+        expertClass = null,
+    )
+
+    private fun stateWithSamples(samples: List<SampleRecordItem>): SessionDetailState {
+        val session = Session(
+            id = "session-1",
+            userId = "user-1",
+            patientId = "patient-1",
+            deviceId = "device-1",
+            startedAt = 1_000L,
+            label = null,
+        )
+        return SessionDetailState(
+            session = SessionSamples(session = session, samples = samples),
+        )
+    }
 
     private fun stateWith(isActiveSession: Boolean, pendingFlagged: Int): SessionDetailState {
         val session = Session(

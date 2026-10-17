@@ -1,8 +1,12 @@
 package com.agarthavision.ui.records
 
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.LpfDescriptor
+import com.agarthavision.domain.model.ParasiteBurdenLevel
 
 /**
  * How an LPF range is written, in the one place both the screen and the PDF read it from.
@@ -19,6 +23,13 @@ val LpfDescriptor.labelRes: Int
         LpfDescriptor.NUMEROUS -> R.string.lpf_descriptor_numerous
     }
 
+val ParasiteBurdenLevel.labelRes: Int
+    get() = when (this) {
+        ParasiteBurdenLevel.LOW -> R.string.parasite_burden_low
+        ParasiteBurdenLevel.MODERATE -> R.string.parasite_burden_moderate
+        ParasiteBurdenLevel.HIGH -> R.string.parasite_burden_high
+    }
+
 /**
  * True when this species name is a binomial and renders italic (C11).
  *
@@ -26,3 +37,10 @@ val LpfDescriptor.labelRes: Int
  * wrong in the one place typography carries meaning. Same rule as `RecordsScreen`.
  */
 fun String.isBinomial(): Boolean = this != EggSpecies.HOOKWORM.displayName
+
+@Composable
+fun LpfDensity.displayText(): String = if (min == max) {
+    stringResource(R.string.lpf_single_value, min)
+} else {
+    stringResource(R.string.lpf_range_value, min, max)
+}

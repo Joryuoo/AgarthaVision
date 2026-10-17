@@ -2,6 +2,8 @@ package com.agarthavision.domain.usecase.reports
 
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.domain.model.LpfDescriptor
+import com.agarthavision.domain.model.LpfDensity
+import com.agarthavision.domain.model.ParasiteBurdenLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -134,6 +136,15 @@ class LpfAggregationTest {
         assertEquals(LpfDescriptor.MODERATE, LpfDescriptor.forMax(LpfDescriptor.MODERATE_MAX))
         assertEquals(LpfDescriptor.NUMEROUS, LpfDescriptor.forMax(LpfDescriptor.MODERATE_MAX + 1))
         assertEquals(LpfDescriptor.NUMEROUS, LpfDescriptor.forMax(12))
+    }
+
+    @Test
+    fun `ParasiteBurdenLevel maps correctly from LpfDensity`() {
+        assertNull(com.agarthavision.domain.model.LpfDensity(0, 0).burdenLevel)
+        assertEquals(ParasiteBurdenLevel.LOW, com.agarthavision.domain.model.LpfDensity(0, 2).burdenLevel)
+        assertEquals(ParasiteBurdenLevel.LOW, com.agarthavision.domain.model.LpfDensity(0, 5).burdenLevel)
+        assertEquals(ParasiteBurdenLevel.MODERATE, com.agarthavision.domain.model.LpfDensity(0, 10).burdenLevel)
+        assertEquals(ParasiteBurdenLevel.HIGH, com.agarthavision.domain.model.LpfDensity(0, 12).burdenLevel)
     }
 
     @Test

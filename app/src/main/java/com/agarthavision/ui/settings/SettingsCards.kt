@@ -15,14 +15,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.Button
@@ -35,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +47,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
+import com.agarthavision.domain.sync.INACTIVE_MEMBER_REFUSAL
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Science
@@ -203,6 +208,7 @@ internal data class SyncCardState(
     val initialFetchDone: Boolean = true,
     val isFetching: Boolean = false,
     val lastFetchIncomplete: Boolean = false,
+    val lastSyncError: String? = null,
 )
 
 internal enum class SyncBadge {
@@ -361,6 +367,20 @@ internal fun SyncCard(
                 failedCount = state.counts.failedReports,
             )
 
+            if (state.counts.failed > 0 && !state.lastSyncError.isNullOrBlank()) {
+                HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
+                Text(
+                    text = if (state.lastSyncError == INACTIVE_MEMBER_REFUSAL) {
+                        stringResource(R.string.settings_sync_refused_inactive_member)
+                    } else {
+                        state.lastSyncError
+                    },
+                    color = colors.dangerText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
         }
     }
 }
@@ -478,6 +498,116 @@ private fun EntitySyncRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Opens Change password (14zcqntjph9). Tappable offline too: the screen it opens says why it
+ * needs a connection, which is clearer than a row that silently does nothing.
+ */
+@Composable
+internal fun ChangePasswordRow(
+    isOffline: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    SettingsCard(modifier = modifier.testTag(SETTINGS_CHANGE_PASSWORD_TAG), onClick = onClick) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Lock,
+                contentDescription = null,
+                tint = colors.textPrimary,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.settings_change_password),
+                    color = colors.textPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (isOffline) {
+                    Text(
+                        text = stringResource(R.string.settings_change_password_offline),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.textSecondary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/** Test tag on [ChangePasswordRow]. */
+const val SETTINGS_CHANGE_PASSWORD_TAG = "settings_change_password"
+
+@Composable
+internal fun BiometricLockCard(
+    isBiometricLockEnabled: Boolean,
+    isBiometricAvailable: Boolean,
+    onToggleBiometricLock: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!isBiometricAvailable) return
+    val colors = AgarthaTheme.colors
+    SettingsCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Fingerprint,
+                    contentDescription = null,
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_biometric_lock_title),
+                        color = colors.textPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_biometric_lock_subtitle),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+            androidx.compose.material3.Switch(
+                checked = isBiometricLockEnabled,
+                onCheckedChange = onToggleBiometricLock,
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = colors.onBrandFill,
+                    checkedTrackColor = colors.brandFill,
+                    checkedBorderColor = colors.brandFill,
+                    uncheckedThumbColor = colors.textSecondary,
+                    uncheckedTrackColor = colors.surfaceVariant,
+                    uncheckedBorderColor = colors.borderStrong,
+                ),
+                modifier = Modifier.testTag("biometricLockSwitch"),
+            )
         }
     }
 }

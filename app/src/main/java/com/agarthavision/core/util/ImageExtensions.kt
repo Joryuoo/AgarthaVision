@@ -9,9 +9,9 @@ import kotlin.math.min
 /**
  * Side length, in pixels, of every JPEG this app posts for inference.
  *
- * The model input is 640x640 with server-side letterboxing
- * (`inference/export/out/model_manifest.json`), so sending a square of exactly
- * this size means the server never has to pad or rescale.
+ * The model input is 640x640 with letterboxing, in the cloud container and on
+ * device alike (the manifests in `assets/models/`), so a square of exactly this size never
+ * has to be padded or rescaled.
  */
 const val CAPTURE_FRAME_SIZE_PX = 640
 

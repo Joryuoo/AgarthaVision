@@ -7,7 +7,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.ui.theme.AgarthaVisionTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,16 +36,17 @@ class ReportsSectionTest {
 
         composeRule.onNodeWithText("Verify at least one sample to generate a report.").assertExists()
         composeRule.onNodeWithText("No reports yet.").assertDoesNotExist()
-        composeRule.onNodeWithContentDescription("Export report").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Generate PDF report").assertIsNotEnabled()
     }
 
     @Test
-    fun `tapping the disabled button offers no format`() {
-        render(verifiedSamples = emptyList())
+    fun `disabled tap does not call onGenerate`() {
+        var generateCalls = 0
+        render(verifiedSamples = emptyList(), onGenerate = { generateCalls++ })
 
-        composeRule.onNodeWithContentDescription("Export report").performClick()
+        composeRule.onNodeWithContentDescription("Generate PDF report").performClick()
 
-        composeRule.onNodeWithText("PDF", substring = true).assertDoesNotExist()
+        assertEquals(0, generateCalls)
     }
 
     @Test
@@ -51,20 +54,19 @@ class ReportsSectionTest {
         render(verifiedSamples = listOf(sample()))
 
         composeRule.onNodeWithText("No reports yet.").assertExists()
-        composeRule.onNodeWithContentDescription("Export report")
+        composeRule.onNodeWithContentDescription("Generate PDF report")
             .assertIsEnabled()
             .assertHasClickAction()
     }
 
     @Test
-    fun `tapping the enabled button offers both formats`() {
-        // The positive twin of the disabled case, so its assertDoesNotExist cannot pass vacuously.
-        render(verifiedSamples = listOf(sample()))
+    fun `tap on enabled button calls onGenerate once`() {
+        var generateCalls = 0
+        render(verifiedSamples = listOf(sample()), onGenerate = { generateCalls++ })
 
-        composeRule.onNodeWithContentDescription("Export report").performClick()
+        composeRule.onNodeWithContentDescription("Generate PDF report").performClick()
 
-        composeRule.onNodeWithText("PDF", substring = true).assertExists()
-        composeRule.onNodeWithText("CSV", substring = true).assertExists()
+        assertEquals(1, generateCalls)
     }
 
     @Test
@@ -74,7 +76,59 @@ class ReportsSectionTest {
         composeRule.onNodeWithContentDescription("Generating…").assertIsNotEnabled()
     }
 
-    private fun render(verifiedSamples: List<SampleUi>, isGenerating: Boolean = false) {
+    @Test
+    fun `a colleague's session offers no generate button and says whose it is`() {
+        // 14zcqntjph6: its author generates its reports. The reports it already has stay listed.
+        render(
+            verifiedSamples = listOf(sample()),
+            readOnlyAuthor = RecordAuthor.Colleague(name = "Maria Santos"),
+        )
+
+        composeRule.onNodeWithContentDescription("Generate PDF report").assertDoesNotExist()
+        composeRule.onNodeWithText("Recorded by Maria Santos").assertExists()
+        composeRule.onNodeWithText("No reports yet.").assertExists()
+    }
+
+    @Test
+    fun `formatReportPositiveSpecies returns empty string for empty list`() {
+        assertEquals("", formatReportPositiveSpecies(emptyList()))
+    }
+
+    @Test
+    fun `formatReportPositiveSpecies formats single and multiple main species`() {
+        assertEquals("Ascaris lumbricoides", formatReportPositiveSpecies(listOf("Ascaris lumbricoides")))
+        assertEquals(
+            "Ascaris lumbricoides, Hookworm",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Hookworm")),
+        )
+        assertEquals(
+            "Ascaris lumbricoides, Trichuris trichiura, Hookworm",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Trichuris trichiura", "Hookworm")),
+        )
+    }
+
+    @Test
+    fun `formatReportPositiveSpecies appends and others when custom species are present`() {
+        assertEquals(
+            "Ascaris lumbricoides, Hookworm, and others",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Hookworm", "Custom Species")),
+        )
+        assertEquals(
+            "Ascaris lumbricoides, and others",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Custom A", "Custom B")),
+        )
+        assertEquals(
+            "and others",
+            formatReportPositiveSpecies(listOf("Custom Only")),
+        )
+    }
+
+    private fun render(
+        verifiedSamples: List<SampleUi>,
+        isGenerating: Boolean = false,
+        onGenerate: () -> Unit = {},
+        readOnlyAuthor: RecordAuthor.Colleague? = null,
+    ) {
         val state = SessionDetailContentState(
             session = SessionDetailUi(
                 id = "abcd",
@@ -92,10 +146,11 @@ class ReportsSectionTest {
             totalReports = 0,
             currentPage = 0,
             isGenerating = isGenerating,
-            onGenerate = {},
+            onGenerate = onGenerate,
             onOpenReport = {},
             onPrevPage = {},
             onNextPage = {},
+            readOnlyAuthor = readOnlyAuthor,
         )
         composeRule.setContent {
             AgarthaVisionTheme {

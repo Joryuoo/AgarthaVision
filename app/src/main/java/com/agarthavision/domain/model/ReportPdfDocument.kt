@@ -17,17 +17,22 @@ data class ReportPdfDocument(
 )
 
 /**
- * The report's identity + summary numbers, rendered as the PDF's header block.
+ * The report's identity, patient, and summary numbers, rendered as the PDF's header block.
  */
 data class ReportPdfHeader(
     val reportId: String,
     val sessionId: String,
     val sessionLabel: String?,
-    /** Supabase user id of the medtech who generated the report. */
-    val generatedBy: String,
+    val patientName: String,
+    /** Null prints `patients_sex_unknown`. */
+    val patientSex: Sex?,
+    val patientAgeYears: Int,
+    val barangayLabel: String,
+    /** Fields examined — one per verified sample. */
+    val fieldsExamined: Int,
+    /** The medtech's display name (or email, or user id) who generated the report. */
+    val generatedByName: String,
     val generatedAt: Instant,
-    val deviceId: String,
-    val totalSamples: Int,
     val totalEggsConfirmed: Int,
     /** Canonical species names (per [EggSpecies.canonicalClass]) with at least one confirmed egg. */
     val positiveSpecies: List<String>,
@@ -36,7 +41,7 @@ data class ReportPdfHeader(
 /**
  * One row of the per-species findings table.
  *
- * Density is reported per Low Power Field (LPF), calculated as the mean egg count across all 
+ * Density is reported per Low Power Field (LPF), calculated as the mean egg count across all
  * fields examined in a session, as the observed range (min-max).
  *
  * The mean went with PB-17: the session figure is a range, and a mean averages a single heavy

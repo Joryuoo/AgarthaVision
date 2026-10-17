@@ -1,6 +1,6 @@
 package com.agarthavision.data.local.species
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.dao.SpeciesSuggestionDao
 import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
 import com.agarthavision.domain.model.EggSpecies
@@ -68,7 +68,7 @@ class SpeciesSuggestionSeeder @Inject constructor(
     private suspend fun guarded(what: String, block: suspend () -> Int): Int =
         runCatching { block() }.getOrElse { throwable ->
             if (throwable is CancellationException) throw throwable
-            Log.w(TAG, "Species suggestion $what failed; the field falls back to free text.", throwable)
+            Logger.w(TAG, "Species suggestion $what failed; the field falls back to free text.", throwable)
             0
         }
 

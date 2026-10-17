@@ -12,10 +12,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.records.SampleRecordItem
+import com.agarthavision.ui.components.READ_ONLY_AUTHOR_NOTE_TAG
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Rule
 import org.junit.Test
@@ -116,11 +118,44 @@ class SampleDetailContentTest {
         composeRule.onNodeWithTag(SampleDetailTestTags.detectionRow(0)).assertHasClickAction()
     }
 
+    @Test
+    fun `a colleague's sample offers no edit and says whose it is`() {
+        render(
+            detection("a", DetectionVerdict.CONFIRMED, label = "Ascaris lumbricoides"),
+            author = RecordAuthor.Colleague(name = "Maria Santos"),
+        )
+
+        // 14zcqntjph6: Edit and View detection both open the edit screen, where re-verify,
+        // add-species, redraw and delete live, so neither is offered on a colleague's sample.
+        composeRule.onNodeWithTag(SampleDetailTestTags.EDIT_BUTTON).assertDoesNotExist()
+        composeRule.onNodeWithTag(SampleDetailTestTags.VIEW_DETECTION).assertDoesNotExist()
+        scrollTo(READ_ONLY_AUTHOR_NOTE_TAG)
+        composeRule.onNodeWithText("Recorded by Maria Santos").assertExists()
+    }
+
+    @Test
+    fun `a colleague with no name on file reads as another medtech`() {
+        render(author = RecordAuthor.Colleague(name = null))
+
+        scrollTo(READ_ONLY_AUTHOR_NOTE_TAG)
+        composeRule.onNodeWithText("Recorded by another medtech").assertExists()
+    }
+
+    @Test
+    fun `the medtech's own sample keeps both ways into edit mode`() {
+        render(detection("a", DetectionVerdict.CONFIRMED, label = "Ascaris lumbricoides"))
+
+        composeRule.onNodeWithTag(SampleDetailTestTags.EDIT_BUTTON).assertExists()
+        scrollTo(SampleDetailTestTags.VIEW_DETECTION)
+        composeRule.onNodeWithTag(SampleDetailTestTags.VIEW_DETECTION).assertExists()
+        composeRule.onNodeWithTag(READ_ONLY_AUTHOR_NOTE_TAG).assertDoesNotExist()
+    }
+
     private fun scrollTo(tag: String) {
         composeRule.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(tag))
     }
 
-    private fun render(vararg detections: Detection) {
+    private fun render(vararg detections: Detection, author: RecordAuthor = RecordAuthor.Viewer) {
         val item = SampleRecordItem(
             sample = Sample(
                 id = "sample-1",
@@ -138,6 +173,7 @@ class SampleDetailContentTest {
                     imageSource = SampleImageSource.Unavailable(SampleImageUnavailableReason.NO_STORAGE_PATH),
                     onBack = {},
                     onViewDetection = {},
+                    author = author,
                 )
             }
         }

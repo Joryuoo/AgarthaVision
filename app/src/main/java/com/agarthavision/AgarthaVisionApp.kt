@@ -3,7 +3,7 @@ package com.agarthavision
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -11,6 +11,7 @@ import coil.memory.MemoryCache
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.data.local.psgc.PsgcSeeder
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
+import com.agarthavision.domain.inference.InferenceQueue
 import com.agarthavision.domain.repository.SampleImageRepository
 import com.agarthavision.domain.sync.SyncScheduler
 import com.agarthavision.ui.image.SampleImageFetcher
@@ -64,6 +65,13 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
     lateinit var supabaseClient: Lazy<SupabaseClient>
 
     /**
+     * Lazy so it is built, and WorkManager first touched, off the main thread in [onCreate],
+     * after Hilt has assigned [workerFactory].
+     */
+    @Inject
+    lateinit var inferenceQueue: Lazy<InferenceQueue>
+
+    /**
      * Scope for work that outlives any screen. Seeding the PSGC reference data belongs
      * here rather than in a ViewModel: it is a data-layer concern, and routing it through
      * one would breach C1 for no benefit — nothing on screen waits for it.
@@ -96,7 +104,15 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         // Supabase warm-up below.
         applicationScope.launch {
             runCatching { sessionManager.get().restoreActiveSession() }
-                .onFailure { Log.w(TAG, "Failed to restore active session", it) }
+                .onFailure { Logger.w(TAG, "Failed to restore active session", it) }
+        }
+
+        // App start resumes the inference queue. Frames the last process queued, or was running
+        // when it died, are still in Room on the phone. WorkManager may already have picked them
+        // up in the background; if not, this queues a pass rather than waiting for a capture.
+        applicationScope.launch {
+            runCatching { inferenceQueue.get().start() }
+                .onFailure { Logger.w(TAG, "Failed to start the inference queue", it) }
         }
 
         // Pre-creates the Supabase client off the main thread so the first real network call
@@ -105,7 +121,7 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         // never breaks tests that instantiate the real Application.
         applicationScope.launch {
             runCatching { supabaseClient.get() }
-                .onFailure { Log.w(TAG, "Failed to warm up Supabase client", it) }
+                .onFailure { Logger.w(TAG, "Failed to warm up Supabase client", it) }
         }
     }
 

@@ -7,14 +7,18 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Room entity for a persisted session report.
+ * Room entity for a persisted report, scoped to either one session or one patient.
  *
- * Mirrors the Supabase `reports` table from migration `0008_reports.sql`, with
- * `pdf_file_path` added by `0011_reports_pdf_and_lpf.sql`.
- * Row-only sync — the CSV file itself stays local; only the metadata +
- * aggregate stats round-trip to Supabase.
+ * Mirrors the Supabase `reports` table from migration `0001_init.sql` (consolidated), with
+ * `patient_id` and `session_ids_json` added by `0015_patient_reports.sql` for patient-scoped
+ * reports (Room version 25). A session report has `sessionId` set and `patientId`/
+ * `sessionIdsJson` null; a patient report has `patientId` set and `sessionId` null, with
+ * `sessionIdsJson` recording the sessions pooled into it.
  *
- * Multiple reports per session are allowed; the UI lists them ordered by
+ * Row-only sync — the PDF file itself stays local; only the metadata + aggregate stats
+ * round-trip to Supabase.
+ *
+ * Multiple reports per session/patient are allowed; the UI lists them ordered by
  * `generatedAt` descending.
  *
  * `supabaseStatus` is Room-only and follows the same pattern as samples
@@ -33,8 +37,14 @@ import androidx.room.PrimaryKey
             childColumns = ["session_id"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(
+            entity = PatientEntity::class,
+            parentColumns = ["patient_id"],
+            childColumns = ["patient_id"],
+            onDelete = ForeignKey.CASCADE,
+        ),
     ],
-    indices = [Index("session_id"), Index("user_id"), Index("generated_at")],
+    indices = [Index("session_id"), Index("patient_id"), Index("user_id"), Index("generated_at")],
 )
 data class ReportEntity(
     @PrimaryKey
@@ -42,7 +52,14 @@ data class ReportEntity(
     val reportId: String,
 
     @ColumnInfo(name = "session_id")
-    val sessionId: String,
+    val sessionId: String?,
+
+    @ColumnInfo(name = "patient_id")
+    val patientId: String? = null,
+
+    /** JSON array of session ids pooled into this report. Patient reports only. */
+    @ColumnInfo(name = "session_ids_json")
+    val sessionIdsJson: String? = null,
 
     @ColumnInfo(name = "user_id")
     val userId: String,

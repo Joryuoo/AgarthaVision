@@ -5,12 +5,14 @@ import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.LpfDescriptor
 import com.agarthavision.domain.model.ReportMetadata
+import com.agarthavision.domain.model.ReportPatient
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
 import com.agarthavision.domain.model.ReportPdfSpeciesRow
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.Sex
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -22,11 +24,19 @@ private const val SAMPLE_VERIFIED_AT = 2_000L
 private const val GENERATED_AT_MILLIS = 30_000L
 private const val TOTAL_SAMPLES = 2
 private const val TOTAL_EGGS_CONFIRMED = 3
+private const val PATIENT_AGE_YEARS = 34
 private const val SAMPLE_CONFIDENCE = 0.91f
 private const val SAMPLE_BBOX_X = 0.1f
 private const val SAMPLE_BBOX_Y = 0.2f
 private const val SAMPLE_BBOX_W = 0.3f
 private const val SAMPLE_BBOX_H = 0.4f
+
+private fun reportPatient() = ReportPatient(
+    name = "Cruz, Gerald M.",
+    sex = Sex.MALE,
+    ageYears = PATIENT_AGE_YEARS,
+    barangayLabel = "Lahug · City of Cebu · Region VII (Central Visayas)",
+)
 
 class ReportPdfBuilderTest {
     // Long by nature: a golden-style assertion on the full ReportPdfDocument data model
@@ -76,10 +86,13 @@ class ReportPdfBuilderTest {
             ),
         )
         val generatedAt = Instant.ofEpochMilli(GENERATED_AT_MILLIS)
+        val patient = reportPatient()
         val metadata = ReportMetadata(
             reportId = "report-1",
             session = session,
+            patient = patient,
             generatedBy = "user-1",
+            generatedByName = "Dr. Medtech",
             generatedAt = generatedAt,
             totalSamples = TOTAL_SAMPLES,
             totalEggsConfirmed = TOTAL_EGGS_CONFIRMED,
@@ -104,10 +117,13 @@ class ReportPdfBuilderTest {
                 reportId = "report-1",
                 sessionId = "session-1",
                 sessionLabel = "Smear A",
-                generatedBy = "user-1",
+                patientName = patient.name,
+                patientSex = patient.sex,
+                patientAgeYears = patient.ageYears,
+                barangayLabel = patient.barangayLabel,
+                fieldsExamined = TOTAL_SAMPLES,
+                generatedByName = "Dr. Medtech",
                 generatedAt = generatedAt,
-                deviceId = "device-1",
-                totalSamples = TOTAL_SAMPLES,
                 totalEggsConfirmed = TOTAL_EGGS_CONFIRMED,
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
             ),
@@ -142,7 +158,9 @@ class ReportPdfBuilderTest {
                 patientId = SESSION_PATIENT_ID,
                 label = null,
             ),
+            patient = reportPatient(),
             generatedBy = "user-1",
+            generatedByName = "Dr. Medtech",
             generatedAt = Instant.ofEpochMilli(GENERATED_AT_MILLIS),
             totalSamples = 1,
             totalEggsConfirmed = 0,
@@ -157,5 +175,36 @@ class ReportPdfBuilderTest {
         val document = builder.build(metadata = metadata, samples = emptyList(), detectionsBySample = emptyMap())
 
         assertEquals(emptyList<ReportPdfSpeciesRow>(), document.speciesRows)
+    }
+
+    @Test
+    fun `wholly-negative session still produces a header with zero fields examined`() {
+        val builder = ReportPdfBuilder()
+        val metadata = ReportMetadata(
+            reportId = "report-3",
+            session = Session(
+                id = "session-3",
+                userId = "user-1",
+                deviceId = "device-1",
+                startedAt = SESSION_STARTED_AT,
+                patientId = SESSION_PATIENT_ID,
+                label = "Smear B",
+            ),
+            patient = reportPatient(),
+            generatedBy = "user-1",
+            generatedByName = "Dr. Medtech",
+            generatedAt = Instant.ofEpochMilli(GENERATED_AT_MILLIS),
+            totalSamples = 1,
+            totalEggsConfirmed = 0,
+            positiveSpecies = emptyList(),
+            lpfPerSpecies = emptyMap(),
+        )
+
+        val document = builder.build(metadata = metadata, samples = emptyList(), detectionsBySample = emptyMap())
+
+        assertEquals(emptyList<ReportPdfSpeciesRow>(), document.speciesRows)
+        assertEquals(1, document.header.fieldsExamined)
+        assertEquals(0, document.header.totalEggsConfirmed)
+        assertEquals(emptyList<String>(), document.header.positiveSpecies)
     }
 }

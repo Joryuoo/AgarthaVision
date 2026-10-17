@@ -5,6 +5,7 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.mapper.effectiveInferenceState
 import com.agarthavision.data.inference.toDomainPredictions
 import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.FlaggedFrame
@@ -111,6 +112,7 @@ class FlaggedFrameStore @Inject constructor(
             inferenceModelVersion = inferenceModelVersion,
             imageWidth = imageWidth,
             imageHeight = imageHeight,
+            inferenceState = effectiveInferenceState(),
         )
     }
 }

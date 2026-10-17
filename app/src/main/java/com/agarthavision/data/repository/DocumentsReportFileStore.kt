@@ -8,13 +8,15 @@ import android.provider.MediaStore
 import androidx.core.net.toUri
 import com.agarthavision.domain.repository.ReportFileStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import javax.inject.Inject
 
 /**
- * Writes session report CSVs and PDFs to `Documents/AgarthaVision/`, keyed by `reportId` so
- * multiple reports for the same session don't collide.
+ * Writes session report PDFs to `Documents/AgarthaVision/`, keyed by `reportId` so multiple
+ * reports for the same session don't collide.
  *
  * Two paths, because scoped storage changed how this works:
  * - **API 29+** goes through [MediaStore], the only way to create a folder in shared
@@ -23,27 +25,26 @@ import javax.inject.Inject
  *   declaration capped at `maxSdkVersion="28"`. Returns an absolute path.
  *
  * Callers must therefore treat the returned string as opaque and hand it to
- * `shareReportCsv`, which knows both shapes.
+ * `shareReportPdf`, which knows both shapes.
  */
 class DocumentsReportFileStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ReportFileStore {
-
-    override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String {
-        val fileName = "agarthavision-session-${sessionId.sanitize()}-${reportId.sanitize()}.csv"
-        return writeBytes(fileName, CSV_MIME_TYPE, csv.toByteArray())
-    }
 
     override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String {
         val fileName = "agarthavision-session-${sessionId.sanitize()}-${reportId.sanitize()}.pdf"
         return writeBytes(fileName, PDF_MIME_TYPE, pdf)
     }
 
+    override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String {
+        val fileName = "agarthavision-patient-${patientId.sanitize()}-${reportId.sanitize()}.pdf"
+        return writeBytes(fileName, PDF_MIME_TYPE, pdf)
+    }
+
     /**
-     * Both shapes [writeCsv] and [writePdf] can return are read here, and every failure
-     * collapses to null: a cleared MediaStore entry throws rather than returning empty, and
-     * a caller that has to distinguish "gone" from "unreadable" would have nothing different
-     * to do about it.
+     * The shape [writePdf] can return is read here, and every failure collapses to null: a
+     * cleared MediaStore entry throws rather than returning empty, and a caller that has to
+     * distinguish "gone" from "unreadable" would have nothing different to do about it.
      */
     override suspend fun readBytes(path: String): ByteArray? =
         if (path.startsWith(CONTENT_URI_PREFIX)) {
@@ -53,6 +54,15 @@ class DocumentsReportFileStore @Inject constructor(
         } else {
             runCatching { File(path).takeIf { it.exists() }?.readBytes() }.getOrNull()
         }
+
+    override suspend fun delete(path: String): Boolean = withContext(Dispatchers.IO) {
+        if (path.startsWith(CONTENT_URI_PREFIX)) {
+            // An entry this app inserted is its own to delete, with no permission prompt.
+            runCatching { context.contentResolver.delete(path.toUri(), null, null) > 0 }.getOrDefault(false)
+        } else {
+            runCatching { File(path).delete() }.getOrDefault(false)
+        }
+    }
 
     private fun writeBytes(fileName: String, mimeType: String, bytes: ByteArray): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -104,7 +114,6 @@ class DocumentsReportFileStore @Inject constructor(
     private companion object {
         private const val REPORT_FOLDER_NAME = "AgarthaVision"
         private const val CONTENT_URI_PREFIX = "content://"
-        private const val CSV_MIME_TYPE = "text/csv"
         private const val PDF_MIME_TYPE = "application/pdf"
         private val REPORT_RELATIVE_PATH =
             "${Environment.DIRECTORY_DOCUMENTS}/$REPORT_FOLDER_NAME"

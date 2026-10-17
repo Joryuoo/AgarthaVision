@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -141,10 +139,11 @@ fun MyCoverageScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 EmptyState(
-                    icon = Icons.Outlined.Map,
                     title = stringResource(R.string.coverage_empty_title),
                     body = stringResource(R.string.coverage_empty_body),
                     modifier = Modifier.fillMaxWidth(),
+                    illustrationLight = R.drawable.ill_empty_smears_light,
+                    illustrationDark = R.drawable.ill_empty_smears_dark,
                 )
             }
         } else {

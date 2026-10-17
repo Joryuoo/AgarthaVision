@@ -9,6 +9,625 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/captcha-sign-in — sign-in passes a Cloudflare Turnstile check · 2026-10-16
+
+### Human check on sign-in · `14zcqntnqxf`
+
+- **Sign-in and the password change send a Turnstile token.** `HumanCheckWidget` renders the
+  widget in a WebView with `https://<hostname>/` as its base URL, the way Cloudflare documents
+  Turnstile for native apps, and hands the token to `SupabaseAuthRepository`, which passes it to
+  Supabase as `captchaToken`. Supabase checks it with Cloudflare; the app never holds the
+  widget's secret.
+- **Submit waits for the check**, and every failed attempt runs it again: a token is single-use.
+  An expired token is replaced by the widget on its own. A widget that cannot load says so and
+  offers a retry.
+- **A refused check says so.** Supabase's `captcha_failed` becomes `HumanCheckRejectedException`
+  (sign-in) or `PasswordChangeResult.HumanCheckRejected` (password change), with their own
+  messages, never "invalid credentials".
+- **Configured per build** from `local.properties`: `TURNSTILE_SITE_KEY_DEV/_PROD` and
+  `TURNSTILE_HOSTNAME_DEV/_PROD`. Blank turns the check off, which only works while Supabase's
+  CAPTCHA protection is off.
+- **Order matters.** Supabase's CAPTCHA setting applies to every client. This release has to be
+  out and installed by medtechs, and the console's part live, before it is switched on.
+
+---
+
+## chore/publishable-key — the app is built with Supabase's publishable key · 2026-10-16
+
+### Key in every APK · `14zcqntnqxg`
+
+- **`SUPABASE_ANON_KEY_DEV/_PROD` take the publishable key** (`sb_publishable_…`, Project
+  Settings → API Keys), not the legacy anon JWT. The property names stay; only the value changes.
+  `local.properties.example`, the README and `docs/stack.md` say so.
+- **No code change.** supabase-kt 3.0.3 sends the key as `apikey`, and as the bearer token only
+  before sign-in, which Supabase accepts for a publishable key; every signed-in call carries the
+  user's own token. Nothing in the app or `inference/` reads the key as a JWT.
+- **Order matters.** A release built with the publishable key has to be installed by medtechs
+  before the legacy keys are disabled: disabling them breaks every APK built with the old key.
+
+---
+
+## fix/active-member-writes — field data is written only by an active laboratory member · 2026-10-16
+
+### Write policies check the laboratory · `14zcqntnqpa`
+
+- **`0018_writes_need_active_lab_member.sql`** adds a RESTRICTIVE policy to every insert, update
+  and delete the app allows on `patients`, `sessions`, `samples`, `detections`, `predictions`,
+  `sample_species_findings` and `reports`, and to inserts and updates in the `samples` and
+  `reports` buckets. Each calls `app_private.require_active_lab_member()`: the caller must be an
+  active member, of any role, of an active laboratory (the console's `console_member_org()`
+  rule). The existing ownership checks still apply. A deactivated medtech, every member of a
+  deactivated laboratory, and an account in no laboratory are refused with 42501 and
+  `not_active_lab_member` in the message. Reads are unchanged.
+- **The 35 `TO public` policies are now `TO authenticated`**, rules unchanged.
+- **The phone says why.** When a sync pass hits that refusal, the Settings sync card shows
+  "Your account is no longer an active member of a laboratory…" instead of the raw error. The
+  unsynced work stays on the phone (`domain/sync/InactiveMemberRefusal.kt`,
+  `SyncPendingDataUseCase`).
+- Applied by hand (C6) after 0017. Its header carries a read-only query listing recent writers
+  who would be refused; check it first. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0018` and the console's migrations, in
+  both orders (app then console, and live's console then app): the new
+  `app_0018_writes_need_active_lab_member.test.sql` there replays 16 phone writes as an active
+  medtech and an active org admin (allowed), as each refused kind of account, and signed out.
+
+---
+
+## fix/advisor-hardening — signed-out visitors reach no app table or function · 2026-10-16
+
+### Supabase security advisor findings · `14zcqntnqxe`
+
+- **`0017_advisor_hardening.sql`** clears the app's findings from the advisor run of 2026-10-15.
+  `sessions_patient_is_fixed()` gets a fixed search_path. The trigger functions
+  (`handle_new_user`, `handle_deleted_user`, `link_patient_creator`, `dedupe_session_label`,
+  `sessions_patient_is_fixed`) lose EXECUTE for every client role; a trigger still fires
+  without it. The policy helpers and the two admin RPCs lose EXECUTE for `anon` and PUBLIC and
+  keep it for `authenticated`.
+- **`anon` loses every right on the nine app tables.** A signed-out read is now refused (42501)
+  instead of returning `[]`, so turning RLS off on a table by mistake no longer opens it.
+- **`is_admin(uuid)` answers a client only about themselves.** The check moved to
+  `app_private.is_admin(uuid)`; `public.is_admin` is security invoker and returns false when a
+  signed-in caller names someone else. Security-definer callers (the console's RPCs) still ask
+  about anyone. Signature unchanged, so no policy or view changed.
+- Applied by hand (C6), independent of any build. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0017` and the console's migrations:
+  the new `app_0017_advisor_hardening.test.sql` there checks each grant, a signed-out read and
+  RPC call, `is_admin()` from each side, and the phone's write flow as a medtech.
+
+---
+
+## fix/patient-report-own-patient-sessions — a patient report pools only that patient's own sessions · 2026-10-05
+
+### Patient report insert rule · `14zcqntk68x`
+
+- **`0016_patient_report_own_patient_sessions.sql`** recreates `reports_insert_own_session`. A
+  patient report is accepted only when `session_ids` names at least one session, and every one
+  is the writer's own **and** belongs to the report's `patient_id`. Before it, a medtech linked
+  to two patients could file a report on patient A pooling a session of patient B, and a Lab B
+  session's findings would reach Lab A's org admin through the console's `patient_id` read
+  (admin/0004). Session reports are checked exactly as before. An empty or null `session_ids`
+  is now refused; the phone never sends one.
+- **`sessions.patient_id` is fixed once written.** A trigger refuses any update that changes
+  it, for every role. Without it the new rule could be met by moving a session onto the report's
+  patient and back. The phone never moves a session; its upserts resend the same value.
+- Applied by hand (C6), independent of any build. Applied to `agarthavision`, checked on
+  2026-10-06. The file's header carries a read-only count of existing patient reports the old
+  rule let in; nothing is fixed in place (C8).
+- Tested locally against `0001`–`0016` through RLS: the ticket's repro is refused with 42501,
+  a report on the patient's own sessions still inserts, and session reports are unchanged.
+
+---
+
+## feature/patient-report-and-address-pdf-only — patient-scoped PDF reports; session card shows the full address; barangay search takes commas · 2026-09-29
+
+### Patient reports (pooled, PDF-only) · `14zcqntj2uz`
+
+- **`GeneratePatientReportUseCase`** pools every session a `PatientReportScope` resolves to
+  (default: all of a patient's sessions; a date range and/or an explicit session-id subset
+  narrow it) into one PDF-only document. A foreign session id in the subset fails generation
+  rather than silently dropping it.
+- **Pooled, not per-session-summed.** Findings from every included session are collected and
+  passed to a single `aggregateLpfPerSpecies` call, so the headline species table is one pooled
+  range across the whole scope; a per-session breakdown table keeps each smear's own range
+  visible alongside it.
+- **Zero-sample sessions are excluded**, not reported as a zero row (`GetPatientReportCandidatesUseCase`
+  shows them disabled in the "Generate report" sheet, `ui/sessions/PatientReportSheet.kt`), and
+  never start checked. Picking a date range re-derives the selection to sessions that are both
+  eligible and inside it, so a checked box never survives being pushed out of scope
+  (`SessionsViewModel.onReportDateRangeSelected`). A scope with nothing left fails with
+  `NO_VERIFIED_SAMPLES_MESSAGE`; an empty selection at generation time (e.g. a range with nothing
+  in it) shows a distinct "No verified samples in the selected range." instead.
+- **Room 24 → 25 (`MIGRATION_24_25`)**: `reports.session_id` becomes nullable; `patient_id` and
+  `session_ids_json` are added. `supabase/migrations/0015_patient_reports.sql` mirrors this on
+  Postgres, widens `report_type` to allow `'patient'`, adds `reports_scope_check`, and requires
+  a `patient_users` link on a patient-report insert. Must apply before the build reaches any
+  device that can generate one — an older build decoding `session_id` as non-null crashes on
+  the first patient report row it pulls. Applied to `agarthavision`, checked on 2026-10-06.
+- **Sync mirrors session reports**: the row goes to `public.reports`, the PDF to the `reports`
+  Storage bucket, restored via `RestoreReportFilesUseCase`'s patient branch
+  (`writePatientPdf`). An unrecognised `report_type` on pull is skipped, not stored.
+- **Reports tab** shows a patient title for these cards, with no NPE on the now-nullable
+  `sessionId` (`ReportCard`, `RecordsScreen`). Its Open/Share PDF actions restore the file from
+  the `reports` Storage bucket the same way Session Detail does when it isn't on this device yet
+  (`RecordsViewModel.restoreReportFiles`, `RestoreReportFilesUseCase`'s patient branch) — a
+  patient report synced from another device now opens here, not just from Session Detail.
+- **PDF** prints the patient's full display name, age at generation, sex, and full address
+  (`PsgcBarangay.fullAddress`, falling back to the raw PSGC code); filenames are UUID-only.
+
+### Session card shows the full address; barangay search takes commas · `14zcqntj2tm`
+
+- **`PsgcBarangay.fullAddress`** ("Lahug, City of Cebu" / "Adams, Adams, Ilocos Norte") is now
+  the single display form for a patient's location. The session patient card reads it instead of
+  the bare barangay name.
+- **Barangay search accepts a comma.** "lahug, city of cebu" still matches every typed segment,
+  but ranks by the segment before the comma alone, so it is not diluted by what follows.
+  `PsgcSearchQuery.parse` returns both the full term list and the name-ranking terms;
+  `PsgcBarangayDao.search` and the repository's cache key follow.
+
+### PDF-only reports, with a patient header · `86d4be47c`
+
+A generated report is now always a PDF, and the PDF always carries who it is about.
+
+- **CSV export is retired.** `ReportCsvBuilder`, `ReportFormat`, and the export-format picker
+  (`ExportFormat`/`ExportFormatMenu`) are gone; `GenerateSessionReportUseCase` writes one PDF,
+  no format argument. `ReportFileStore.writeCsv` and the CSV share/view helpers in
+  `ReportSharing.kt` are gone with it. `csv_file_path` stays on `Report`/`ReportEntity` as a
+  legacy-only column (C8) — old CSV-only rows keep listing, but nothing restores, shares, or
+  opens them any more.
+- **The PDF gains a patient block.** Name, sex, age (computed at the same instant as
+  `generatedAt`), and address (`PsgcBarangay.fullAddress`, or the raw PSGC code if it no longer
+  resolves — the same display form the patient report and the session patient card use) print
+  above the session and summary sections. A session whose patient has not yet synced to this
+  device fails generation with a clear message rather than a crash or a blank header.
+- **The findings table's empty state is a plural sentence** ("No parasites found across N
+  field(s) examined.") instead of a fixed string, and the LPF column header and unit note read
+  more explicitly ("Eggs per LPF (range)", "Direct Fecal Smear").
+- Session Detail's generate control is a direct tap (no PDF/CSV menu); the Reports list card
+  drops its CSV button and share-format menu.
+
+---
+
+## feat/effv2s-offline-model — EfficientNetV2-S everywhere · 2026-10-04
+
+`14zcqntk2nm`. Depends on `fix/one-box-per-egg`.
+
+- **On-device runs EfficientNetV2-S.** `assets/models/` now bundles only
+  `yolo26n-effv2s-v1-tflite-fp32` (81.2 MB, against ≈ 27 MB for B0), and
+  `OnDeviceModels.SHIPPED` points at it. The B0 build is removed.
+- **Fast enough on a Redmi Note 11.** `OnDeviceInferenceParityTest`, fp32 on GPU+CPU: 20/20
+  frames matched the checkpoint, mean IoU 0.9933, 100% class agreement; inference median
+  762 ms, total median 817 ms per frame.
+- **One model everywhere.** `inference/server.py`, the Kaggle notebook and the export scripts
+  default to `yolo26n-efficientnetv2s.pt` / `yolo26n-effv2s-v1-*`. The cloud container needs the
+  new weights and `MODEL_VERSION` when redeployed.
+- **Old checkpoints retired.** `yolo26n-efficientnetv2b0.pt` and
+  `yolo26n-mobilenetv4convsmall.pt` are removed from `inference/weights/`.
+
+---
+
+## fix/one-box-per-egg — one egg, one detection · 2026-10-04
+
+`14zcqntk1vd`.
+
+- **Duplicate removal ignores species.** Both engines removed overlapping boxes only within a
+  species, so an egg the model could not place came back once per species it considered.
+  Sample `ec940c6e`: two eggs, four detections, three of them stacked on one egg at 92–96% IoU
+  (Trichuris 0.50, Hookworm 0.44, Ascaris 0.29). Now the most confident box wins.
+- **Cloud:** `inference/server.py` passes `agnostic_nms=True`; the container must be
+  redeployed for it to reach phones. `make_parity_fixture.py` does the same.
+- **On-device:** `YoloOutputDecoder` runs one greedy NMS across all classes.
+- **Separate eggs are untouched.** Boxes under the IoU threshold (0.7) are all kept, whatever
+  their species. The 20 parity fixtures give identical results under either rule, so they
+  were not regenerated.
+
+---
+
+## refactor/super-admins-table — super admins get their own table · 2026-10-02
+
+`14zcqntjwje`, Admin decision D22. SQL and docs; no app code changed, because nothing on the
+phone reads `role`.
+
+- **`0014_super_admins.sql`** creates `super_admins`, one row per grant, and points
+  `is_admin()` at it with the same signature. Every `role = 'admin'` profile is copied in as one
+  active row, so `is_admin()` answers the same for everyone. Applied by hand to
+  `agarthavision` on 2026-10-02.
+- **Nobody signed in can read or write it.** RLS with no policy, and no privilege for `anon` or
+  `authenticated`. Colleagues and org admins can no longer learn who the super admins are from it.
+- **Revoking is a tombstone (C8).** A trigger allows only setting `revoked_at` on an active grant.
+- **`profiles.role` is retired, not dropped**, and `handle_new_user()` no longer names it.
+- **Docs:** `schema.ts` (`SuperAdmin`), the `Profile` card, C6, `file-tree.md` and the effects
+  index say where super admins live now.
+- **Console, not here:** its gate reads `role` until 14zcqntjwjf, so until then a super admin
+  granted by hand needs both. Its database tests make super admins through `role` and must
+  insert a `super_admins` row instead.
+
+---
+
+## fix/assigned-patients-only — an org admin's phone holds only their own patients · 2026-10-01
+
+`14zcqntjt3p`.
+
+- **The pull scopes itself.** Every fetch used to rely on RLS alone, so an org admin (console
+  `admin/0002`) who signed in on a phone downloaded their whole laboratory. An org admin may
+  use the phone, and in a small laboratory is often a medtech as well. Now the links are
+  filtered to the user, patients are fetched by the ids those links name, and sessions, samples
+  and reports are each fetched as the user's own plus those under their patients. That is
+  exactly what a medtech's policies return, so a medtech's phone holds what it did before.
+- **Super admins do not use the phone.** They belong to no organization, so a patient they
+  registered would have none. Were one to sign in, the same scoping holds: since `0013`
+  (below) `is_admin()` gives them no patient, session or sample, and the link fetch filters
+  out every patient link it still does.
+- **Colleagues' names by id.** Only the authors on the user's own patients, read off the device
+  (`ColleagueDao::getColleagueIdsOnLinkedPatients`), never a laboratory's staff list.
+- **Ids go 100 at a time**, and a row returned both as the user's own and under a parent is
+  written once.
+- **Not cleaned up:** a phone that already synced as an org admin keeps those rows, hidden,
+  until its storage is cleared.
+
+---
+
+## docs/profile-outlives-login — authorship outlives the login, written down · 2026-10-01
+
+`14zcqntjvjx`. Docs only; the schema change is `0011_profile_outlives_login.sql` from
+`feat/deactivation-sign-out` (#98).
+
+- **C8 states the rule.** Offboarding deletes the login; the profile and everything it authored
+  stay, still naming the person, and the email is free for another laboratory or a rehire. It
+  also says a rehire still gets a fresh profile, since reconnecting them is its own ticket.
+- **`Profile` card** names the ticket and notes that the cascades *from* a profile
+  (`patient_users`, and the console's `organizations`, `organization_members` and audit log)
+  never fire.
+
+---
+
+## feat/deidentified-patient-reads — super admins read patients de-identified at the database · 2026-10-01
+
+`14zcqntjvjw`, with the Admin Console's `14zcqntjvky`.
+
+- **`0012_deidentified_reads.sql`, step 1, additive.** Three views a super admin reads instead
+  of the tables: `patients_deidentified` (no name, sex or birthdate), `sessions_deidentified`
+  (no `label`, which spells the patient's initials, sex and age) and `samples_deidentified`
+  (no `user_note`). Each returns rows only to `is_admin(auth.uid())`, is `security_barrier`,
+  and is readable by `authenticated` only.
+- **Step 2 is the console.** It reads a super admin's patients, sessions and samples from the
+  views, and works with or without step 3.
+- **`0013_super_admin_reads_deidentified.sql`, step 3.** The `patients`, `sessions` and
+  `samples` read policies and `can_read_session()` lose their `is_admin()` branch, and the
+  `reports` bucket loses `reports: admin read all`, because a report prints the name. The
+  admin branch of the detections, findings and predictions policies moves outside their
+  subquery on `samples`, so super admins keep reading those. `session_label_duplicates()`
+  returns session ids without the label. Applied only after the console from step 2 was
+  deployed.
+- **All three steps are live.** The console's step 2 (its PR 11) is deployed, and `0012` and
+  `0013` are applied to `agarthavision`, checked on 2026-10-02.
+- **Unchanged:** medtechs, colleagues on a shared patient (0007), organization admins, report
+  rows, patient links, sample frames and `barangay_prevalence()`. The console's
+  `bun run test:db` covers each, against both files.
+- `patient-pii-position.md` Position 6 and C10 say what the policies now do.
+- **The console's set is live, so the entry below is out of date.** `admin/0001`–`0003`
+  merged to the console's `staging` (`cb8246c`, same SQL) and were applied to `agarthavision`
+  on 2026-10-01. `file-tree.md` says so, and that the org-admin phone download recorded below
+  is now real for any org admin who signs in on a phone.
+
+---
+
+## docs/admin-migrations-schema — the Admin Console's migrations are on the shelf · 2026-10-01
+
+`14zcqntjpha`. Docs only; no code or SQL changed.
+
+The Admin Console now adds its own migrations to the same `agarthavision` database, from its
+own repository (`supabase/migrations/admin/NNNN_*.sql`, own number sequence, additive only).
+Before this change, C6 read as if this repository held the whole schema.
+
+- **`file-tree.md`** gains one section on that set:
+  - where it lives and its additive-only rule
+  - what its three files add
+  - the one trigger on `patients` (`console_on_patient_created`, never raises)
+  - the org-admin read policies on app-owned tables
+  - the app columns it depends on, and its assumption that `profiles.id` is the login id,
+    which `0011`'s `account_id` will one day end
+- **C6** says this folder is the authority for what this repository owns, and points there.
+- **`Patient` and `Profile` cards** note the trigger, the laboratory that owns a patient, and
+  that an org admin is a membership role rather than a `profiles.role` value. Both re-verified
+  at `6590f32f`, after `0007`–`0011`.
+- **Effects:** the data-model checklist asks whether a change touches a name the console reads.
+  The RLS section says not every policy is in this repository.
+- **Recorded, not fixed:** the phone's pull has no user filter on patients, links, sessions,
+  samples, reports or colleagues' names, so an org admin who signs in on a phone downloads the
+  rows of the laboratory's whole clinical record. Has to be fixed before the console's
+  `admin/0002` is applied; none of its set was on `agarthavision` on 2026-10-01.
+
+---
+
+## feat/change-password — change password in Settings · 2026-10-01
+
+`14zcqntjph9`.
+
+- **Settings → Change password.** Current password, new, confirm, each with show/hide. Blank
+  fields (spaces only included, which sign-in would refuse), a mismatched confirmation and an
+  unchanged password are caught on the phone.
+- **Online only.** Offline the screen says it needs a connection and the button is disabled. A
+  connection lost before the server is reached says the password was not changed; one lost after
+  the new password was sent says it may already be changed.
+- **The current password is checked first**, by signing in with it again, so a wrong one is
+  refused on its field before anything changes. The provider's strength rules, and its own
+  explanation, land under the new password.
+- **This phone stays signed in.** Local data, the cached identity and unsynced work are
+  untouched. Supabase signs out the account's other sessions; they need the new password, and
+  other phones go through #98's wipe, keeping unsynced work. On this phone the change and #98's
+  account check share a lock (`AuthSessionLock`), so a renewal of the session being replaced
+  can never be refused and wipe the phone that made the change.
+
+## feat/deactivation-sign-out — a removed account's phone signs out and wipes itself · 2026-10-01
+
+`14zcqntjph8`.
+
+- **The signal is a refused login renewal.** At the start of every sync pass the phone asks the
+  server to renew its login (at most every five minutes). A 4xx answer, or the SDK having dropped
+  the session for one, means the account is gone; 408, 429, 5xx, timeouts and no network do not.
+  It does not matter whether the Admin Console deleted the login or banned it.
+- **The wipe.** Every synced row on the phone, the `colleagues` name cache from #97, its JPEGs,
+  Coil's image caches and its exported report files. Every unsynced row stays, the signed-out
+  account's included: a password changed on the web or another phone gets the same refusal as
+  a deleted login, and the phone cannot tell them apart. Then sign-out, and the login screen
+  says why and how many unuploaded items are waiting for the next sign-in.
+- **`0011_profile_outlives_login.sql`.** Deleting a login used to fail for any medtech who had
+  authored a row, because `profiles.id` cascaded from `auth.users`. The profile now outlives the
+  login: `profiles.account_id` (text, provider-neutral) names the login and is nulled when it is
+  deleted. Applied to `agarthavision` on 2026-10-01; nothing reads `account_id` yet.
+- **Sign-out order flipped**: the cached identity is cleared before the Supabase session, so a
+  medtech's own sign-out never looks like a refusal.
+
+## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
+
+`14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Four migrations to apply by hand, in order: 0007,
+0008, 0009, 0010. Room 23 → 24. All four are applied to `agarthavision`, checked on 2026-10-06.
+
+- **Shared history (0007).** A medtech assigned to a patient reads every session, sample,
+  detection, finding, prediction and report on it, and both buckets' files, whoever wrote them.
+  Additive SELECT policies only; writes stay author-only. Reverses 0003's "not patient-linked"
+  reports rule. The pull drops its author filter, skips rows whose parent is not on the device,
+  and removes assignments the server no longer returns.
+- **Read-only colleagues (0008, Room v24).** A colleague's session and sample cannot be resumed,
+  edited, re-verified, deleted or renamed on the phone, and say "Recorded by …". Names come from
+  a new `colleagues` cache filled from `profiles`, which colleagues can now read of each other.
+- **Distinct labels (0009).** A server trigger renames a clashing session label
+  `<label>-<first 4 of id>` instead of rejecting it; existing duplicates get a report and a
+  one-time rename. The pull settles clashes once every page is in. A rename now uploads.
+- **Writes need the writer's own session (0010).** Restrictive INSERT/UPDATE policies on
+  `samples` and `reports`: a row can only be written into a session its writer authored, now
+  that 0007 hands colleagues' session ids to the phone.
+
+---
+
+## docs/sprint-2-alignment — the shelf matches the code again · 2026-09-29
+
+`14zcqntjg5f`. Docs only; no code changed.
+
+An audit of `development` @ `feaa4803` found the shelf's structure sound and its content
+drifting: most Kotlin line citations pointed at the wrong code after later edits.
+
+- **Citations by symbol.** Every Kotlin, Gradle, Python, TOML and `schema.ts` citation is now
+  `path::symbol`, never a line number. Only SQL migrations keep `path:line`, since an applied
+  migration never changes. Every legacy migration reference carries its `legacy-dev/` prefix.
+- **Card frontmatter.** Every card under `docs/map/` opens with `type`, `status`
+  (`stub` / `verified` / `stale`), `verified` and `commit`. A PR that touches cited code updates
+  the card or marks it stale (`docs/CONTEXT.md` house rule 5).
+- **Four new process cards:** `sign-in`, `register-patient`, `session-lifecycle`,
+  `delete-sample`, plus effects rows for sign-in, patients, sessions and the Home dashboard.
+- **Drift fixed**, among others: `validate.md` rewritten for the checkbox questions, species-first
+  counting and the pending-inference lock; the Finding card's `stage` is live, not dormant;
+  report files do reach the `reports` bucket; C2, C4, C5 and C6 restated as the code has them;
+  the session label format; the screen list; the `samples` Storage policies re-cited to the
+  consolidated schema.
+- **Code findings recorded, not fixed:** a tombstone never reaches Postgres (`SampleInsertRow`
+  has no `deleted_at`); the Sessions list egg total counts only `confirmed` while the report
+  counts every non-false-positive; four ViewModels call repositories directly (C1).
+- **`connectedAndroidTest` is a non-negotiable now:** it uninstalls the app and wipes unsynced
+  samples. `AGENTS.example.md` gains a tool-agnostic "keep the shelf current" section.
+
+## feat/server-micro-batching — the inference server queues, batches and uses both GPUs · 2026-09-27
+
+`14zcqntj6p2`.
+
+`/infer` used to run the model on the event loop. Every inference blocked uvicorn, `/health` hung
+behind it, nothing bounded the pile-up, and the second T4 sat idle.
+
+- **A bounded queue** (`QUEUE_SIZE`, 32) sits in front of the model. When it is full, the server
+  answers `503` with `Retry-After` at once. A request that waits longer than `REQUEST_TIMEOUT_S`
+  (25 s, under the app's 30 s read timeout and Cloudflare's ~100 s) gets a `503` too.
+- **Micro-batching:** a worker takes up to `MAX_BATCH_SIZE` (8) frames, waiting at most
+  `MAX_QUEUE_DELAY_MS` (15) for companions, and runs them as one forward pass.
+- **One worker per GPU**, each with its own model loaded and warmed up at start-up, all pulling
+  from the same queue.
+- JPEG decoding and the forward pass run off the event loop, so **`/health` answers during
+  inference**.
+- **The contract is unchanged:** the same endpoints, auth and response body. An unreadable body
+  is now a `400`, not a `500`. `X-Inference-Batch-Size` and `X-Inference-Device` headers make
+  batching visible from outside.
+- `tests/` covers all of the above against a fake model: 10 tests, no GPU needed. The notebook's
+  `%%writefile` cell is regenerated from `server.py`, and its GPU cell lists every device.
+
+## feat/verify-pending-inference — a pending sample says so, and the medtech can stop waiting · 2026-09-27
+
+`14zcqntj6p1`.
+
+- **Pending is visible.** While a sample waits on inference, its Model Output section shows a
+  spinner and "Queued for inference", or "Frame is in inference" once it is the frame being
+  run: the same split as the queue's badge. Read off the frame's own `InferenceState`. There is no
+  second flag. `isResolving` keeps its own meaning (a frame still being fetched), because
+  merging the two would conflate a frame with no model output yet and a frame with no image
+  yet.
+- **Annotation is locked meanwhile.** Add species, remarks and Submit are disabled, and the view
+  model ignores those inputs too. The model pre-fills the species, so anything entered before
+  it lands would collide with it.
+- **Cancel inference, confirmed.** The dialog says the sample will never get a model output.
+  Confirming calls `CancelInferenceUseCase`, the frame switches to manual in place, and it can
+  be annotated at once. Dismissing leaves it pending. When the result beats the tap, there is
+  nothing to cancel and the result shows.
+- **The result updates in place.** When the store re-emits the open frame with its output,
+  the section, the boxes and the pre-filled answers appear without leaving the screen. This
+  only happens while the frame is pending, so a medtech's answers are never overwritten.
+- **#78 still holds.** Nothing can be edited while pending, so leaving never asks then.
+  Cancelling is not an edit. Edits after a cancel are guarded as usual.
+- The "no model output" copy now covers a cancelled frame and one the queue gave up on, not
+  only an unreachable server.
+
+---
+
+## feat/queue-inference-badges — every queue row says where its model output is · 2026-09-27
+
+`14zcqntj6p0`.
+
+Each Verification Queue row's badge now shows the sample's inference state: **Queued**, **In
+inference**, **Ready** or **Manual**. It replaces the "AI-suggested" / "Manual" pill, which could
+only say whether a model was ever involved.
+
+- Four states, not two. Frames run one at a time and the on-device path takes seconds each, so
+  labelling every waiting frame "In inference" would misstate what the system is doing.
+- The label is always drawn, and the tone only reinforces it: neutral for queued, gold for in
+  inference, the accent tint for ready (as AI rows had) and the warning tint for manual (as
+  manual rows had). All come from theme tokens.
+- It updates live. The queue is a Room query and `QueueSample` compares by value, so a row
+  moves Queued → In inference → Ready without leaving the screen.
+- Every row stays tappable, pending ones included.
+
+---
+
+## feat/instant-capture — the shutter confirms at once and never spins · 2026-09-27
+
+`14zcqntj6nz`.
+
+A tap saves the frame and shows "Frame captured" immediately. The model output comes later from
+the background inference queue, so there is nothing left for the shutter to wait on.
+
+- **No busy state.** `CaptureState.isBusy` is gone, and with it the shutter's dimmed
+  travelling arc, the "Capturing sample" description, the back button's disabled state and the
+  system-back lock. The medtech can capture field after field without pausing.
+- **A double tap saves one sample.** The busy state was also what stopped a second tap from
+  saving the same cached frame again. `CaptureViewModel` now saves each cached frame once, by
+  identity; the next tap takes the analyzer's next frame. A failed save can be retried.
+- **Taps less than 750 ms apart save once (2026-09-29).** Identity alone was not enough: the
+  analyzer replaces the frame every ~33 ms, so a fast double tap lands on a new, near-identical
+  frame, and rapid tapping saved 9 samples of one field in 1.25 s on a Redmi Note 11. The
+  cooldown drops those taps. Moving to the next field takes far longer than 750 ms.
+- **The save still survives leaving the screen.** It runs under `NonCancellable`, so a medtech
+  who leaves in the milliseconds it takes loses only the confirmation, not the frame.
+- **One confirmation for every tap.** `CaptureOutcome` no longer carries a source. Whether a
+  model answers is decided later by the queue, so "Frame captured · model unavailable" is gone.
+  The toast's action still opens the exact sample that tap wrote.
+- `ConnectionLossBanner` is unchanged. Whether it still earns its place now that the phone can
+  answer offline is an open question for Tabada.
+
+---
+
+## feat/background-inference-queue — capture saves at once, and the model answers later · 2026-09-27
+
+`14zcqntj6ny`.
+
+**Capture waits on nothing.** `CaptureFieldUseCase` saves the frame as `queued` and returns. It
+used to run inference first, so every tap waited on the network (up to 40 s against a dead
+server), and an unreachable server turned the frame into a Manual Capture that could never get a
+model output.
+
+**A queue in Room, with one consumer.** `samples.inference_state` holds `queued` →
+`in_inference` → `ready`, or `manual`. `InferenceQueueProcessor` takes one frame at a time,
+oldest first: the cloud first, the on-device model when the cloud fails for any reason, a `503`
+included. `CloudCircuitBreaker` skips the cloud for 60 s after three failures in a row, doubling
+per failed probe up to 10 minutes. It runs through WorkManager (`WorkManagerInferenceQueue`), like
+sync: each capture and each app launch appends an `InferenceQueueWorker` pass to one unique chain,
+so passes never overlap, and `InferenceRetryWorker` wakes the queue when a failed frame is due. A
+frame interrupted by a killed process is put back in the queue on the next pass. The queue keeps
+going after the app is swiped away, whenever Android allows it background work; on MIUI that needs
+Autostart, as sync does. The queue itself is the rows in Room, on the phone.
+
+**When both engines fail**, the frame waits 30 s, then twice as long each time up to 5 minutes,
+and becomes manual after 5 attempts (`samples.inference_attempts`). Other frames keep moving.
+
+**Cancel is atomic and final.** Every transition is one conditional UPDATE. A result is written
+only if the row is still `in_inference`, so a cancel or delete that lands first discards it.
+`CancelInferenceUseCase` records the sample manual (`inference_model_version = 'manual'`). The
+Verification Screen's UI for it is a separate ticket.
+
+**A pending sample is never a clean field.** It shows as `ModelOutput.InProgress`,
+`isCleanField` is false, and `SubmitVerificationUseCase` refuses it. Counts, reports, the dashboard
+and sync already skip it because it is still `flagged`.
+
+**Room 23, the first hand-written migration.** `MIGRATION_22_23` adds the two columns and marks
+existing manual rows `manual`. From here the phone holds frames that exist nowhere else, so every
+bump ships a `Migration` (C6). Destructive fallback stays only for installs older than 22.
+
+**Connect timeout 10 s → 5 s.** Nobody waits on the call now, and the phone answers when the
+cloud cannot.
+
+**The connection-loss banner no longer says captures become Manual.** It reads "Cloud model
+unreachable · Captures are still recorded. This phone reads them instead, more slowly."
+
+---
+
+## feat/offline-inference-engine — the on-device model is back, and it agrees with the cloud · 2026-09-27
+
+`14zcqntj6nw` with `14zcqntj6nx`.
+
+**Inference versions name the engine and the precision.** `<arch>-v<training-version>-<target>-<precision>`:
+the cloud reports `yolo12n-effv2s-v1-cloud-fp32` (`server.py`, the notebook), on-device results
+`yolo12n-effv2s-v1-tflite-fp16` or `-int8`. The old `yolov26-efficientnetv2-v1` named the wrong
+architecture: `best.pt` was trained from `effnet-v12.yaml`, a YOLOv12-nano neck on EfficientNetV2-S,
+and its head is not NMS-free.
+
+**The export tooling is ported from `feat/offline-inference` and fixed.** Two faults behind the
+2026-09-06 deferral were export faults, not the phone's:
+
+- The "fp16" file was byte-identical to fp32 (78 MB). onnx2tf 2.x also emits a model that is fp16
+  end to end, which LiteRT's CPU kernels reject. `export_mobile.py` now drives onnx2tf's
+  `tf_converter` backend and TensorFlow's converter itself, and refuses a build whose dtypes,
+  I/O or box geometry do not match its name. fp16 is 39.4 MB, int8 22.8 MB.
+- The TFLite head emits box geometry normalised to 0..1, and the old decoder read it as pixels:
+  the "zero boxes matched" result. Manifests now say `box_coordinates: normalized`.
+
+Both builds ship in `app/src/main/assets/models/` through Git LFS, each with a manifest named after
+its version. Model artifacts are no longer ignored there; capture fixtures still are.
+
+**`OnDeviceInferenceEngine`** (`data/inference/ondevice/`), on LiteRT 2.2's `CompiledModel` API.
+It compiles once, GPU first with CPU placement for unsupported ops, and runs on one thread.
+Preprocessing is Ultralytics' letterbox, and decoding runs NMS with the container's defaults. A
+missing or refused model reports unavailable instead of crashing. It is provided but not routed
+to yet: capture still calls the cloud only.
+
+Measured on a Redmi Note 11 against the cloud model's answers for the same 20 capture-shaped
+frames (`OnDeviceInferenceParityTest`):
+
+| | fp16 | int8 |
+|---|---|---|
+| Matched / missed / invented | 20 / 0 / 0 | 20 / 0 / 0 |
+| Mean IoU, mean confidence delta | 0.994, 0.0007 | 0.918, 0.027 |
+| Infer median (p90) | 4,885 ms (4,904) | 4,836 ms (4,856) |
+
+All 829 ops run on the GPU in one partition, against 20.8 s per frame on CPU last time. int8 buys
+no speed on the GPU and costs box accuracy, so fp16 is `OnDeviceModels.SHIPPED`. On the desktop,
+fp16 matched all 607 of `best.pt`'s detections across the 600 val images (mean IoU 0.993).
+
+**Build:** `android.uniquePackageNames=false`, because `litert` and `litert-api` share a namespace
+that AGP 9 rejects ([LiteRT#6965](https://github.com/google-ai-edge/LiteRT/issues/6965)).
+
+**2026-09-28: new weights, YOLO26-nano on EfficientNetV2-B0.** `best.pt` is replaced by
+`inference/weights/yolo26n-efficientnetv2b0.pt` (val mAP50-95 0.913), which the cloud and the phone
+both run. `yolo26n-mobilenetv4convsmall.pt` (0.901) is committed beside it as the next on-device
+candidate. Versions are now `yolo26n-effv2b0-v1-cloud-fp32` and `yolo26n-effv2b0-v1-tflite-fp32`.
+The tables above measure the old model.
+
+- **Fork pin `c2b1563` → `1fd2043`** (`feat/optimized-inference`) in `requirements.txt`, the export
+  requirements and the notebook. The old pin has no `TimmBackbone` and cannot load either file.
+- **The phone ships fp32**, 26.9 MB, to see whether it runs the B0 model at all before trading
+  accuracy for size. The old fp16 and int8 builds are removed. `export_mobile.py` now also writes
+  the fp32 build, and patches `TimmBackbone` instead of `EfficientNetV2Backbone`.
+- **Output layout unchanged.** These heads were trained with YOLO26's one-to-one branch off, so
+  the TFLite output is still `[1, 7, 8400]` normalised, and the decoder and its NMS stand as they are.
+- **Parity on the desktop**, 20 capture-shaped frames: fp32 matched 22 of 22 of the PyTorch
+  checkpoint's detections at IoU 1.0000; fp16 22 of 22 at 0.9972. Not yet measured on the phone.
+
+---
+
 ## feat/home-and-ui-redesign — offline province/town boundary geometry · 2026-09-27
 
 `14zcqntj3bv` (Phase 8 of 10). No boundary data existed anywhere in the repo — the on-device
@@ -19,6 +638,8 @@ renumbering to join a 2023-vintage shapefile onto the current q2_2026 PSGC datas
 result into two custom quantized binary assets well inside their 200 KB/900 KB budgets. New
 pure-Kotlin `domain/geo` primitives (projection, hit-testing, view-fit, choropleth binning) and
 a `BoundaryRepository` read them — no Room table, no schema change, no map UI yet.
+
+---
 
 ## fix/detection-box-provenance — the model's output is stored, and a box says who drew it · 2026-09-24
 

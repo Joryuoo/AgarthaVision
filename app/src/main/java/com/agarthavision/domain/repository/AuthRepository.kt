@@ -1,6 +1,7 @@
 package com.agarthavision.domain.repository
 
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PasswordChangeResult
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -37,13 +38,34 @@ interface AuthRepository {
     /**
      * Signs in an existing dashboard-provisioned user with email and password, and
      * caches the resulting [LocalIdentity] for offline attribution.
+     *
+     * [humanCheckToken] is the single-use token from the sign-in human check, null when the
+     * check is off (14zcqntnqxf). Throws
+     * [com.agarthavision.domain.model.HumanCheckRejectedException] when the provider refuses it.
      */
-    suspend fun signIn(email: String, password: String)
+    suspend fun signIn(email: String, password: String, humanCheckToken: String?)
 
     /**
      * Returns the current user's ID, or null if not logged in.
      */
     suspend fun getCurrentUserId(): String?
+
+    /**
+     * Changes the signed-in medtech's password (14zcqntjph9). Online only.
+     *
+     * Checks [currentPassword] with the provider first, so a phone left unlocked cannot have its
+     * password changed by whoever picks it up. Then sets [newPassword]. This phone stays signed
+     * in; the provider may end the account's other sign-ins, which then need the new password.
+     * Local data is never touched.
+     *
+     * Checking [currentPassword] is a sign-in, so it carries a [humanCheckToken] like any other
+     * (14zcqntnqxf).
+     */
+    suspend fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+        humanCheckToken: String?,
+    ): PasswordChangeResult
 
     /**
      * Signs the medtech out per ADR-008: revokes the live Supabase session **and** clears

@@ -2,14 +2,18 @@ package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.usecase.capture.DeleteFlaggedSampleUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -22,21 +26,26 @@ class DeleteQueueItemsUseCaseTest {
     private val sampleDao: SampleDao = mock()
     private val deleteFlaggedSampleUseCase: DeleteFlaggedSampleUseCase = mock()
     private val syncPendingDataUseCase: SyncPendingDataUseCase = mock()
+    private val authRepository: AuthRepository = mock {
+        onBlocking { currentLocalUserId() } doReturn "user-1"
+    }
 
     private val useCase = DeleteQueueItemsUseCase(
         sampleDao = sampleDao,
         deleteFlaggedSampleUseCase = deleteFlaggedSampleUseCase,
         syncPendingDataUseCase = syncPendingDataUseCase,
+        authRepository = authRepository,
     )
 
     private fun sample(
         id: String,
         status: SampleStatus,
         deletedAt: Long? = null,
+        userId: String = "user-1",
     ) = SampleEntity(
         sampleId = id,
         sessionId = "session-1",
-        userId = "user-1",
+        userId = userId,
         deviceId = "device-1",
         timestamp = 1_000L,
         imagePath = "/tmp/$id.jpg",
@@ -117,6 +126,22 @@ class DeleteQueueItemsUseCaseTest {
         val summary = useCase(setOf("gone")).getOrThrow()
 
         assertEquals(0, summary.total)
+    }
+
+    @Test
+    fun `a colleague's sample is refused and nothing in the batch is touched`() = runTest {
+        // 14zcqntjph6: the server lets only the author tombstone it, so the batch is refused
+        // whole before any row changes rather than half-applied and silently rejected on push.
+        whenever(sampleDao.getSampleByIdIncludingDeleted("mine"))
+            .thenReturn(sample("mine", SampleStatus.SYNCED))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("theirs"))
+            .thenReturn(sample("theirs", SampleStatus.SYNCED, userId = "user-2"))
+
+        val result = useCase(setOf("mine", "theirs"))
+
+        assertTrue(result.exceptionOrNull() is ReadOnlyRecordException)
+        verify(sampleDao, never()).tombstoneSample(any(), any(), any())
+        verify(deleteFlaggedSampleUseCase, never()).invoke(any())
     }
 
     @Test

@@ -78,12 +78,17 @@ class DiscardUnsyncedDataUseCase @Inject constructor(
                 sessionDao.deleteSession(session.sessionId)
             }
 
-            // A patient that still owns a session is left alone rather than failing the whole
-            // sign-out on the NO_ACTION foreign key. That needs a patient which reached
-            // Supabase once and later failed a re-push while its sessions stayed synced, so
-            // the record the medtech cares about is already on the server.
+            // A patient that still owns a session, or that a surviving report references, is
+            // left alone rather than failing the whole sign-out on the NO_ACTION/CASCADE
+            // foreign keys. Sessions cover a patient which reached Supabase once and later
+            // failed a re-push while its sessions stayed synced. Reports cover the same case
+            // for patient-scoped reports: `ReportEntity.patient_id` cascades on delete, so a
+            // synced patient report left dangling on a deleted patient would be silently
+            // destroyed — checked here after this patient's own pending reports were already
+            // deleted above, so the count reflects only reports that must survive.
             patients.count { patient ->
-                val stillInUse = sessionDao.countSessionsForPatient(patient.patientId) > 0
+                val stillInUse = sessionDao.countSessionsForPatient(patient.patientId) > 0 ||
+                    reportDao.countReportsForPatient(patient.patientId) > 0
                 if (!stillInUse) patientDao.deletePatient(patient.patientId)
                 !stillInUse
             }

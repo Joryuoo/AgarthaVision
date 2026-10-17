@@ -64,4 +64,10 @@ data class VerificationSheetActions(
     val onConfirmLeave: () -> Unit = {},
     /** Stay on the sample, edits intact. */
     val onDismissLeave: () -> Unit = {},
+    /** Asks to give up on a pending model output. Opens a confirmation; nothing is cancelled yet. */
+    val onCancelInferenceRequested: () -> Unit = {},
+    /** Cancels for good: the sample becomes manual and never gets a model output. */
+    val onCancelInferenceConfirmed: () -> Unit = {},
+    /** Keeps waiting for the model output. */
+    val onCancelInferenceDismissed: () -> Unit = {},
 )

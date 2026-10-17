@@ -1,10 +1,12 @@
 package com.agarthavision.data.sync
 
 import android.content.Context
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.agarthavision.domain.model.AccountAccess
+import com.agarthavision.domain.usecase.auth.EnforceAccountAccessUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
@@ -29,14 +31,23 @@ class SyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
+    private val enforceAccountAccessUseCase: EnforceAccountAccessUseCase,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        val access = runCatching { enforceAccountAccessUseCase() }
+            .onFailure { Logger.e(TAG, "Account check failed", it) }
+            .getOrNull()
+        if (access == AccountAccess.REFUSED) return Result.success()
+        return pushThenPull()
+    }
+
+    private suspend fun pushThenPull(): Result {
         val push = syncPendingDataUseCase()
         val fetch = fetchRemoteDataUseCase()
 
-        push.onFailure { Log.e(TAG, "Sync push failed", it) }
-        fetch.onFailure { Log.e(TAG, "Sync fetch failed", it) }
+        push.onFailure { Logger.e(TAG, "Sync push failed", it) }
+        fetch.onFailure { Logger.e(TAG, "Sync fetch failed", it) }
 
         // Skipped means unauthenticated or offline. Retrying will not change either: there is
         // no credential to acquire here, and the network constraint already held before this

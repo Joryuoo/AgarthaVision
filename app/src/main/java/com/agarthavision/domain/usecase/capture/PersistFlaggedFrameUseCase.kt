@@ -55,6 +55,7 @@ class PersistFlaggedFrameUseCase @Inject constructor(
                 predictionsJson = predictionsJson,
                 imageWidth = frame.imageWidth,
                 imageHeight = frame.imageHeight,
+                inferenceState = frame.inferenceState.value,
             )
         )
 

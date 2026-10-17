@@ -1,14 +1,17 @@
 package com.agarthavision.ui.settings
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.auth.BiometricPromptManager
+import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.core.util.Logger
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
@@ -45,22 +48,31 @@ data class SettingsUiState(
     val isOffline: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.LIGHT,
     val isDarkMode: Boolean = false,
+    val isBiometricLockEnabled: Boolean = false,
+    val isBiometricAvailable: Boolean = false,
     val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
     val isSyncing: Boolean = false,
     val initialFetchDone: Boolean = true,
     val lastFetchIncomplete: Boolean = false,
     val lastSyncCompletion: SyncCompletion? = null,
+    val lastSyncError: String? = null,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
         get() = isSignedIn && !isOffline && !isSyncing
 }
 
+private data class PreferencesTuple(
+    val themeMode: ThemeMode,
+    val biometricEnabled: Boolean,
+)
+
 private data class SyncTuple(
     val syncing: Boolean,
     val initialFetchDone: Boolean,
     val fetchIncomplete: Boolean,
     val lastSync: SyncCompletion?,
+    val lastSyncError: String?,
 )
 
 /**
@@ -83,6 +95,8 @@ class SettingsViewModel @Inject constructor(
     private val initialFetchStateStore: InitialFetchStateStore,
     private val fetchOutcomeStore: FetchOutcomeStore,
     private val lastSyncStore: LastSyncStore,
+    private val biometricLockRepository: BiometricLockRepository,
+    private val biometricPromptManager: BiometricPromptManager,
 ) : ViewModel() {
 
     private val events = MutableSharedFlow<SettingsEvent>()
@@ -118,25 +132,39 @@ class SettingsViewModel @Inject constructor(
         identity?.let { lastSyncStore.observe(it.userId) } ?: flowOf(null)
     }
 
+    private val lastSyncErrorFlow = identityFlow.flatMapLatest { identity ->
+        identity?.let { lastSyncStore.observeLastError(it.userId) } ?: flowOf(null)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         identityFlow,
         connectivityObserver.isOnline,
-        observeThemeModeUseCase(),
+        combine(observeThemeModeUseCase(), biometricLockRepository.isBiometricLockEnabled, ::PreferencesTuple),
         pendingSyncFlow,
-        combine(isSyncingFlow, initialFetchDoneFlow, lastFetchIncompleteFlow, lastSyncFlow, ::SyncTuple),
-    ) { identity, online, themeMode, pendingSync, tuple ->
+        combine(
+            isSyncingFlow,
+            initialFetchDoneFlow,
+            lastFetchIncompleteFlow,
+            lastSyncFlow,
+            lastSyncErrorFlow,
+            ::SyncTuple,
+        ),
+    ) { identity, online, prefTuple, pendingSync, tuple ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
             isSignedIn = identity != null,
             isOffline = !online,
-            themeMode = themeMode,
-            isDarkMode = themeMode == ThemeMode.DARK,
+            themeMode = prefTuple.themeMode,
+            isDarkMode = prefTuple.themeMode == ThemeMode.DARK,
+            isBiometricLockEnabled = prefTuple.biometricEnabled,
+            isBiometricAvailable = biometricPromptManager.getBiometricStatus() == BiometricStatus.READY,
             pendingSyncCounts = pendingSync,
             isSyncing = tuple.syncing,
             initialFetchDone = tuple.initialFetchDone,
             lastFetchIncomplete = tuple.fetchIncomplete,
             lastSyncCompletion = tuple.lastSync,
+            lastSyncError = tuple.lastSyncError,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -144,11 +172,17 @@ class SettingsViewModel @Inject constructor(
         initialValue = SettingsUiState(),
     )
 
+    fun onToggleBiometricLock(enabled: Boolean) {
+        viewModelScope.launch {
+            biometricLockRepository.setBiometricLockEnabled(enabled)
+        }
+    }
+
     /** Persists the chosen theme mode. */
     fun onSelectTheme(mode: ThemeMode) {
         viewModelScope.launch {
             setThemeModeUseCase(mode).onFailure { error ->
-                Log.e(TAG, "Failed to persist theme mode $mode", error)
+                Logger.e(TAG, "Failed to persist theme mode $mode", error)
             }
         }
     }
@@ -165,10 +199,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             isSyncingFlow.value = true
             syncPendingDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync (push) failed", error)
+                Logger.e(TAG, "Manual sync (push) failed", error)
             }
             fetchRemoteDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync (fetch) failed", error)
+                Logger.e(TAG, "Manual sync (fetch) failed", error)
             }
             isSyncingFlow.value = false
         }

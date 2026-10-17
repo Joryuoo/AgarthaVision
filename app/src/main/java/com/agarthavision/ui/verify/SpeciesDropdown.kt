@@ -70,10 +70,10 @@ internal fun FieldLabel(label: String) {
 @Composable
 internal fun fieldColors(colors: AgarthaColors) = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = colors.accent,
-    unfocusedBorderColor = colors.borderStrong,
+    unfocusedBorderColor = colors.border,
     errorBorderColor = colors.danger,
-    focusedContainerColor = colors.surface,
-    unfocusedContainerColor = colors.surface,
+    focusedContainerColor = colors.surfaceMuted,
+    unfocusedContainerColor = colors.surfaceMuted,
     errorContainerColor = colors.dangerTint.copy(alpha = 0.5f),
     focusedTextColor = colors.textPrimary,
     unfocusedTextColor = colors.textPrimary,
@@ -118,6 +118,13 @@ fun SpeciesDropdown(
                 readOnly = true,
                 singleLine = true,
                 textStyle = FieldTextStyle,
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.verify_species_placeholder),
+                        color = colors.textTertiary,
+                        fontSize = 15.sp,
+                    )
+                },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = colorScheme,
                 shape = FieldShape,
@@ -245,6 +252,13 @@ fun StageDropdown(
                 readOnly = true,
                 singleLine = true,
                 textStyle = FieldTextStyle,
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.verify_stage_placeholder),
+                        color = colors.textTertiary,
+                        fontSize = 15.sp,
+                    )
+                },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = colorScheme,
                 shape = FieldShape,

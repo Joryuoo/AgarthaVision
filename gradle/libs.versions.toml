@@ -31,6 +31,8 @@ roborazzi = "1.74.0"
 foundation-layout = "1.11.2"
 supabase = "3.0.3"
 ktor = "3.0.3"
+litert = "2.2.0"
+biometric = "1.2.0-alpha05"
 
 [libraries]
 # Compose
@@ -45,6 +47,7 @@ compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "core-splashscreen" }
 exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+biometric = { group = "androidx.biometric", name = "biometric-ktx", version.ref = "biometric" }
 
 # Activity
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity" }
@@ -122,6 +125,10 @@ roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", versi
 roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
 roborazzi-junit-rule = { group = "io.github.takahirom.roborazzi", name = "roborazzi-junit-rule", version.ref = "roborazzi" }
 foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundation-layout" }
+
+# On-device inference (LiteRT, formerly TensorFlow Lite). The CompiledModel API carries the GPU
+# accelerator built in, so no separate gpu artifact is needed.
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
