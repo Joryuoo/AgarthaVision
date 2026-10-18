@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -23,24 +24,24 @@ class ChangePasswordUseCaseTest {
     fun `offline it answers no connection without trying`() = runTest {
         whenever(connectivityObserver.currentlyOnline()).thenReturn(false)
 
-        assertEquals(PasswordChangeResult.NoConnection, useCase("old-pass", "new-pass"))
-        verify(authRepository, never()).changePassword(any(), any())
+        assertEquals(PasswordChangeResult.NoConnection, useCase("old-pass", "new-pass", null))
+        verify(authRepository, never()).changePassword(any(), any(), anyOrNull())
     }
 
     @Test
     fun `the same password is refused before any sign-in`() = runTest {
         whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
 
-        assertEquals(PasswordChangeResult.SamePassword, useCase("same-pass", "same-pass"))
-        verify(authRepository, never()).changePassword(any(), any())
+        assertEquals(PasswordChangeResult.SamePassword, useCase("same-pass", "same-pass", null))
+        verify(authRepository, never()).changePassword(any(), any(), anyOrNull())
     }
 
     @Test
     fun `online it hands the provider's answer back unchanged`() = runTest {
         whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
-        whenever(authRepository.changePassword("old-pass", "new-pass"))
+        whenever(authRepository.changePassword("old-pass", "new-pass", null))
             .thenReturn(PasswordChangeResult.WrongCurrentPassword)
 
-        assertEquals(PasswordChangeResult.WrongCurrentPassword, useCase("old-pass", "new-pass"))
+        assertEquals(PasswordChangeResult.WrongCurrentPassword, useCase("old-pass", "new-pass", null))
     }
 }

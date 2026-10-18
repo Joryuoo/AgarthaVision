@@ -19,11 +19,15 @@ class ChangePasswordUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val connectivityObserver: ConnectivityObserver,
 ) {
-    suspend operator fun invoke(currentPassword: String, newPassword: String): PasswordChangeResult =
+    suspend operator fun invoke(
+        currentPassword: String,
+        newPassword: String,
+        humanCheckToken: String?,
+    ): PasswordChangeResult =
         when {
             !connectivityObserver.currentlyOnline() -> PasswordChangeResult.NoConnection
             // Caught here as well as by the provider, so it costs no round trip and no sign-in.
             newPassword == currentPassword -> PasswordChangeResult.SamePassword
-            else -> authRepository.changePassword(currentPassword, newPassword)
+            else -> authRepository.changePassword(currentPassword, newPassword, humanCheckToken)
         }
 }

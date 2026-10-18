@@ -25,6 +25,93 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/captcha-sign-in — sign-in passes a Cloudflare Turnstile check · 2026-10-16
+
+### Human check on sign-in · `14zcqntnqxf`
+
+- **Sign-in and the password change send a Turnstile token.** `HumanCheckWidget` renders the
+  widget in a WebView with `https://<hostname>/` as its base URL, the way Cloudflare documents
+  Turnstile for native apps, and hands the token to `SupabaseAuthRepository`, which passes it to
+  Supabase as `captchaToken`. Supabase checks it with Cloudflare; the app never holds the
+  widget's secret.
+- **Submit waits for the check**, and every failed attempt runs it again: a token is single-use.
+  An expired token is replaced by the widget on its own. A widget that cannot load says so and
+  offers a retry.
+- **A refused check says so.** Supabase's `captcha_failed` becomes `HumanCheckRejectedException`
+  (sign-in) or `PasswordChangeResult.HumanCheckRejected` (password change), with their own
+  messages, never "invalid credentials".
+- **Configured per build** from `local.properties`: `TURNSTILE_SITE_KEY_DEV/_PROD` and
+  `TURNSTILE_HOSTNAME_DEV/_PROD`. Blank turns the check off, which only works while Supabase's
+  CAPTCHA protection is off.
+- **Order matters.** Supabase's CAPTCHA setting applies to every client. This release has to be
+  out and installed by medtechs, and the console's part live, before it is switched on.
+
+---
+
+## chore/publishable-key — the app is built with Supabase's publishable key · 2026-10-16
+
+### Key in every APK · `14zcqntnqxg`
+
+- **`SUPABASE_ANON_KEY_DEV/_PROD` take the publishable key** (`sb_publishable_…`, Project
+  Settings → API Keys), not the legacy anon JWT. The property names stay; only the value changes.
+  `local.properties.example`, the README and `docs/stack.md` say so.
+- **No code change.** supabase-kt 3.0.3 sends the key as `apikey`, and as the bearer token only
+  before sign-in, which Supabase accepts for a publishable key; every signed-in call carries the
+  user's own token. Nothing in the app or `inference/` reads the key as a JWT.
+- **Order matters.** A release built with the publishable key has to be installed by medtechs
+  before the legacy keys are disabled: disabling them breaks every APK built with the old key.
+
+---
+
+## fix/active-member-writes — field data is written only by an active laboratory member · 2026-10-16
+
+### Write policies check the laboratory · `14zcqntnqpa`
+
+- **`0018_writes_need_active_lab_member.sql`** adds a RESTRICTIVE policy to every insert, update
+  and delete the app allows on `patients`, `sessions`, `samples`, `detections`, `predictions`,
+  `sample_species_findings` and `reports`, and to inserts and updates in the `samples` and
+  `reports` buckets. Each calls `app_private.require_active_lab_member()`: the caller must be an
+  active member, of any role, of an active laboratory (the console's `console_member_org()`
+  rule). The existing ownership checks still apply. A deactivated medtech, every member of a
+  deactivated laboratory, and an account in no laboratory are refused with 42501 and
+  `not_active_lab_member` in the message. Reads are unchanged.
+- **The 35 `TO public` policies are now `TO authenticated`**, rules unchanged.
+- **The phone says why.** When a sync pass hits that refusal, the Settings sync card shows
+  "Your account is no longer an active member of a laboratory…" instead of the raw error. The
+  unsynced work stays on the phone (`domain/sync/InactiveMemberRefusal.kt`,
+  `SyncPendingDataUseCase`).
+- Applied by hand (C6) after 0017. Its header carries a read-only query listing recent writers
+  who would be refused; check it first. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0018` and the console's migrations, in
+  both orders (app then console, and live's console then app): the new
+  `app_0018_writes_need_active_lab_member.test.sql` there replays 16 phone writes as an active
+  medtech and an active org admin (allowed), as each refused kind of account, and signed out.
+
+---
+
+## fix/advisor-hardening — signed-out visitors reach no app table or function · 2026-10-16
+
+### Supabase security advisor findings · `14zcqntnqxe`
+
+- **`0017_advisor_hardening.sql`** clears the app's findings from the advisor run of 2026-10-15.
+  `sessions_patient_is_fixed()` gets a fixed search_path. The trigger functions
+  (`handle_new_user`, `handle_deleted_user`, `link_patient_creator`, `dedupe_session_label`,
+  `sessions_patient_is_fixed`) lose EXECUTE for every client role; a trigger still fires
+  without it. The policy helpers and the two admin RPCs lose EXECUTE for `anon` and PUBLIC and
+  keep it for `authenticated`.
+- **`anon` loses every right on the nine app tables.** A signed-out read is now refused (42501)
+  instead of returning `[]`, so turning RLS off on a table by mistake no longer opens it.
+- **`is_admin(uuid)` answers a client only about themselves.** The check moved to
+  `app_private.is_admin(uuid)`; `public.is_admin` is security invoker and returns false when a
+  signed-in caller names someone else. Security-definer callers (the console's RPCs) still ask
+  about anyone. Signature unchanged, so no policy or view changed.
+- Applied by hand (C6), independent of any build. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0017` and the console's migrations:
+  the new `app_0017_advisor_hardening.test.sql` there checks each grant, a signed-out read and
+  RPC call, `is_admin()` from each side, and the phone's write flow as a medtech.
+
+---
+
 ## fix/patient-report-own-patient-sessions — a patient report pools only that patient's own sessions · 2026-10-05
 
 ### Patient report insert rule · `14zcqntk68x`

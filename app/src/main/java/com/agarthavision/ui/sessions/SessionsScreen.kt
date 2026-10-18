@@ -484,7 +484,7 @@ private fun PatientPreviewCard(
 ) {
     val colors = AgarthaTheme.colors
     val context = LocalContext.current
-    var isRevealed by rememberSaveable { mutableStateOf(false) }
+    var isRevealed by rememberSaveable { mutableStateOf(true) }
     val age = patient.ageYears(Instant.now())
     val ageText = context.resources.getQuantityString(R.plurals.patient_preview_age, age, age)
     val sexLabel = when (patient.sex) {
@@ -498,9 +498,9 @@ private fun PatientPreviewCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(colors.brandFill)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
@@ -510,11 +510,9 @@ private fun PatientPreviewCard(
         ) {
             Text(
                 text = if (isRevealed) patient.displayName else patient.maskedDisplayName,
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontSize = 24.sp,
-                    lineHeight = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
+                fontSize = 22.sp,
+                lineHeight = 28.sp,
+                fontWeight = FontWeight.Bold,
                 color = colors.onBrandFill,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -527,57 +525,88 @@ private fun PatientPreviewCard(
                 } else {
                     R.string.patients_reveal_name_desc
                 }
-                IconButton(
-                    onClick = { isRevealed = !isRevealed },
-                    modifier = Modifier.size(32.dp),
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(colors.onBrandFill.copy(alpha = 0.2f))
+                        .clickable(onClick = { isRevealed = !isRevealed }),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = stringResource(descRes),
                         tint = colors.onBrandFill,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
         }
         Text(
             text = ageSex,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-            ),
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
             color = colors.onBrandFill.copy(alpha = 0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = barangay,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-            ),
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
             color = colors.onBrandFill.copy(alpha = 0.9f),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+        Spacer(Modifier.height(8.dp))
         if (counts.isLoading) {
-            SkeletonBox(Modifier.width(140.dp).height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SkeletonBox(Modifier.width(80.dp).height(28.dp), shape = CircleShape)
+                SkeletonBox(Modifier.width(90.dp).height(28.dp), shape = CircleShape)
+            }
         } else {
-            Text(
-                text = pluralStringResource(
-                    R.plurals.sessions_subtitle,
-                    counts.totalCount,
-                    counts.totalCount,
-                    counts.unverifiedCount,
-                ),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                ),
-                color = colors.onBrandFill.copy(alpha = 0.9f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PatientCardChip(
+                    text = pluralStringResource(
+                        R.plurals.patient_preview_sessions_chip,
+                        counts.totalCount,
+                        counts.totalCount,
+                    ),
+                )
+                PatientCardChip(
+                    text = pluralStringResource(
+                        R.plurals.patient_preview_unverified_chip,
+                        counts.unverifiedCount,
+                        counts.unverifiedCount,
+                    ),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun PatientCardChip(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(colors.onBrandFill.copy(alpha = 0.2f))
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = colors.onBrandFill,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

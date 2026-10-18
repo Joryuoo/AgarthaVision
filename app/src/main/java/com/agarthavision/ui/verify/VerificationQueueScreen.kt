@@ -38,7 +38,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Inbox
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Verified
 import androidx.compose.material3.Button
@@ -281,9 +280,10 @@ internal fun QueueEmptyState(
     val padded = modifier.padding(horizontal = 32.dp)
     when (variant) {
         QueueEmptyVariant.NEVER_HAD -> EmptyState(
-            icon = Icons.Outlined.Inbox,
             title = stringResource(R.string.verify_queue_empty_title),
             body = stringResource(R.string.verify_queue_empty_body),
+            illustrationLight = R.drawable.ill_empty_capture_light,
+            illustrationDark = R.drawable.ill_empty_capture_dark,
             modifier = padded,
         )
         QueueEmptyVariant.ALL_DONE -> EmptyState(

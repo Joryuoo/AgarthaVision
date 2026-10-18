@@ -47,6 +47,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
+import com.agarthavision.domain.sync.INACTIVE_MEMBER_REFUSAL
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Science
@@ -369,7 +370,11 @@ internal fun SyncCard(
             if (state.counts.failed > 0 && !state.lastSyncError.isNullOrBlank()) {
                 HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
                 Text(
-                    text = state.lastSyncError,
+                    text = if (state.lastSyncError == INACTIVE_MEMBER_REFUSAL) {
+                        stringResource(R.string.settings_sync_refused_inactive_member)
+                    } else {
+                        state.lastSyncError
+                    },
                     color = colors.dangerText,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 8.dp),

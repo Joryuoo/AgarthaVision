@@ -71,6 +71,14 @@ and after every local write.
    (`SyncPendingDataUseCase::invoke`). Samples are read *including deleted*. Patients go first because
    `sessions.patient_id` references `patients(id)`. A per-row failure marks that row and
    does not abort the pass.
+3. **Record the message Settings shows.** The first failure, prefixed with its row, or `""` on a
+   clean pass. Since 0018 every write needs an active member of an active laboratory, and the
+   database refuses anyone else with `not_active_lab_member` in the message. When any row
+   failed that way the pass records `INACTIVE_MEMBER_REFUSAL` instead
+   (`domain/sync/InactiveMemberRefusal.kt`), and the Settings sync card shows
+   `settings_sync_refused_inactive_member`: the account is no longer active, the work stays on
+   the phone, ask the laboratory's admin. Nothing local is deleted; a reactivated account's next
+   pass uploads it.
 
 A report push is the row, then its PDF into the `reports` bucket; a file the device no
 longer holds is skipped rather than failing the row (`data/supabase/SyncReportUseCase.kt`).

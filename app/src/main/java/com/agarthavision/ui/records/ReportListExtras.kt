@@ -24,12 +24,14 @@ import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Check
 import com.agarthavision.ui.icons.ChevronLeft
 import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.theme.AgarthaTheme
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Prev / "Page X of Y" / Next control for the reports list. Shown only when there is more than
@@ -111,11 +113,21 @@ internal fun ReportStatusPill(status: ReportSyncStatus) {
         ReportSyncStatus.SYNC_FAILED -> Triple(colors.dangerTint, colors.dangerText, R.string.report_status_failed)
         ReportSyncStatus.PENDING -> Triple(colors.warningTint, colors.warningText, R.string.report_status_pending)
     }
-    Box(
+    Row(
         modifier = Modifier
             .background(bg, RoundedCornerShape(999.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (status == ReportSyncStatus.SYNCED) {
+            Icon(
+                imageVector = AgarthaIcons.Check,
+                contentDescription = null,
+                tint = fg,
+                modifier = Modifier.size(12.dp),
+            )
+        }
         Text(
             text = stringResource(label),
             color = fg,
@@ -126,5 +138,5 @@ internal fun ReportStatusPill(status: ReportSyncStatus) {
 }
 
 internal fun Instant.formatReportDateTime(): String =
-    atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+    atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MMM d, yyyy · HH:mm", Locale.getDefault()))
 
