@@ -9,6 +9,22 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/session-detail-unread-session — an unverified session shows no result, not a negative one · 2026-10-13
+
+### Session Detail LPF card · `14zcqntk7bg`
+
+- A session exists from the moment it is named, so Session Detail could open on one with no
+  verified field and read "No parasites found" under "No confirmed eggs in 0 fields". With no
+  verified field, `LpfHeroCard` now says no field has been verified, so there is no result,
+  and the line beside the total says "No fields verified yet". Screen readers get the same.
+- A verified session with nothing counted still says "No parasites found"; a session with
+  detections is unchanged. Neither PDF is affected: both refuse or drop a session with no
+  verified field.
+- `LpfHeroCardTest` covers the unread, read-but-clean and positive cases
+  (`SessionDetailTestTags.NOT_READ`, `NO_PARASITES`).
+
+---
+
 ## feat/captcha-sign-in — sign-in passes a Cloudflare Turnstile check · 2026-10-16
 
 ### Human check on sign-in · `14zcqntnqxf`
