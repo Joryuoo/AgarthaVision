@@ -245,10 +245,9 @@ SQL as the branches it merged (`feat/organizations` `219d9cc4`, `feat/lab-scopin
 - the `sample_id` columns of `detections`, `predictions` and `sample_species_findings`
 - `reports.session_id`
 - `patient_users.patient_id`
-- `profiles.id`, `profiles.role` and `profiles.full_name`. Since `0014`, `role` grants nothing in
-  the database, but the console's own gate still reads it until it switches to `is_admin()`
-  (14zcqntjwjf). Until then a super admin granted by hand needs both a `super_admins` row and
-  `role = 'admin'`
+- `profiles.id` and `profiles.full_name`. Since `0014`, `role` grants nothing in the database,
+  and since 14zcqntjwjf the console's own gate asks `is_admin()` too, so it no longer reads
+  `role`
 - that `profiles.id` *is* the login id: the set compares `auth.uid()` with
   `organization_members.user_id` and joins `auth.users` on `profiles.id`. Since `0011` the login
   is `profiles.account_id`, equal to `id` today; resolving profiles through `account_id` (the

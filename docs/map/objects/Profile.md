@@ -96,8 +96,8 @@ one such row.
   (`:79-108`). Granting again is a new row.
 - **Grants are made by hand** in the SQL editor until the console adds guarded functions. 0014
   copied each `role = 'admin'` profile in as one active row with `granted_by` null (`:113-115`).
-- **The console's gate still reads `role`** until 14zcqntjwjf switches it to `is_admin()`. Until
-  then a super admin granted by hand needs both the row and `role = 'admin'`.
+- **The console's gate reads the grant, not `role`.** Since 14zcqntjwjf the Admin Console asks
+  `is_admin()` like every policy here, so a super admin granted by hand needs only the row.
 - **A super admin's profile cannot be deleted**: their grant references it. Nothing deletes a
   profile anyway (C8).
 
@@ -141,7 +141,7 @@ label, never a permission. Because `handle_new_user()` writes no name, a colleag
   and `legacy-dev/0012` reintroduced the inline `(select role from profiles …)` subquery. A change
   to the role column's name or values there must patch both styles.
 - The Admin Console. Its migrations read `id` and `full_name`, and super admin through
-  `is_admin()`; its app gate reads `role` directly until 14zcqntjwjf. It assumes `id` *is* the
+  `is_admin()`, and its app gate asks `is_admin()` too (14zcqntjwjf). It assumes `id` *is* the
   login id: it compares `auth.uid()` with
   `organization_members.user_id` and joins `auth.users` on `id`. Resolving a profile through
   `account_id` instead (the rehire step above) breaks it without an error here. It also holds
