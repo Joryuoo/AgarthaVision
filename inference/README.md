@@ -1,7 +1,9 @@
 # Agartha Inference Container
 
-FastAPI server wrapping the custom Ultralytics fork (YOLO26-nano on an EfficientNetV2-S
-backbone) for egg detection. Runs on a DigitalOcean MI300X AMD GPU droplet,
+FastAPI server wrapping the custom Ultralytics fork for egg detection. The cloud model is
+YOLO26-nano on a MobileNetV4-Hybrid-Large backbone (`yolo26n-mobilenetv4hybridlarge.pt`, kept
+in the Kaggle dataset, not this repo). The phone runs a different model,
+`weights/yolo26n-efficientnetv2s.pt`, exported to TFLite (`export/README.md`). Runs on a DigitalOcean MI300X AMD GPU droplet,
 or on a free Kaggle T4 x2 ([`KAGGLE.md`](KAGGLE.md)).
 
 > **Cost reminder:** The MI300X droplet bills ~$1.99/hr while running.
@@ -13,8 +15,10 @@ or on a free Kaggle T4 x2 ([`KAGGLE.md`](KAGGLE.md)).
 
 - Docker (DMKuZu only — teammates do not need this)
 - GHCR write access: `docker login ghcr.io -u <github-username> -p <PAT>`
-- `git lfs install` run once on your machine (for `weights/yolo26n-efficientnetv2s.pt`)
-- The trained weights from Tabada at `inference/weights/yolo26n-efficientnetv2s.pt`
+- The cloud weights, `yolo26n-mobilenetv4hybridlarge.pt`, downloaded from the private
+  `agartha-weights` Kaggle dataset into `inference/weights/`. The `Dockerfile` copies
+  `weights/` into the image, and the file is not in the repo: build without it and the image
+  has no cloud model at `WEIGHTS_PATH`
 
 ---
 
@@ -51,7 +55,7 @@ ssh root@<droplet-ip> "pip install -e /app/ultralytics"
 
 ```bash
 # From your local machine (repo root):
-scp inference/weights/yolo26n-efficientnetv2s.pt root@<droplet-ip>:/root/app/weights/
+scp inference/weights/yolo26n-mobilenetv4hybridlarge.pt root@<droplet-ip>:/root/app/weights/
 scp inference/server.py root@<droplet-ip>:/root/app/
 ```
 
@@ -287,7 +291,8 @@ Matches `InferenceResponseDto` in the Android app exactly:
 
 When Tabada produces new weights:
 
-1. Replace `inference/weights/yolo26n-efficientnetv2s.pt` (tracked via Git LFS)
+1. Replace the cloud checkpoint in the `agartha-weights` Kaggle dataset, and the on-device
+   source checkpoint `inference/weights/yolo26n-efficientnetv2s.pt` (Git LFS) if it changed too
 2. Bump the training version (`v1` → `v2`) in `MODEL_VERSION`'s default in `server.py` and the
    notebook, so cloud results from the new weights are distinguishable
 3. Re-export the on-device models under the same version and replace them in

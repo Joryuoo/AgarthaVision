@@ -40,6 +40,58 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/patient-duplicate-key-fallback — a patient the server already holds syncs instead of failing · 2026-10-29
+
+### Re-sync a patient the server already holds · `14zcqntr43e`
+
+- A patient already on Supabase never synced again: its insert hit `patients_pkey`, the update
+  fallback from 86d4brr1f never fired, and the patient, its sessions and its samples stayed
+  `sync_failed` behind it. Seen on a device as "1 failed" under Patients, Sessions and Samples in
+  Data & Sync.
+- **The conflict is read from the HTTP status.** `PatientRemoteDataSource::upsertPatient` looked
+  for SQLSTATE `23505` in the exception message, but supabase-kt 3.0.3 drops PostgREST's code, so
+  a `RestException` carries only the message, details and status. It now takes a 409 as the
+  conflict. `isDuplicateKey` and `UNIQUE_VIOLATION` are gone.
+- **A 409 alone does not prove the row exists**, because PostgREST answers 409 for a foreign-key
+  violation too. The fallback update now asks for the row back with `select()`. An empty result
+  means it matched nothing (the row is absent, or RLS hid it), and the original insert error is
+  rethrown instead of marking the patient synced on a write that never happened.
+- `PatientRemoteDataSourceUpsertTest` drives the real client against a local `HttpServer` that
+  answers like PostgREST. It covers a new patient (one insert), a held patient (falls through to
+  an update of that row), a conflict whose update matches no row (rethrows), and a non-conflict
+  error (rethrown without an update).
+
+---
+
+## feature/edit-sample-screen-redesign — the verification sheet, session reports and empty states are restyled · 2026-10-17
+
+### Edit sample screen and session reports restyle · `14zcqntkegh`, `14zcqntk7ae`
+
+- **A UI restyle; no data, sync or schema change.** It touches `ui/verify`, `ui/records`,
+  `ui/sessions`, `ui/patients`, `strings.xml` and drawables only.
+- **Verification sheet** (`VerificationSheet`, `VerificationFindings`, `ModalSheetComponents`,
+  `SpeciesDropdown`). The sample image is square (`aspectRatio(1f)`) and scrolls with the content
+  column. The action bar is pinned (`SheetActionRow`): "Discard" and "Save changes" in edit mode,
+  "Discard" and "Submit" in first verification. The model output sits in one card with the boxes
+  toggle, on a maroon gradient with white type, and the AI disclaimer is outside the card.
+- **Added species** are restyled as numbered cards with an "Added by you" chip, an egg-count
+  stepper that shows the field-total floor and boxed count, and Remove and Save actions. Remarks
+  and the detection questions are tidied and grouped as cards.
+- **Session Detail** gets a redesigned reports card (`ReportsSection`: a check icon on a synced
+  report, dates written "MMM d, yyyy · HH:mm", `formatReportPositiveSpecies` for the species
+  line) and a tab strip (`SessionDetailTabItem`). `DescriptionFilled` is a new filled PDF icon.
+  The patient preview card shows sessions and unverified counts as chips (`PatientCardChip`).
+- **Empty states.** New light and dark illustrations for "nothing captured yet" in the
+  verification queue (`ill_empty_capture_*`) and for a session with no verified samples
+  (`ill_empty_samples_*`). The patient empty states use the activity illustration at a
+  constrained width.
+- Tests: `VerificationSheetContentTest` adds edit and submit action labels, pinned actions
+  visible without scrolling, and the added species card; `ReportsSectionTest` covers
+  `formatReportPositiveSpecies`. `docs/features.md` gains a "Verification layout and actions"
+  paragraph.
+
+---
+
 ## fix/session-detail-unread-session — an unverified session shows no result, not a negative one · 2026-10-13
 
 ### Session Detail LPF card · `14zcqntk7bg`
@@ -143,6 +195,157 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## docs/console-gate-reads-super-admins — the shelf says the console's gate asks is_admin() · 2026-10-13
+
+### Console gate documented as built · `14zcqntm62u`
+
+- **Docs only.** `docs/map/objects/Profile.md` and `docs/file-tree.md` still said the Admin
+  Console's gate reads `profiles.role` until 14zcqntjwjf, so a hand-made super admin needed
+  `role = 'admin'` as well as a `super_admins` row. That ticket is built.
+- Both files now say the console asks `is_admin()` like every policy here and reads `role`
+  nowhere, so a super admin granted by hand needs only the row.
+- No code, SQL or test changed.
+
+---
+
+## feat/biometric-app-lock — the app locks behind fingerprint or face on launch and resume · 2026-10-09
+
+### Biometric app lock · `86d4bywtk`
+
+- **A Settings switch turns the lock on.** `BiometricLockCard` shows only when
+  `BiometricPromptManager::getBiometricStatus` reports `READY` (strong or weak biometrics). The
+  choice is kept in DataStore by `BiometricLockRepositoryImpl`, key `is_biometric_lock_enabled`,
+  off by default.
+- **A full-screen overlay hides the app while it is locked.** `MainViewModel` starts locked, so
+  a cold launch is locked. `MainActivity.onStop` locks again whenever the lock is on, so a
+  resume is too. `BiometricLockOverlay` shows only for a signed-in user (`AuthGate.Authed`) with
+  the lock on. The system prompt opens by itself, and again from the overlay's unlock button.
+- `BiometricPromptManager::showBiometricPrompt` wraps `androidx.biometric` and returns
+  `BiometricResult` as `Success`, `Cancelled` or `Error`. Only `Success` calls `unlockApp()`.
+  `MainActivity` is now a `FragmentActivity`, which the prompt needs.
+- **A login-screen biometric button was added and then removed in the same PR.** The final
+  diff has no biometric code on the login screen or in `LoginViewModel`; the overlay is the only
+  entry. The `login_biometric_button` string is left behind.
+- New dependency `androidx.biometric:biometric-ktx` 1.2.0-alpha05 and the `USE_BIOMETRIC`
+  permission. Tests: `BiometricLockRepositoryTest` (default off, on, back off), plus
+  `MainViewModelTest` and `SettingsViewModelTest` additions.
+
+---
+
+## feature/session-sample-screens-redesign — Session Detail, the sample gallery and the patient report sheet are restyled · 2026-10-06
+
+### Session and sample screens redesign · `14zcqntkbre`
+
+- **Session Detail hero card** (`LpfHeroCard`): a maroon gradient card with the confirmed egg
+  total at 68 sp, "N species · M fields", and a "PER-FIELD DENSITY (LPF)" list. Each species
+  row shows its descriptor and burden level as a chip and its density in large type.
+  `LpfDensity.displayText()` writes a single value as "N LPF" when min equals max, and a range
+  otherwise (`LpfFormattingTest`).
+- **Samples tab is a 3-column gallery** (`LazyVerticalGrid`) of `SampleTile`, with a "Manual"
+  badge on manual captures and an egg-count pill past one egg. The box drawing moved out of
+  `SampleDetailScreen` into `DetectionOverlay.kt` so the tiles reuse it. A session with no
+  samples shows `EmptyState`.
+- **Patient report sheet** (`PatientReportSheet`) is redesigned: a subtitle with the patient and
+  session count, a From and To card pair that open `SingleDatePickerDialog`, quick ranges
+  (All time, Last 30 days, Last 7 days), a SESSIONS list with check boxes and an "Outside date
+  range" tag, and a summary line of the sessions and verified samples that will be included.
+- `SessionsViewModel::onSelectAllReportSessions` toggles every session eligible under the chosen
+  range, and clears them if all are already selected.
+- Tests: `PatientReportSheetTest`, `SessionDetailStateTest`, `SampleTileTest`,
+  `LpfFormattingTest` and a select-all case in `SessionsViewModelTest`. New `Check`, `Close` and
+  `Description` icons and the strings for all of the above.
+
+---
+
+## docs/record-applied-migrations — the shelf records which migrations are applied to agarthavision · 2026-10-06
+
+### Record 0007–0010, 0015 and 0016 as applied · `14zcqntk68x`
+
+- **Docs only.** Checked on 2026-10-06 with a read-only catalog query in the SQL editor.
+- `docs/file-tree.md` gains the missing `0007`–`0010` rows in the migrations table (shared
+  history, colleague names, session label collisions, writes need own session). `0010`, `0015`
+  and `0016` now say they are applied to `agarthavision`, checked on 2026-10-06.
+- The matching entries in this file (`feat/patient-shared-history`,
+  `feature/patient-report-and-address-pdf-only` and
+  `fix/patient-report-own-patient-sessions`) gain the same "applied" note.
+- No code, SQL or test changed.
+
+---
+
+## security/forbid-direct-logging-detekt-rule — logging goes through one wrapper that is silent in release builds · 2026-10-06
+
+### Forbid direct `android.util.Log` and `println` · `86d4byvgj`
+
+- **`core/util/Logger.kt::Logger` is the only way to log.** It has `v`, `d`, `i`, `w` and `e`
+  and writes only when `BuildConfig.DEBUG` is true, so a release build logs nothing through it.
+- **`detekt.yml` forbids the rest.** `ForbiddenImport` bans `android.util.Log`, and
+  `ForbiddenMethodCall` bans `Log.v/d/i/w/e/println` and Kotlin's `println` and `print`. Both
+  exclude `Logger.kt` and the test source sets.
+- 26 files move their logging calls to `Logger`: the sync use cases and remote data sources, the
+  inference queue and on-device engine, the seeders, `SyncWorker`, `AgarthaVisionApp` and
+  several view models.
+- `Logger`'s comment says it sanitizes throwables so raw SQL cannot reach Logcat, but
+  `sanitizeThrowable` returns the throwable unchanged. Release builds are safe only because
+  nothing is logged at all.
+- No test was added; detekt is the check.
+
+---
+
+## feature/onboarding-redesign — onboarding, login and the empty states get illustrations, and sign-in stops waiting on the full download · 2026-10-06
+
+### Onboarding, login and empty-state illustrations · `14zcqntk43w`, `14zcqntk43u`, `14zcqntk7ae`
+
+- **Onboarding** (`OnboardingContent`) is four pages with a light and dark vector illustration
+  each (`ill_onboarding_1`–`4`) and an entrance animation. `rememberReducedMotion()` turns it
+  off when the system "Remove animations" setting is on. The start route is fixed for the life
+  of the nav graph (`startRouteFor`, `onboardingExitRoute`), first run exits to Login, and the
+  seen flag is saved before navigating. Before, finishing onboarding showed a dashboard frame,
+  because the flag flipping rebuilt the nav host.
+- **Login screen** has a maroon hero panel and a sign-in sheet. `ResizeForKeyboard()` switches
+  the activity to adjustResize while it shows (the default pans), and change password does the
+  same.
+- **Sign-in no longer waits on a full sync.** `CompleteSignInUseCase` awaits only
+  `FetchRemoteDataUseCase::pullPatientsOnly`, then asks for a background pass with
+  `SyncScheduler::requestSyncAfterSignIn`. That uses `APPEND_OR_REPLACE`, because `KEEP` could
+  drop it behind an app-start pass that had read "no identity". It runs even when the pull
+  failed, and a throw cannot strand the user on Login. The login button shows staged progress.
+- **First-download status.** `ObserveInitialDownloadDoneUseCase` drives an
+  `InitialDownloadBanner` on the dashboard and a "still downloading" empty state on an empty,
+  unfiltered Patients list, which keeps its new-patient action.
+- **Empty states** use the new `ill_empty_*` illustrations (sessions, activity, patients,
+  smears, reports) through `EmptyState`, at 80% opacity. The session card's three-dot menu from
+  `feat/restore-session-rename` is replaced by a long press on the medtech's own card, with a
+  custom accessibility action. A colleague's card still has none.
+- Tests: `CompleteSignInUseCaseTest`, `FetchRemoteDataUseCaseTest`, `OnboardingContentTest`,
+  `StartRouteTest`, `LoginScreenRedesignTest`, `InitialDownloadBannerTest`, `EmptyStateTest`,
+  `ReducedMotionTest`, `PatientsEmptyContentTest`, and updates to the view model and
+  `SessionCardUiTest` tests.
+
+---
+
+## security/remove-client-inference-api-key — the APK no longer carries the inference key · 2026-10-06
+
+### Cloud inference sends the user's Supabase token · `86d4bywtf`, `86d4c2pzt`
+
+- **`INFERENCE_API_KEY` is gone from the app.** The `buildConfigField` for it is removed from
+  both build types in `app/build.gradle.kts`, leaving `SUPABASE_URL`, `SUPABASE_ANON_KEY` and
+  `INFERENCE_URL`.
+- **The OkHttp interceptor in `core/di/InferenceModule.kt` sends the signed-in user's access
+  token** (`auth.currentAccessTokenOrNull()`) as the bearer token, and sends no
+  `Authorization` header when there is none.
+- **The container did not accept it.** The PR's docs say `INFERENCE_API_KEY` is held
+  server-side, but `inference/server.py` still compared the bearer token with that key, so
+  every cloud call was refused until `fix/inference-verifies-supabase-jwt` (2026-11-05).
+- **Remote rows decode tolerantly** (86d4c2pzt). The patient, session, sample, detection,
+  prediction, finding and report sources decode each row on its own, skip and log one that is
+  malformed, and keep the good ones. Report `lpf_per_species` accepts `min` and `max` written as
+  floats (`toIntFlexible`) instead of reading them as 0.
+- Tests in `SupabaseMapperContractTest`: float min and max, a missing min or max or a
+  non-object value, and a bad row among good ones. `docs/stack.md` and the `infer` map are
+  updated.
+
+---
+
 ## fix/patient-report-own-patient-sessions — a patient report pools only that patient's own sessions · 2026-10-05
 
 ### Patient report insert rule · `14zcqntk68x`
@@ -162,6 +365,171 @@ Verify any entry with `git log --oneline --reverse`.
   rule let in; nothing is fixed in place (C8).
 - Tested locally against `0001`–`0016` through RLS: the ticket's repro is refused with 42501,
   a report on the patient's own sessions still inserts, and session reports are unchanged.
+
+---
+
+## docs/lpf-range-and-no-infectivity-tier-decision-records — the LPF range and the missing infectivity tier are written down · 2026-10-05
+
+### LPF range definition and no-infectivity-tier rationale · `86d4be4vc`
+
+- **Docs only** (`docs/features.md`, `docs/map/objects/Finding.md`, `docs/map/processes/report.md`).
+- The LPF range is written as `min(eggCount)..max(eggCount)` per species across every field the
+  session recorded, and a field with none of that species counts as 0, not as absent, because
+  dropping empty fields would overstate every result. There is no floor or cap on the number of
+  fields.
+- The descriptor comes from the worst field, not the mean: rare 1–2, few 3–5, moderate 6–10,
+  numerous above 10. It is paired with an estimated burden level (`LpfDensity.kt::LpfDescriptor`
+  and `ParasiteBurdenLevel`). The thresholds match `LpfDescriptor.forMax`.
+- WHO and DOH intensity tables are defined for Kato-Katz EPG and cannot be rescaled to
+  direct-smear LPF, so no infectivity tier is reported. Re-adding one needs a cutoff table signed
+  off clinically by name and date.
+- No code or test changed.
+
+---
+
+## test/supabase-mapper-contract-tests — Supabase rows are pinned to the entities they map to · 2026-10-05
+
+### Row-to-entity mapper contract tests · `86d4c2q2k`
+
+- **The read-path row types and mappers are now `internal` top-level declarations.** `PatientRow`,
+  `PatientUserRow`, `SessionRow`, `SampleRow`, `DetectionRow`, `PredictionRow`, `FindingRow` and
+  `ReportRow`, and their `toEntity()` functions, move out of the data source classes so a test
+  can reach them.
+- **The report mapper is hardened.** `ReportRow.toEntity()` reads `lpf_per_species` without
+  throwing: a non-object value, or a `min` or `max` that is missing or not an integer, becomes 0
+  instead of crashing the pull.
+- `SupabaseMapperContractTest` adds twelve cases: a well-formed row for each type, a malformed
+  one for patient, session and report rows (null optionals, empty or null fields), and a
+  tombstoned sample carrying `deleted_at`.
+
+---
+
+## feat/first-run-intro-screen — a first-run intro shows once, before sign-in · 2026-10-05
+
+### First-run onboarding intro · `86d4amrbk`
+
+- **A three-step intro opens a fresh install.** `OnboardingScreen` is a `HorizontalPager`: capture
+  microscopic fields, detect and verify eggs, report and parasite burden. It has Skip, Next and
+  "Get Started", and Back (the button and the system back) after the first step.
+- **Swipe and the step dots both navigate.** The dots are tappable.
+- **Shown once.** `OnboardingPreferenceRepositoryImpl` keeps `has_seen_onboarding` in DataStore,
+  false by default. `MainViewModel.hasSeenOnboarding` is null while it loads, and the splash
+  screen and the nav graph both wait for it. The start route is Onboarding when unseen, then
+  Login or Dashboard by auth state. `OnboardingViewModel::onCompleteOnboarding` sets the flag.
+- Finishing navigates to Dashboard and pops Onboarding. `feature/onboarding-redesign` changed
+  this to exit to Login on first run.
+- Tests: `OnboardingViewModelTest` and a `MainViewModelTest` case for the new flag.
+
+---
+
+## feat/infection-level-classification — each species' LPF density carries a Low, Moderate or High burden label · 2026-10-04
+
+### Estimated parasite burden level · `86d4bzmah`
+
+- **`ParasiteBurdenLevel` is `LOW`, `MODERATE` or `HIGH`**, read off the LPF descriptor of the
+  worst field (`LpfDensity::burdenLevel`): rare and few are Low, moderate is Moderate, numerous
+  is High, and no descriptor gives none. The code says it avoids unqualified "WHO infectivity
+  tier" claims, which apply only to Kato-Katz EPG, so despite the branch name the label is a
+  burden estimate, not an infection level.
+- **Session Detail shows it** on each species row of `LpfHeroCard`, as the descriptor and the
+  burden joined by a dot, for example "Few · Low Burden". A second commit restacks the row: the
+  species name and range on one line, the descriptor and burden below it, descriptor capitalised.
+- The labels are the new `parasite_burden_low`, `parasite_burden_moderate` and
+  `parasite_burden_high` strings, mapped by `ParasiteBurdenLevel.labelRes` in `LpfFormatting.kt`.
+- Neither PDF is touched; only the screen changed.
+- `LpfAggregationTest` covers the mapping: 0 gives none, 2 and 5 give Low, 10 gives Moderate and
+  12 gives High.
+
+---
+
+## fix/instant-verification-save — saving a verification closes the sheet without waiting on the upload · 2026-10-04
+
+### Verification save no longer awaits the push · `14zcqntk2pb`
+
+- Saving a sample awaited its push to Supabase before the sheet closed: about 3 s on Wi-Fi,
+  against about 0.14 s offline (figures from the commit message), for a result nothing read,
+  since a failure only marks the row `sync_failed`.
+- **`BackgroundSamplePush` runs the push in a process-lifetime scope.** `SubmitVerificationUseCase`
+  calls `backgroundSamplePush.push(sampleId)` and no longer holds `SyncSampleUseCase` or
+  `SyncScheduler`. The push still runs first and then asks for a sync pass, in that order, so
+  the pass does not start alongside the direct push, and a request dropped by the scheduler's
+  `KEEP` while a pass runs is still covered. A throw is caught and logged, since nothing is left
+  to observe it.
+- **The sheet blocks input while a save is in flight.** Only Submit was locked before, so an
+  edit made in that window was overwritten by the save's copy, and paging re-armed Submit and
+  let the finished save close the sheet on another sample. `SavingInputBlocker` swallows
+  touches and clears focus, the sheet's semantics are cleared so TalkBack cannot get past it,
+  and `VerificationViewModel` ignores `setFrame`, leaving, and `onDeleteFrame` while
+  `isSubmitting`.
+- A process killed mid-push leaves the row `verified` for the next foreground trigger, which is
+  no worse than a kill mid-save was.
+- Tests: `BackgroundSamplePushTest`, plus `SubmitVerificationUseCaseTest`,
+  `VerificationViewModelTest` and `VerificationSheetContentTest` additions.
+
+---
+
+## chore/remove-unused-count-queries — two egg-count queries nothing called are removed · 2026-10-03
+
+### Remove `observeConfirmedEggCountsSince` and `observeSessionsWithStats` · `14zcqntjg99`
+
+- **Dead code out.** `DetectionDao::observeConfirmedEggCountsSince` and
+  `SessionDao::observeSessionsWithStats` go, with their `DetectionRepository` and
+  `SessionRepository` declarations and implementations. Nothing called them.
+- The test doubles that overrode them in the records, sessions and session-label tests are
+  trimmed with them. `observeSessionsPage`, which feeds the Sessions list, is unchanged.
+- `docs/features.md` drops the "declared but called by nothing" row, and `validate.md` now
+  names only `SessionDao::observeSessionsPage` as filtering `d.verdict != 'false_positive'`.
+
+---
+
+## feat/restore-session-rename — a session can be renamed from the patient's sessions list · 2026-10-03
+
+### Rename session menu and sheet · `14zcqntjt3j`
+
+- **Your own session cards get a three-dot menu with Rename.** `SessionCard` shows a
+  `SessionKebabMenu` (test tag `sessionKebab_<id>`) that calls `onRenameClick`. A colleague's
+  card shows no menu, since it is read-only.
+- **`RenameSessionSheet`** is a bottom sheet prefilled with the current label. It shows the
+  view model's duplicate-label error, and closes when the label changes in the list.
+- The list is split out of `SessionsScreen` into `SessionsScreenList` and `SessionCardSupport.kt`.
+  The rename itself (`SessionsViewModel::onRenameSession`) is not in this diff, so it is the
+  existing behaviour with its UI restored.
+- `feature/onboarding-redesign` later replaced the three-dot menu with a long press.
+- Tests: `SessionCardUiTest` covers the menu opening Rename for an own session, and no menu on
+  a colleague's session. Four new strings.
+
+---
+
+## fix/session-card-egg-total — the session card and the report count the same eggs · 2026-10-03
+
+### One egg-counting rule · `14zcqntjg98`
+
+- **The Sessions list counted fewer eggs than the report.** `SessionDao::observeSessionsPage`
+  joined only `verdict = 'confirmed'`, while the report counted everything that is not a false
+  positive, so a smear with a wrong-class or box-incorrect egg showed fewer on its card.
+- Its join is now `d.verdict != 'false_positive'`, as is the join in `observeSessionsWithStats`
+  and the query in `DetectionDao::observeConfirmedEggCountsSince`. A misclassified or misplaced
+  egg is still an egg; only a rejected box is excluded.
+- `SessionSummaryQueryTest` adds a session with `WRONG_CLASS`, `BOX_INCORRECT` and
+  `FALSE_POSITIVE` detections and expects 2 eggs.
+- `validate.md` swaps "the inconsistency worth knowing" for a "Unified egg counting rule"
+  section, and the effects map no longer says the queries disagree. The two other queries are
+  removed by `chore/remove-unused-count-queries`.
+
+---
+
+## fix/verified-sample-deletion — deleting a verified sample reaches Supabase · 2026-10-01
+
+### Push the `deleted_at` tombstone on sync · `14zcqntjg97`
+
+- A deleted verified sample is soft-deleted on the phone (C8), but its `deleted_at` was never
+  sent, so it stayed live in Postgres and on every other device. `SyncSampleUseCase` already read
+  the sample including deleted, but `SampleInsertRow` had no `deleted_at` field.
+- **`SampleInsertRow` now carries `deleted_at`**, written as an ISO instant from the epoch
+  millis when it is above 0 and null otherwise. A pull already honoured a remote `deleted_at`.
+- `SyncUseCasesTest` covers syncing a tombstoned sample: the entity handed to `syncSample` keeps
+  its `deletedAt`.
+- `Sample.md` and `delete-sample.md` lose their "drift, the tombstone is local-only" notes.
 
 ---
 

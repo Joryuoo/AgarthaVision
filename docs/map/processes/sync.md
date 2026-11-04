@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-10-05
-commit: 33bced13
+verified: 2026-11-05
+commit: 2cc16989
 ---
 
 # sync
@@ -50,9 +50,10 @@ catch-up pass, in that order — asking first would run a second push of the sam
    failure writes `sync_failed` and logs a `[SyncFailed]` line with a failure class
    (`SyncSampleUseCase::invoke`). Nothing is rolled back and nothing is retried here.
 
-**Gap, code wins: a tombstone does not reach Postgres.** Step 1 reads the tombstoned row so it
-can "push its tombstone", but `SampleInsertRow` has no `deleted_at`, so the upsert never carries
-it. See [`Sample`](../objects/Sample.md).
+**The tombstone travels.** Step 1 reads the tombstoned row so it can push its tombstone, and
+`SampleRemoteDataSource.kt::SampleInsertRow` carries `deleted_at`, so the upsert sets it in
+Postgres (14zcqntjg97). The pull brings it back down through `SampleRow.toEntity`, and other
+devices soft-delete their copy. See [`Sample`](../objects/Sample.md).
 
 ## Movement — the catch-up pass
 
@@ -70,7 +71,9 @@ and after every local write.
 2. **Push in FK-safe order**: **patients → sessions → samples → reports**
    (`SyncPendingDataUseCase::invoke`). Samples are read *including deleted*. Patients go first because
    `sessions.patient_id` references `patients(id)`. A per-row failure marks that row and
-   does not abort the pass.
+   does not abort the pass. A patient is an insert that falls back, on HTTP 409, to an update
+   that must return the row; an empty update rethrows the original error rather than mark the
+   patient synced (`data/supabase/PatientRemoteDataSource.kt::upsertPatient`, 14zcqntr43e).
 3. **Record the message Settings shows.** The first failure, prefixed with its row, or `""` on a
    clean pass. Since 0018 every write needs an active member of an active laboratory, and the
    database refuses anyone else with `not_active_lab_member` in the message. When any row
@@ -191,7 +194,11 @@ and is repaired from the disk rather than trusted.
 - **RLS, writes.** Every insert must satisfy ownership: `auth.uid() = created_by` on patients
   (`0001_init.sql:369`), `auth.uid() = user_id` on sessions, samples and reports
   (`0001_init.sql:405`, `:418`, `:497`), and detections and findings are checked through the
-  parent sample (`0001_init.sql:431-491`). Sync only ever runs authenticated.
+  parent sample (`0001_init.sql:441`, `:467`). Sync only ever runs authenticated.
+- **A supabase-kt upgrade.** `PatientRemoteDataSource.kt::upsertPatient` detects the conflict
+  from `RestException.statusCode`, because supabase-kt 3.0.3 drops PostgREST's SQLSTATE. If a
+  new version changes what a `RestException` carries, `PatientRemoteDataSourceUpsertTest`
+  drives the real client against a PostgREST-shaped server and catches it.
 - **Four separate sync-state enums** — `PatientSyncStatus`, `SessionSyncStatus`,
   `SampleStatus`, `ReportSyncStatus` — all managing pending/synced/sync_failed states. Changing the
   vocabulary means changing all four plus every raw query that names a value.

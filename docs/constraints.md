@@ -15,7 +15,9 @@ A ViewModel must not reach Room, Retrofit, or Supabase directly. It calls a use 
 a single `StateFlow<ScreenState>`, and emits one-shot events on a `SharedFlow`.
 
 **Enforcement:** review only. No lint rule, no detekt rule, no CI check. `detekt.yml` covers
-complexity, naming, and magic numbers — there is no import-boundary rule in it.
+complexity, naming, and magic numbers. Its one `ForbiddenImport` / `ForbiddenMethodCall` pair
+bans `android.util.Log` and `println` (see C10), not a layer — there is no import-boundary
+rule in it.
 
 **As-built:** the literal rule holds — no file under `ui/` imports `androidx.room`,
 `retrofit2`, or `io.github.jan.*`. The spirit is bent in two ViewModels that inject the
@@ -308,6 +310,14 @@ history, test artifacts, or logs. Local on-device SQLite storage (Room) and repo
 storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
 validation mandate requiring synthetic patient profiles are documented in
 [`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
+**Logging goes through `core/util/Logger.kt::Logger`**, which writes only in debug builds.
+detekt's `ForbiddenImport` and `ForbiddenMethodCall` (`detekt.yml`) fail the build on
+`android.util.Log` or `println` anywhere else in `main`. Two limits, code wins:
+`Logger.sanitizeThrowable` returns the throwable unchanged, so it sanitizes nothing yet; and
+OkHttp's `HttpLoggingInterceptor` is not covered by the rule. On debug builds it logs the
+inference call at `HEADERS` with no `redactHeader`, so the user's bearer token reaches logcat
+(`core/di/InferenceModule.kt::provideOkHttpClient`).
 
 **Super admins read patients de-identified (D19, 14zcqntjvjw).** A super admin, an active
 `super_admins` row since `0014` and `profiles.role = 'admin'` before it, is the AgarthaVision

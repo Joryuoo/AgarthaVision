@@ -27,7 +27,7 @@ The project is a decision-support and preprocessing tool. It does not replace qu
 ## Features
 
 - **Patient-based records** — sessions and samples are organized under a patient, with PSGC barangay residence for surveillance aggregation.
-- **AI-assisted capture** — one-shot CameraX capture with synchronous inference against a self-hosted FastAPI container; automatically falls back to manual capture on connection loss.
+- **AI-assisted capture** — CameraX capture that saves the frame at once and queues it for inference in the background: the self-hosted FastAPI container first, the bundled on-device model whenever the cloud cannot answer.
 - **Human-in-the-loop verification** — every model detection is confirmed, corrected, or rejected by a medtech before it counts, with pre-filled answers, per-box species/stage questions, and an always-available manual "Add Egg" path.
 - **LPF density reporting** — per-species Low Power Field density ranges (Direct Smear method) with a qualitative descriptor, replacing EPG/Kato-Katz.
 - **PDF session reports** — generated on-device from local Room data and synced to Supabase.
@@ -146,7 +146,7 @@ See [`docs/commands.md`](docs/commands.md) for the full command reference, inclu
 
 ### Backend and Data
 
-Supabase migrations live in `supabase/migrations/`. `0001_init.sql` is the consolidated, current schema for the `agarthavision` project (sessions, samples, detections, predictions, patients, storage RLS, and persisted session reports), applied by hand through the Supabase dashboard. Pre-patient migration history is archived under `supabase/migrations/legacy-dev/` as a record of the earlier dev/prod projects — do not implement against it.
+Supabase migrations live in `supabase/migrations/`. `0001_init.sql` is the consolidated base schema for the `agarthavision` project (sessions, samples, detections, predictions, patients, storage RLS, and persisted session reports), and the numbered files after it change it in order. All of them are applied by hand through the Supabase dashboard; [`docs/file-tree.md`](docs/file-tree.md#supabasemigrations) lists them. Pre-patient migration history is archived under `supabase/migrations/legacy-dev/` as a record of the earlier dev/prod projects — do not implement against it.
 
 The inference container lives in `inference/`. It exposes:
 
@@ -169,7 +169,7 @@ Everything it routes to lives under `docs/`:
 
 *(Sprint backlog items and tasks are managed in ClickUp, not this repo.)*
 
-Documentation here is as-built and cited to `path:line`. Where a document and the code disagree, the code wins - fix the document in the same change.
+Documentation here is as-built and cites code by symbol (`path/File.kt::symbol`) and SQL by `path:line`. Where a document and the code disagree, the code wins - fix the document in the same change.
 
 ## Contributing
 

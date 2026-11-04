@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-11-05
+commit: 2cc16989
 entity: app/src/main/java/com/agarthavision/data/local/entity/PsgcBarangayEntity.kt
 ---
 

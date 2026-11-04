@@ -16,13 +16,14 @@ below are what that notebook automates.
 1. **Verify your phone** — Kaggle → *Settings → Phone Verification*. Internet access in
    notebooks is gated behind this, and you need it for the `pip git+` install and the tunnel.
 2. **Upload the weights as a Dataset:**
-   - Run `git lfs pull` locally first so `weights/yolo26n-efficientnetv2s.pt` is the real ~44 MB file, not the
-     LFS pointer.
-   - Kaggle → *Datasets → New Dataset* → drag in `yolo26n-efficientnetv2s.pt`.
+   - The cloud checkpoint, `yolo26n-mobilenetv4hybridlarge.pt`, is not in the repo (the repo's
+     `weights/yolo26n-efficientnetv2s.pt` is the phone's model). Get it from Tabada.
+   - Kaggle → *Datasets → New Dataset* → drag in `yolo26n-mobilenetv4hybridlarge.pt`.
    - Ignore the **"Switch to Models"** banner — a `.pt` is valid dataset content; that banner
      is just a non-blocking suggestion.
    - Title it exactly **`agartha-weights`** (lowercase, hyphenated) → mounts at
-     `/kaggle/input/agartha-weights/yolo26n-efficientnetv2s.pt`. Keep it **Private**. Click **Create**.
+     `/kaggle/input/` (the notebook searches there for `yolo26n-mobilenetv4hybridlarge.pt`, whatever
+     the mount layout). Keep it **Private**. Click **Create**.
 
 ## Per-session steps
 
