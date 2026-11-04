@@ -9,6 +9,37 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/inference-verifies-supabase-jwt — cloud inference accepts the app's signed-in user again · 2026-11-05
+
+### Inference container verifies the Supabase JWT · `14zcqnttfeq`
+
+- PR #120 made the app send the user's Supabase access token instead of `INFERENCE_API_KEY`,
+  but the container still compared the bearer token with that key, so it refused every cloud
+  call with a `401`, and frames were silently scored by the on-device model instead.
+- `inference/server.py::verify_user` replaces `verify_key`. It checks the token's signature
+  against the project's JWKS (ES256/RS256 only), plus `exp`, `iss`, `aud` and
+  `role = authenticated`. A missing or bad token is `401`, and an unreachable JWKS is `503`
+  with `Retry-After`. The container's only auth setting is `SUPABASE_URL`, and
+  `INFERENCE_API_KEY` is gone. New dependency: `PyJWT[crypto]`.
+- The Kaggle notebook's copy of `server.py` is back in sync. It had also been missing
+  `agnostic_nms=True` (14zcqntk1vd).
+- The container's Ultralytics fork is pinned to `kazuretsu/ultralytics@06fae7a`, which adds the
+  YOLO26 + EfficientNetV2-S config, in `requirements.txt` and the notebook. The old
+  `DMKuZu/ultralytics` URL only resolved through GitHub's rename redirect.
+- The server now defaults to the cloud model, `yolo26n-mobilenetv4hybridlarge`
+  (`MODEL_VERSION=yolo26n-mobv4hybridl-v1-cloud-fp32`), in `server.py`, the notebook's copy of it
+  and its config cell. The phone keeps `yolo26n-efficientnetv2s`. The Hybrid-Large weights are
+  kept in the Kaggle dataset, not the repo. The remaining docs that name EfficientNetV2-S as the
+  cloud model are left to `14zcqnttfer`.
+- The notebook reads `SUPABASE_URL` and `CLOUDFLARE_TUNNEL_TOKEN` from Kaggle Secrets, and finds
+  the weights under `/kaggle/input/` instead of hardcoding the dataset's mount path. Its
+  smoke-test and "point the app at it" notes are gone, so it no longer holds the project URL or
+  the tunnel's hostname.
+- `inference/tests/test_server.py` covers valid, missing, expired, wrong-signature, wrong-role,
+  wrong-issuer, wrong-audience, no-expiry and HS256 tokens, and an unreachable JWKS.
+
+---
+
 ## feat/captcha-sign-in — sign-in passes a Cloudflare Turnstile check · 2026-10-16
 
 ### Human check on sign-in · `14zcqntnqxf`

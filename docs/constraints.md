@@ -281,7 +281,7 @@ configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
-Supabase URLs, publishable keys, and the inference bearer token live in `local.properties`, which is
+Supabase URLs, publishable keys and the inference URL live in `local.properties`, which is
 gitignored (`/local.properties` and `local.properties` in `.gitignore`). They reach the app as
 `BuildConfig` fields read at build time (`localProperties` and `buildTypes` in
 `app/build.gradle.kts`). A missing property
@@ -294,8 +294,13 @@ in Supabase's CAPTCHA setting.
 **Enforcement:** `.gitignore` plus review. CI runs in `.github/workflows/build-and-test.yml`
 (verifying compile and Roborazzi screenshot tests without requiring secrets).
 
-**Drift, fixed in PB-01:** the debug and release `buildTypes` read `INFERENCE_API_KEY_DEV` /
-`INFERENCE_API_KEY_PROD`. `local.properties.example` now documents both suffixed names.
+**The inference container holds no secret either (14zcqnttfeq).** There is no inference API key
+any more. The app sends the signed-in user's Supabase access token as the bearer token
+(`core/di/InferenceModule.kt::provideOkHttpClient`). The container verifies it against the
+project's public signing keys (JWKS), checking expiry, issuer, audience and `role = authenticated`
+(`inference/server.py::verify_user`). Its only auth setting is the public `SUPABASE_URL`.
+`INFERENCE_API_KEY_DEV` / `_PROD` (PB-01) are gone from `app/build.gradle.kts` and
+`local.properties.example`. A leftover copy of either in a `local.properties` is read by nothing.
 
 **Patient data privacy and at-rest security:** Like application secrets, patient Personally
 Identifiable Information (PII) and Sensitive Personal Information (SPI) must never leak into git

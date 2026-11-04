@@ -200,6 +200,11 @@ the read end on purpose (86d4au2n1).
 Client and server must move together, and they are versioned independently — the server is a
 container image, the client is an APK.
 
+**Auth is part of the contract.** The app sends the user's Supabase access token, and the container
+verifies it against its `SUPABASE_URL` project's JWKS (`inference/server.py::verify_user`). If
+the two disagree, every call is a `401` that looks like nothing at all, because the on-device
+model answers instead (14zcqnttfeq).
+
 **The non-obvious break:** coordinates are **centre-x, centre-y, width, height in pixels**
 (`box.xywh` in `inference/server.py::infer`), copied verbatim into `bbox_*`
 (`data/local/mapper/VerificationMapper.kt::toDetectionEntities`), despite the KDoc on

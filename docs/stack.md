@@ -127,10 +127,13 @@ no longer declares. `bun install` from the current `package.json` installs nothi
 - **Inference container** (self-hosted): FastAPI + Uvicorn + Ultralytics YOLO on PyTorch,
   image based on `rocm/pytorch:latest` (`inference/Dockerfile` `FROM`), serving on port 8000
   (`inference/Dockerfile` `EXPOSE`, `CMD`). Endpoints `GET /health` and `POST /infer`
-  (`inference/server.py::health`, `::infer`). Bearer-token auth (`inference/server.py::verify_key`).
-  Weights baked in at `inference/weights/yolo26n-efficientnetv2s.pt` (YOLO26-nano on an
-  EfficientNetV2-S backbone, from the fork's `feat/optimized-inference`); default model version string
-  `yolo26n-effv2s-v1-cloud-fp32` (`inference/server.py` `MODEL_VERSION`).
+  (`inference/server.py::health`, `::infer`). Auth by the signed-in user's Supabase access token, verified against the
+  project's JWKS with PyJWT (`inference/server.py::verify_user`).
+  The cloud model is `yolo26n-mobilenetv4hybridlarge.pt` (YOLO26-nano on a MobileNetV4-Hybrid-Large
+  backbone, from the fork's `feat/optimized-inference`). Its weights live in the Kaggle dataset, not
+  the repo. The default model version string is `yolo26n-mobv4hybridl-v1-cloud-fp32`
+  (`inference/server.py` `WEIGHTS_PATH`, `MODEL_VERSION`). The phone runs a different model,
+  `inference/weights/yolo26n-efficientnetv2s.pt` exported to TFLite.
 
 ## Build-time configuration
 
@@ -141,6 +144,8 @@ Both suffixed keys are documented in `local.properties.example`. `SUPABASE_ANON_
 name but holds the project's publishable key (`sb_publishable_…`), not the legacy anon JWT, which
 is being disabled (14zcqntnqxg). supabase-kt sends it as `apikey`, and as the bearer token only
 before sign-in; every signed-in call carries the user's own token. `INFERENCE_API_KEY` was removed
-from `BuildConfig` and the client APK; cloud inference calls authenticate using the user's
-Supabase session access token (`InferenceModule.kt`).
+from `BuildConfig` and the client APK, and from the container (14zcqnttfeq). Cloud inference calls
+authenticate with the user's Supabase session access token
+(`core/di/InferenceModule.kt::provideOkHttpClient`), which the container verifies itself
+(`inference/server.py::verify_user`).
 A missing key becomes an empty string.

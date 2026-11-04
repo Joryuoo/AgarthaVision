@@ -1,5 +1,6 @@
 """The inference server's queue (14zcqntj6p2): batching, one worker per GPU, 503 backpressure,
-a /health that answers mid-inference, and an unchanged API contract.
+a /health that answers mid-inference, and an unchanged API contract. And its auth (14zcqnttfeq):
+only a signed-in user's Supabase access token is accepted.
 
 Run from `inference/`: `pip install -r requirements-test.txt && pytest tests`.
 """
@@ -8,13 +9,15 @@ import io
 import time
 
 import httpx
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 from PIL import Image
 
 import server
-from conftest import FakeYOLO
+from conftest import FakeYOLO, public_jwks, user_token
 
-AUTH = {"Authorization": "Bearer test-key", "Content-Type": "image/jpeg"}
+AUTH = {"Authorization": f"Bearer {user_token()}", "Content-Type": "image/jpeg"}
 
 
 def jpeg() -> bytes:
@@ -34,6 +37,25 @@ def reset(monkeypatch):
     monkeypatch.setattr(server, "MAX_QUEUE_DELAY_MS", 15.0)
     monkeypatch.setattr(server, "QUEUE_SIZE", 32)
     monkeypatch.setattr(server, "REQUEST_TIMEOUT_S", 25.0)
+
+
+@pytest.fixture(autouse=True)
+def jwks(monkeypatch):
+    """A fresh JWKS client per test, serving the test key set instead of fetching Supabase's.
+
+    Set `.reachable = False` to make the fetch fail the way an unreachable Supabase does.
+    """
+    client = jwt.PyJWKClient(server.JWKS_URL)
+    client.reachable = True
+
+    def fetch_data():
+        if not client.reachable:
+            raise jwt.PyJWKClientConnectionError("Fail to fetch data from the url")
+        return public_jwks()
+
+    monkeypatch.setattr(client, "fetch_data", fetch_data)
+    monkeypatch.setattr(server, "jwks", client)
+    return client
 
 
 def serve(test):
@@ -61,7 +83,7 @@ def test_infer_keeps_the_response_shape_the_app_parses():
     assert response.status_code == 200
     body = response.json()
     assert set(body) == {"model_version", "predictions", "image", "inference_ms"}
-    assert body["model_version"] == "yolo26n-effv2s-v1-cloud-fp32"
+    assert body["model_version"] == "yolo26n-mobv4hybridl-v1-cloud-fp32"
     assert body["image"] == {"width": 64, "height": 48}
     assert body["predictions"] == [{
         "class": "Ascaris lumbricoides",
@@ -82,11 +104,111 @@ def test_overlapping_boxes_are_suppressed_across_species():
     assert FakeYOLO.agnostic_nms and all(FakeYOLO.agnostic_nms)
 
 
-def test_a_wrong_key_is_refused():
-    async def test(client):
-        return await client.post("/infer", content=jpeg(), headers={**AUTH, "Authorization": "Bearer nope"})
+# ── auth: a signed-in user's Supabase token, and nothing else (14zcqnttfeq) ─────────────────
 
-    assert serve(test).status_code == 401
+
+def infer_with(*authorization):
+    """POSTs one frame per [authorization] header value (None: no header); returns the responses."""
+
+    async def test(client):
+        responses = []
+        for value in authorization:
+            headers = {"Content-Type": "image/jpeg"}
+            if value is not None:
+                headers["Authorization"] = value
+            responses.append(await client.post("/infer", content=jpeg(), headers=headers))
+        return responses
+
+    return serve(test)
+
+
+def test_ac2_a_signed_in_users_token_is_accepted():
+    (response,) = infer_with(f"Bearer {user_token()}")
+
+    assert response.status_code == 200
+
+
+def test_ac2_a_request_without_a_token_is_refused_with_401():
+    missing, empty = infer_with(None, "Bearer ")
+
+    assert missing.status_code == 401
+    assert missing.headers["WWW-Authenticate"] == "Bearer"
+    assert empty.status_code == 401
+
+
+def test_ac2_an_expired_token_is_refused():
+    (response,) = infer_with(f"Bearer {user_token(expires_in=-60)}")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Token expired"
+
+
+def test_ac2_a_token_with_a_wrong_signature_is_refused():
+    impostor = ec.generate_private_key(ec.SECP256R1())
+
+    same_kid, unknown_kid = infer_with(
+        f"Bearer {user_token(key=impostor)}",
+        f"Bearer {user_token(key=impostor, kid='not-a-project-key')}",
+    )
+
+    assert same_kid.status_code == 401
+    assert unknown_kid.status_code == 401
+
+
+def test_ac2_a_token_that_is_not_a_jwt_is_refused():
+    # The old static API key is exactly such a token.
+    garbage, old_api_key = infer_with("Bearer nope", "Bearer CHANGE_ME_strong_secret")
+
+    assert garbage.status_code == 401
+    assert old_api_key.status_code == 401
+
+
+def test_ac1_a_valid_token_that_is_not_a_signed_in_user_is_refused():
+    anon, service_role, no_role = infer_with(
+        f"Bearer {user_token(role='anon')}",
+        f"Bearer {user_token(role='service_role')}",
+        f"Bearer {user_token(role=None)}",
+    )
+
+    assert anon.status_code == 401
+    assert service_role.status_code == 401
+    assert no_role.status_code == 401
+
+
+def test_ac1_a_token_for_another_project_or_audience_or_without_expiry_is_refused():
+    other_project, other_audience, no_expiry = infer_with(
+        f"Bearer {user_token(iss='https://another-project.supabase.co/auth/v1')}",
+        f"Bearer {user_token(aud='someone-else')}",
+        f"Bearer {user_token(exp=None)}",
+    )
+
+    assert other_project.status_code == 401
+    assert other_audience.status_code == 401
+    assert no_expiry.status_code == 401
+
+
+def test_ac1_an_hs256_token_is_refused_even_with_the_projects_kid():
+    forged = user_token(key="a-guessed-shared-secret-at-least-32-bytes", algorithm="HS256")
+
+    (response,) = infer_with(f"Bearer {forged}")
+
+    assert response.status_code == 401
+
+
+def test_an_unreachable_jwks_answers_503_with_retry_after_not_401(jwks):
+    jwks.reachable = False
+
+    (response,) = infer_with(f"Bearer {user_token()}")
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == str(server.RETRY_AFTER_S)
+
+
+def test_health_needs_no_token():
+    async def test(client):
+        return await client.get("/health")
+
+    assert serve(test).status_code == 200
 
 
 def test_an_empty_or_unreadable_body_is_a_400_not_a_500():

@@ -217,8 +217,9 @@ as working.
 ### Backend and inference service
 - **Postgres schema**: see [`file-tree.md`](file-tree.md#supabasemigrations) for the migration
   layout and the `legacy-dev/` archive.
-- **FastAPI inference container**: `GET /health` and `POST /infer`, bearer-token authentication,
-  model weights bundled, requests micro-batched on a bounded queue with one worker per GPU
+- **FastAPI inference container**: `GET /health` and `POST /infer`, `/infer` open only to a
+  signed-in user's Supabase access token, verified against the project's JWKS
+  (`inference/server.py::verify_user`, 14zcqnttfeq), model weights bundled, requests micro-batched on a bounded queue with one worker per GPU
   (`inference/server.py::health`, `::infer`, `::worker`; `inference/README.md` "Queue and
   batching").
 

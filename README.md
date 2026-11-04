@@ -151,7 +151,7 @@ Supabase migrations live in `supabase/migrations/`. `0001_init.sql` is the conso
 The inference container lives in `inference/`. It exposes:
 
 - `GET /health` for connectivity checks.
-- `POST /infer` for frame inference using bearer-token authentication.
+- `POST /infer` for frame inference, authenticated by the signed-in user's Supabase access token.
 
 The mobile app persists verified samples locally with Room, uploads images to Supabase Storage, and writes sample/detection/report metadata to Supabase Postgres when sync succeeds.
 

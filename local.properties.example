@@ -39,14 +39,13 @@ TURNSTILE_SITE_KEY_PROD=<turnstile-site-key>
 TURNSTILE_HOSTNAME_PROD=<widget-hostname>
 
 # ── Inference (self-hosted FastAPI container on a rented GPU droplet) ────────
-# DMKuZu spins up the droplet, runs the inference container, and shares the
-# IP + bearer key over the team chat. See ADR-003.
+# DMKuZu runs the inference container and shares its URL over the team chat.
+# See ADR-003.
 #
-# Both keys are suffixed. app/build.gradle.kts:67 reads INFERENCE_API_KEY_DEV and
-# :90 reads INFERENCE_API_KEY_PROD; an unsuffixed INFERENCE_API_KEY resolves to
-# null, which compiles fine and ships an empty bearer token — the inference call
-# then fails with a 401 that looks like a server problem. See constraints.md C10.
+# Only the URL is needed. There is no inference key: the app sends the signed-in
+# user's Supabase access token, and the container checks it against the same
+# project's signing keys (inference/README.md, "Auth"; constraints.md C10). The
+# container's SUPABASE_URL must be the project SUPABASE_URL_* above points at,
+# or every cloud call gets a 401 and the frame falls back to the on-device model.
 INFERENCE_URL_DEV=http://<droplet-ip>:8000
 INFERENCE_URL_PROD=http://<droplet-ip>:8000
-INFERENCE_API_KEY_DEV=<shared-secret-dev>
-INFERENCE_API_KEY_PROD=<shared-secret-prod>

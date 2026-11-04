@@ -108,10 +108,11 @@ Not wired into the Gradle build; run it separately.
 
 ```
 docker build -t agartha-inference inference/
-docker run -p 8000:8000 -e INFERENCE_API_KEY=<secret> agartha-inference
+docker run -p 8000:8000 -e SUPABASE_URL=https://<project-ref>.supabase.co agartha-inference
 ```
 
-`INFERENCE_API_KEY` is required; everything else it reads (weights path, model version, queue
+`SUPABASE_URL` is required: `/infer` accepts only that project's signed-in users' access tokens
+(`inference/server.py::verify_user`). Everything else it reads (weights path, model version, queue
 and batching limits, GPUs) is in the environment table of `inference/README.md`. Check it with
 `GET /health`, which answers once the model has loaded and stays prompt during inference
 (`inference/server.py::health`). Server tests: `inference/README.md`, "Tests".

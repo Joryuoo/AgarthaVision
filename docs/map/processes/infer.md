@@ -1,7 +1,7 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
+verified: 2026-11-05
 commit: feaa4803
 ---
 
@@ -67,7 +67,13 @@ returns. The model output arrives later.
    `InferenceEngine` binding. See [On-device engine](#on-device-engine).
 2. **Authenticate.** An OkHttp interceptor attaches
    `Authorization: Bearer <accessToken>` using the signed-in user's Supabase session access token
-   (`core/di/InferenceModule.kt`). `INFERENCE_API_KEY` is held server-side, preventing secret leakage in APKs.
+   (`core/di/InferenceModule.kt::provideOkHttpClient`). No inference secret ships in the APK.
+   The container checks that token itself (14zcqnttfeq, `inference/server.py::verify_user`):
+   the signature against the project's JWKS (ES256/RS256 only), `exp`, `iss`
+   (`$SUPABASE_URL/auth/v1`), `aud = authenticated` and `role = authenticated`. Any failure,
+   including no token, is `401`, which the queue treats like any other cloud failure: the
+   frame goes on-device. If the JWKS can't be fetched, the answer is `503` instead
+   (`inference/README.md`, "Auth").
    Timeouts are 5 s connect, 30 s read (`core/di/InferenceModule.kt`):
    nobody is waiting on the call, and the on-device model answers when the cloud cannot.
 3. **Run the model.** The container loads and warms up one copy of the weights per GPU at
@@ -147,9 +153,12 @@ counterpart, and the queue's fallback whenever the cloud fails or the circuit br
   and a small alias set (`domain/model/EggSpecies.kt`). An unrecognised label is preserved
   raw in `class_label` and behaves as a `WRONG_CLASS` candidate — renaming a model class
   silently changes every verdict computation and every species grouping.
-- The bearer key name. The debug `buildTypes` block of `app/build.gradle.kts` reads
-  `INFERENCE_API_KEY_DEV` and release reads `INFERENCE_API_KEY_PROD`, the two keys
-  `local.properties.example` declares (`../../constraints.md` C10).
+- **The Supabase project the container trusts.** Its `SUPABASE_URL` must be the project the
+  app signs in to (`SUPABASE_URL_*` in `local.properties`). A mismatch, a revoked signing key,
+  or a move back to a shared HS256 secret makes every cloud call a `401`. Capture still
+  produces detections, from the weaker on-device model, so the fault is easy to miss: check
+  which engine's version (`…-cloud-fp32` or `…-tflite-fp32`) the samples record
+  (`../../constraints.md` C10).
 
 ## Does not hit
 
@@ -159,4 +168,6 @@ counterpart, and the queue's fallback whenever the cloud fails or the circuit br
   sends the frame to the on-device model. Only two consecutive `/health` failures raise the
   connection-loss banner.
 - **Supabase.** Losing Supabase mid-session does not stop recording, and neither does losing
-  the inference container.
+  the inference container. The container needs Supabase only for its signing keys, which it
+  caches for `JWKS_CACHE_S` (10 min). After that, an outage turns cloud calls into `503`s, and
+  frames are scored on the phone.

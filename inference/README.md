@@ -35,8 +35,8 @@ ssh root@<droplet-ip>
 
 ```bash
 # Install custom Ultralytics fork (replace with your GitHub fork URL + SHA)
-pip install git+https://github.com/DMKuZu/ultralytics@<commit-sha>
-pip install fastapi "uvicorn[standard]" pillow numpy
+pip install git+https://github.com/kazuretsu/ultralytics@<commit-sha>
+pip install fastapi "uvicorn[standard]" pillow "PyJWT[crypto]" numpy
 ```
 
 If you're actively editing the fork locally, rsync it instead:
@@ -61,8 +61,10 @@ scp inference/server.py root@<droplet-ip>:/root/app/
 # On the droplet:
 mkdir -p /app/weights
 cd /app
-INFERENCE_API_KEY=<your-secret> uvicorn server:app --host 0.0.0.0 --port 8000
+SUPABASE_URL=https://<project-ref>.supabase.co uvicorn server:app --host 0.0.0.0 --port 8000
 ```
+
+`SUPABASE_URL` is the project the app signs in to. There is no secret to set (see [Auth](#auth)).
 
 ### 6. Smoke test from your local machine
 
@@ -70,9 +72,9 @@ INFERENCE_API_KEY=<your-secret> uvicorn server:app --host 0.0.0.0 --port 8000
 # Health check (no auth)
 curl http://<droplet-ip>:8000/health
 
-# Inference with a sample JPEG
+# Inference with a sample JPEG, as a signed-in user (Auth, "Getting a token to test with")
 curl -X POST \
-  -H "Authorization: Bearer <your-secret>" \
+  -H "Authorization: Bearer <access-token>" \
   -H "Content-Type: image/jpeg" \
   --data-binary @/path/to/sample.jpg \
   http://<droplet-ip>:8000/infer
@@ -95,14 +97,14 @@ Expected response when nothing is detected:
 
 ### 7. Share with teammates
 
-Once the server is running, share via the same channel as the Supabase keys:
+Once the server is running, share its URL via the same channel as the Supabase keys:
 
 ```
 INFERENCE_URL_DEV=http://<droplet-ip>:8000
-INFERENCE_API_KEY=<your-secret>
 ```
 
-Teammates paste these into their `local.properties`. No code changes needed.
+Teammates paste it into their `local.properties`. There is no key to share: the app sends the
+signed-in user's own access token.
 
 ### 8. Destroy the droplet when done
 
@@ -131,20 +133,56 @@ docker run \
   --device=/dev/dri \
   --group-add video \
   -p 8000:8000 -d \
-  -e INFERENCE_API_KEY="<your-secret>" \
-  -e MODEL_VERSION="yolo26n-effv2s-v1-cloud-fp32" \
+  -e SUPABASE_URL="https://<project-ref>.supabase.co" \
+  -e MODEL_VERSION="yolo26n-mobv4hybridl-v1-cloud-fp32" \
   ghcr.io/dmkuzu/agartha-inference:v1
 ```
 
 ---
 
+## Auth
+
+`POST /infer` accepts only a **signed-in user's Supabase access token**, which is what the app
+sends (`core/di/InferenceModule.kt::provideOkHttpClient`). There is no shared API key, so
+nothing secret is baked into the APK or set on the server. `server.py::verify_user` checks:
+
+1. **Signature**, against the project's public signing keys at
+   `$SUPABASE_URL/auth/v1/.well-known/jwks.json`. The project signs with ES256. Only ES256 and
+   RS256 are accepted, so an HS256 token is refused even if it names the project's `kid`.
+2. **Expiry** (`exp`), **issuer** (`iss` = `$SUPABASE_URL/auth/v1`) and **audience**
+   (`aud` = `authenticated`).
+3. **Role**: `role` must be `authenticated`. An `anon` or `service_role` token is refused.
+
+Any failure is `401` with `WWW-Authenticate: Bearer`, including a missing header. If the key set
+cannot be fetched, the token can't be judged either way, so the answer is `503` with
+`Retry-After`. The app falls back to the on-device model for that frame, as with any other
+failure.
+
+The key set is fetched on the first request and reused for `JWKS_CACHE_S`. A token signed with a
+`kid` the server hasn't seen triggers an early refetch, so a rotated signing key works without a
+restart.
+
+### Getting a token to test with
+
+Sign in as a test user through the Auth API, using the project's publishable key:
+
+```bash
+curl -s -X POST "https://<project-ref>.supabase.co/auth/v1/token?grant_type=password" \
+  -H "apikey: <publishable-key>" -H "Content-Type: application/json" \
+  -d '{"email": "<test-user>", "password": "<password>"}'
+```
+
+The response's `access_token` is the bearer token. It expires after the project's JWT expiry
+(an hour by default).
+
 ## Environment variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `INFERENCE_API_KEY` | Yes | — | Bearer token checked on every `POST /infer` |
-| `WEIGHTS_PATH` | No | `weights/yolo26n-efficientnetv2s.pt` | Path to the model weights file |
-| `MODEL_VERSION` | No | `yolo26n-effv2s-v1-cloud-fp32` | Reported as `model_version` and stored per sample. Naming scheme: `export/README.md` |
+| `SUPABASE_URL` | Yes | — | The Supabase project whose signed-in users may call `POST /infer`, e.g. `https://<project-ref>.supabase.co`. Its JWKS and issuer are derived from it ([Auth](#auth)) |
+| `JWKS_CACHE_S` | No | `600` | How long the fetched signing keys are reused |
+| `WEIGHTS_PATH` | No | `weights/yolo26n-mobilenetv4hybridlarge.pt` | Path to the cloud model weights file. Not in the repo: the Hybrid-Large checkpoint lives in the Kaggle dataset |
+| `MODEL_VERSION` | No | `yolo26n-mobv4hybridl-v1-cloud-fp32` | Reported as `model_version` and stored per sample. Naming scheme: `export/README.md` |
 | `MAX_BATCH_SIZE` | No | `8` | Most frames in one forward pass |
 | `MAX_QUEUE_DELAY_MS` | No | `15` | How long a worker waits for more frames after the first of a batch |
 | `QUEUE_SIZE` | No | `32` | Frames waiting for a GPU. When full, `POST /infer` answers `503` at once |
@@ -199,7 +237,9 @@ pytest tests
 ```
 
 They cover the response shape, `/health` answering mid-inference, batching, both GPUs being
-used, the `503`s and a failed batch. How the real model behaves on two T4s is checked on Kaggle
+used, the `503`s and a failed batch. They also cover auth: valid, missing, expired, wrong-signature,
+wrong-role, wrong-issuer and HS256 tokens, and an unreachable JWKS. Tokens are signed with a
+throwaway key, so nothing is fetched from Supabase. How the real model behaves on two T4s is checked on Kaggle
 (`KAGGLE.md`, "Checking the queue").
 
 ---
@@ -209,12 +249,12 @@ used, the `503`s and a failed batch. How the real model behaves on two T4s is ch
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/health` | None | Returns `{"status": "ok"}`, promptly even during inference. Use for monitoring |
-| `POST` | `/infer` | Bearer token | Send raw JPEG bytes; returns detections JSON. `400` for an empty or unreadable body, `401` for a wrong key, `503` + `Retry-After` when the queue is full or the wait times out |
+| `POST` | `/infer` | Signed-in user's Supabase access token | Send raw JPEG bytes; returns detections JSON. `400` for an empty or unreadable body, `401` for a missing or invalid token, `503` + `Retry-After` when the queue is full, the wait times out or the signing keys can't be fetched |
 
 ### `POST /infer` request
 
 - `Content-Type: image/jpeg`
-- `Authorization: Bearer <INFERENCE_API_KEY>`
+- `Authorization: Bearer <access-token>`, see [Auth](#auth)
 - Body: raw JPEG bytes (no multipart/form-data)
 
 ### `POST /infer` response shape
