@@ -2,7 +2,7 @@
 type: process
 status: verified
 verified: 2026-11-05
-commit: feaa4803
+commit: b400f861
 ---
 
 # infer
