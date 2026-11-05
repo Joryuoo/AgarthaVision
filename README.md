@@ -156,19 +156,40 @@ There is no inference key: the app sends the signed-in user's Supabase access to
 
 A signed release build also needs a keystore. Keep it outside the project folder; `.gitignore` ignores `*.keystore` and `*.jks` as a backstop.
 
-### Common Commands
+### Testing and QA commands
 
-| Command | Purpose |
-| --- | --- |
-| `bun run build` | Build the debug APK |
-| `bun run compile` | Compile debug Kotlin |
-| `bun run test` | Run debug unit tests |
-| `bun run lint` | Run ktlint and detekt |
-| `bun run lint:fix` | Apply ktlint formatting |
-| `bun run install:device` | Install debug build on a connected device |
-| `bun run clean` | Clean Gradle outputs |
+Use Bun with the committed `bun.lock` (`bun install --frozen-lockfile`), Python 3.11+
+on PATH, and JDK 21 + Android SDK API 36 for Android checks. Create/activate a Python virtual
+environment and run `python -m pip install -r inference/requirements-test.txt` for API/smoke.
+On PowerShell, direct Gradle commands use `.\gradlew.bat`.
 
-See [`docs/commands.md`](docs/commands.md) for the full command reference, including Gradle-direct invocations and the inference container.
+| Bun command | Purpose / prerequisites | Equivalent direct invocation |
+|---|---|---|
+| `bun run test:unit` (also `test`) | All debug JVM tests, including Compose/Robolectric and local integration; JDK 21 + SDK API 36 | `./gradlew :app:testDebugUnitTest` |
+| `bun run test:screenshots` | The same full debug suite **once**, with Roborazzi golden verification | `./gradlew :app:verifyRoborazziDebug` |
+| `bun run screenshots:record` | Manually update references; review every changed image | `./gradlew :app:recordRoborazziDebug` |
+| `bun run test:api` | GPU-free API contracts, JWT, queue and failures; Python test requirements | `python -m pytest inference/tests -q --junitxml=build/qa/api.xml` |
+| `bun run test:integration` | Classified local Room/repository and sync tests; not deployed Supabase | `python tools/qa/run.py integration` (Gradle filters below) |
+| `bun run test:device` | Instrumentation; **emulator or dedicated test device only**, JDK + SDK + adb | `./gradlew :app:connectedDebugAndroidTest` |
+| `bun run test:smoke --local` | Starts/stops localhost fake-model API, real JWT validation with ephemeral test key; Python test requirements | `python tools/qa/run.py smoke --local` |
+| `bun run test:smoke` | Designated staging; requires `QA_SMOKE_URL`, `QA_SMOKE_TOKEN`, `QA_DEPLOYED_REVISION` | `python tools/qa/run.py smoke` |
+| `bun run check` | Tooling tests, compile, lint, debug APK, one full screenshot/unit pass, GPU-free API | `python tools/qa/run.py check` |
+| `bun run qa:evidence` | Execute `check` + localhost smoke; collect reports, logs, summary and explicit gaps | `python tools/qa/run.py evidence` |
+| `bun run test:all` | Android JVM tests across variants **only**, not API/device/smoke | `./gradlew :app:test` |
+
+Pre-commit runs compilation, app lint and staged-test selection (domain JVM fallback). Pre-push
+runs the full Android/Roborazzi suite once plus GPU-free API tests. PR CI runs `check` and
+the shared localhost fake-model smoke, retaining reports, logs, revision and screenshot differences.
+After a confirmed staging deployment, dispatch the workflow with the deployed revision; configure
+`QA_SMOKE_URL` and secret `QA_SMOKE_TOKEN` in the staging environment. Missing credentials
+fail the smoke job. Local smoke uses real JWT verification with a throwaway test key.
+
+Generated evidence lives in `build/qa/<run-id>/summary.json` with logs, Python XML and copied
+Gradle reports. Skips and missing human/device/staging evidence stay explicit. STD plans and
+actual evidence remain separate; fake-model timings do not establish real-model performance.
+Screenshot recording is manual, and instrumentation must use an emulator or dedicated test device
+because uninstall can erase local app data. See [`docs/commands.md`](docs/commands.md) for
+prerequisites, exact integration filters, focused fallback, report provenance and other build commands.
 
 ### Backend and Data
 
