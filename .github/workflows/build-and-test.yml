@@ -1,42 +1,95 @@
 name: build-and-test
 
-# Runs the unit test suite on every pull request, mirroring the
-# :app:verifyRoborazziDebug check that already runs in the Husky pre-commit hook.
 on:
   pull_request:
+  # Dispatch only AFTER a successful designated staging deployment.
+  workflow_dispatch:
+    inputs:
+      deployed_revision:
+        description: Exact revision confirmed deployed to the staging service
+        required: true
+        type: string
 
-# Cancel superseded runs when a PR is updated with new commits.
+permissions:
+  contents: read
+
 concurrency:
-  group: build-and-test-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: build-and-test-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  unit-tests:
-    name: Unit tests + screenshot verification
+  checks:
+    if: github.event_name == 'pull_request'
+    name: Android regression, API and localhost fake-model smoke
     runs-on: ubuntu-latest
     steps:
-      - name: Check out PR
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Run unit tests and screenshot verification
-        run: ./gradlew :app:verifyRoborazziDebug --stacktrace
-
-      - name: Upload test reports
-        if: ${{ !cancelled() }}
+      - uses: android-actions/setup-android@v3
+        with:
+          # Override the action's retired "tools" default. Gradle resolves the app's
+          # compile SDK/build tools using the SDK licenses accepted by this action.
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - id: qa_dependencies
+        run: python -m pip install -r inference/requirements-test.txt
+      # Compile/lint/APK + ONE full Roborazzi pass + API tests.
+      - name: Required checks with structured evidence
+        run: bun run check
+      - name: Shared HTTP smoke against CI-started fake-model service
+        # Run after a failed check, but only after the preceding setup chain succeeded.
+        if: ${{ !cancelled() && steps.qa_dependencies.outcome == 'success' }}
+        run: bun run test:smoke --local
+      - name: Preserve outcomes, logs, tested revision and screenshot differences
+        if: ${{ !cancelled() && hashFiles('build/qa/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
-          path: |
-            app/build/reports/tests/
-            app/build/outputs/roborazzi/
-          if-no-files-found: ignore
-          retention-days: 7
+          name: qa-pr-${{ github.sha }}
+          # Only the collector's redacted copies, never raw Gradle/Python output.
+          path: build/qa/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Report missing evidence
+        if: ${{ !cancelled() && hashFiles('build/qa/**') == '' }}
+        run: echo 'No QA evidence was generated. Inspect preceding setup or execution failures; no test outcomes are claimed.' >> "$GITHUB_STEP_SUMMARY"
+
+  staging-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    name: Smoke confirmed staging deployment
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: python -m pip install -r inference/requirements-test.txt
+      - name: Shared required staging smoke
+        env:
+          QA_SMOKE_URL: ${{ vars.QA_SMOKE_URL }}
+          QA_SMOKE_TOKEN: ${{ secrets.QA_SMOKE_TOKEN }}
+          QA_DEPLOYED_REVISION: ${{ inputs.deployed_revision }}
+        run: bun run test:smoke
+      - name: Preserve deployed revision and smoke outcomes
+        if: ${{ !cancelled() && hashFiles('build/qa/**') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-staging-${{ github.run_id }}
+          path: build/qa/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Report missing evidence
+        if: ${{ !cancelled() && hashFiles('build/qa/**') == '' }}
+        run: echo 'No staging QA evidence was generated. Inspect preceding setup or execution failures; no smoke outcomes are claimed.' >> "$GITHUB_STEP_SUMMARY"

@@ -391,18 +391,20 @@ by this exemption and must never be an `ill_*` drawable.
 `ui/theme/Color.kt`, `ui/theme/Palette.kt`, `ui/theme/Spacing.kt`, `ui/theme/Theme.kt`,
 `ui/theme/Type.kt`.
 
-## C12 — Build and test before pushing
+## C12 — Compile, lint and focused tests before commit; full regression before push
 
-Compile, unit tests, a debug APK, and lint must pass before a commit lands, and the debug
-build must pass again before a push.
+`.husky/pre-commit` invokes `tools/qa/run.py::commands` for Kotlin compilation, app ktlint/detekt
+and focused tests. Staged test-only changes select exact classes; other changes use the broader
+fast domain-JVM fallback documented in `commands.md`. `.husky/pre-push` runs the full debug
+suite once with Roborazzi verification and GPU-free inference API tests. No deployed smoke is
+required locally. `check` adds the debug APK build; PR CI runs it plus shared localhost fake-model
+smoke and preserves reports. Successful staging deploys require the separately dispatched smoke
+job with the confirmed deployment revision and test-user token. Screenshot recording is manual.
 
-**Enforcement:** the strongest mechanical enforcement in the repo. `.husky/pre-commit` runs
-`:app:compileDebugKotlin`, `:app:verifyRoborazziDebug`, `assembleDebug`, then
-`:app:ktlintCheck :app:detekt`, aborting on any failure. The second step is the full unit
-test suite with screenshot goldens compared, not a separate screenshot pass. `.husky/pre-push` runs
-`assembleDebug`. Both require a JDK and the Android SDK; both are bypassed by
-`git commit --no-verify`, which is the correct move for a docs-only change that touches no
-Kotlin, Gradle, or SQL.
+**Enforcement:** hooks, `tools/qa/run.py::commands`, `.github/workflows/build-and-test.yml`.
+Python 3.11+ is required; Android checks require JDK 21 + SDK, API tests require
+`inference/requirements-test.txt`. Bun and `bun.lock` are the supported installer workflow.
+See `commands.md` for exact selections, failure/report handling and evidence limitations.
 
 ## C13 — Code wins over docs
 
