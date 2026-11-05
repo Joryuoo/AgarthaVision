@@ -1,11 +1,26 @@
 # Changelog
 
-Reconstructed from `git log`. **This project has never cut a release** — there are no tags,
-no `versionName` bump beyond the initial `0.1.0-mvp` (`app/build.gradle.kts:37`), and no
-release branch. What follows is grouped by the work that actually landed, dated from the
-commits themselves. Nothing here is invented.
+Reconstructed from `git log`. **One release so far:** `v0.1.0-mvp`, a pre-release published
+on GitHub Releases on 2026-11-05 with the signed APK attached
+(<https://github.com/Joryuoo/AgarthaVision/releases/tag/v0.1.0-mvp>). Its tag points at
+`036ae57`, the head of `development` that day, and matches `versionName = "0.1.0-mvp"`
+(`app/build.gradle.kts:37`). There is no release branch. What follows is grouped by the work
+that actually landed, dated from the commits themselves, not by release. Nothing here is invented.
 
 Verify any entry with `git log --oneline --reverse`.
+
+---
+
+## docs/readme-release-and-env — the README names the deployment and every build variable · 2026-11-05
+
+### README deployment and environment variables · `14zcqntnr07`
+
+- `README.md` gains a Deployment section: the GitHub release that will carry the signed APK
+  (`v0.1.0-mvp`), the admin console URL, and Supabase as the backend.
+- `README.md` lists the five `local.properties` names (each `_DEV` for debug builds and
+  `_PROD` for release builds), matching `local.properties.example` and `app/build.gradle.kts`.
+- `.gitignore` ignores `*.jks` beside `*.keystore`, the format Android Studio saves a new
+  release keystore in.
 
 ---
 
