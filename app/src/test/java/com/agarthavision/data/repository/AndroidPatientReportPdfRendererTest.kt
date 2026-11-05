@@ -336,7 +336,8 @@ class AndroidPatientReportPdfRendererTest {
         )
         val bytes = renderer.render(doc)
 
-        assertValidPdf(bytes, expectedPages = 1)
+        // The expanded findings card and wrapped row leave the reviewer sign-off on page 2.
+        assertValidPdf(bytes, expectedPages = 2)
     }
 
     @Test
