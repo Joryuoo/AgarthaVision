@@ -31,21 +31,27 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: android-actions/setup-android@v3
+        with:
+          # Override the action's retired "tools" default. Gradle resolves the app's
+          # compile SDK/build tools using the SDK licenses accepted by this action.
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: python -m pip install -r inference/requirements-test.txt
+      - id: qa_dependencies
+        run: python -m pip install -r inference/requirements-test.txt
       # Compile/lint/APK + ONE full Roborazzi pass + API tests.
       - name: Required checks with structured evidence
         run: bun run check
       - name: Shared HTTP smoke against CI-started fake-model service
-        if: ${{ !cancelled() }}
+        # Run after a failed check, but only after the preceding setup chain succeeded.
+        if: ${{ !cancelled() && steps.qa_dependencies.outcome == 'success' }}
         run: bun run test:smoke --local
       - name: Preserve outcomes, logs, tested revision and screenshot differences
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('build/qa/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: qa-pr-${{ github.sha }}
@@ -53,6 +59,9 @@ jobs:
           path: build/qa/
           if-no-files-found: error
           retention-days: 14
+      - name: Report missing evidence
+        if: ${{ !cancelled() && hashFiles('build/qa/**') == '' }}
+        run: echo 'No QA evidence was generated. Inspect preceding setup or execution failures; no test outcomes are claimed.' >> "$GITHUB_STEP_SUMMARY"
 
   staging-smoke:
     if: github.event_name == 'workflow_dispatch'
@@ -74,10 +83,13 @@ jobs:
           QA_DEPLOYED_REVISION: ${{ inputs.deployed_revision }}
         run: bun run test:smoke
       - name: Preserve deployed revision and smoke outcomes
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('build/qa/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: qa-staging-${{ github.run_id }}
           path: build/qa/
           if-no-files-found: error
           retention-days: 14
+      - name: Report missing evidence
+        if: ${{ !cancelled() && hashFiles('build/qa/**') == '' }}
+        run: echo 'No staging QA evidence was generated. Inspect preceding setup or execution failures; no smoke outcomes are claimed.' >> "$GITHUB_STEP_SUMMARY"

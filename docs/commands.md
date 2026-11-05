@@ -99,6 +99,10 @@ CI always uploads only sanitized `build/qa/` evidence, including copied Gradle X
 and Roborazzi outputs/differences, even
 on failure. The upload includes the tested source revision and staging smoke includes the
 separate deployed revision. References are verified, never recorded by hooks or CI.
+SDK setup explicitly installs `platform-tools`; Gradle resolves required compile SDK/build tools
+using accepted licenses. Local CI smoke runs after failed checks only when the prior setup and
+Python dependency installation succeeded. If setup fails before evidence exists, CI records that
+absence in the job summary and skips the artifact upload rather than adding misleading failures.
 `commit-msg` still enforces C9. Install hooks with `bun run prepare` (also run by `bun install`).
 
 ### Actual evidence versus STD
