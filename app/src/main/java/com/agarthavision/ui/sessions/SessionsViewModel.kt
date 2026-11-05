@@ -7,6 +7,7 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.isColleagueRecord
@@ -15,6 +16,9 @@ import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.records.GeneratePatientReportUseCase
+import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.domain.usecase.records.PreviewPatientReportUseCase
+import com.agarthavision.ui.records.ReportSheetStep
 import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
 import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
@@ -89,16 +93,6 @@ data class SessionsState(
     val reportSheet: PatientReportSheetState? = null,
 )
 
-/** State backing the patient-report bottom sheet reached from this screen (14zcqntj2uz). */
-data class PatientReportSheetState(
-    val candidates: List<PatientReportCandidate> = emptyList(),
-    val selectedSessionIds: Set<String> = emptySet(),
-    val startDate: LocalDate? = null,
-    val endDate: LocalDate? = null,
-    val isGenerating: Boolean = false,
-    val isLoadingCandidates: Boolean = true,
-    val error: String? = null,
-)
 
 sealed interface SessionsEvent {
     data class NavigateToCapture(val sessionId: String) : SessionsEvent
@@ -134,10 +128,12 @@ class SessionsViewModel @Inject constructor(
     private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase,
     private val getPatientReportCandidatesUseCase: GetPatientReportCandidatesUseCase,
     private val generatePatientReportUseCase: GeneratePatientReportUseCase,
+    private val previewPatientReportUseCase: PreviewPatientReportUseCase,
     savedStateHandle: SavedStateHandle,
     private val observeColleagueNamesUseCase: ObserveColleagueNamesUseCase,
 ) : ViewModel() {
 
+    private var previewRequestId = 0L
     private val internalState = MutableStateFlow(SessionsState())
     private val eventChannel = Channel<SessionsEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
@@ -506,18 +502,47 @@ class SessionsViewModel @Inject constructor(
      * they believe covers a smear it silently drops.
      */
     fun onOpenGenerateReport() {
-        val patient = patientId ?: return
+        previewRequestId++
+        val patientId = patientId ?: return
+        val currentPatient = internalState.value.patient
+        val displayName = currentPatient?.displayName.orEmpty()
+        val maskedName = currentPatient?.maskedDisplayName.orEmpty()
+        val isCodename = currentPatient?.isCodename == true
         internalState.update {
-            it.copy(reportSheet = PatientReportSheetState(isLoadingCandidates = true))
+            it.copy(
+                reportSheet = PatientReportSheetState(
+                    patientDisplayName = displayName,
+                    patientMaskedName = maskedName,
+                    isPatientCodename = isCodename,
+                    isLoadingCandidates = true,
+                ),
+            )
         }
         viewModelScope.launch {
-            getPatientReportCandidatesUseCase(patient)
+            val patient = currentPatient ?: patientRepository.getPatientById(patientId)
+            val resolvedDisplay = patient?.displayName ?: displayName
+            val resolvedMasked = patient?.maskedDisplayName ?: maskedName
+            val resolvedCodename = patient?.isCodename ?: isCodename
+            getPatientReportCandidatesUseCase(patientId)
                 .onSuccess { candidates ->
+                    val eligible = eligibleSessionIds(candidates, start = null, end = null)
                     internalState.update {
                         it.copy(
-                            reportSheet = PatientReportSheetState(
+                            reportSheet = it.reportSheet?.copy(
+                                patientDisplayName = resolvedDisplay,
+                                patientMaskedName = resolvedMasked,
+                                isPatientCodename = resolvedCodename,
                                 candidates = candidates,
-                                selectedSessionIds = eligibleSessionIds(candidates, start = null, end = null),
+                                selectedIds = eligible,
+                                selectedSessionIds = eligible,
+                                isLoadingCandidates = false,
+                            ) ?: PatientReportSheetState(
+                                patientDisplayName = resolvedDisplay,
+                                patientMaskedName = resolvedMasked,
+                                isPatientCodename = resolvedCodename,
+                                candidates = candidates,
+                                selectedIds = eligible,
+                                selectedSessionIds = eligible,
                                 isLoadingCandidates = false,
                             ),
                         )
@@ -527,6 +552,9 @@ class SessionsViewModel @Inject constructor(
                     internalState.update {
                         it.copy(
                             reportSheet = it.reportSheet?.copy(
+                                patientDisplayName = resolvedDisplay,
+                                patientMaskedName = resolvedMasked,
+                                isPatientCodename = resolvedCodename,
                                 isLoadingCandidates = false,
                                 error = error.message ?: "Could not load sessions.",
                             ),
@@ -537,6 +565,7 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun onDismissReportSheet() {
+        previewRequestId++
         internalState.update { it.copy(reportSheet = null) }
     }
 
@@ -550,14 +579,19 @@ class SessionsViewModel @Inject constructor(
      * survive to generation (14zcqntj2uz follow-up).
      */
     fun onReportDateRangeSelected(start: LocalDate?, end: LocalDate?) {
+        previewRequestId++
         val (safeStart, safeEnd) = sanitizeDateRange(start, end)
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
+            val eligible = eligibleSessionIds(sheet.candidates, safeStart, safeEnd)
             state.copy(
                 reportSheet = sheet.copy(
                     startDate = safeStart,
                     endDate = safeEnd,
-                    selectedSessionIds = eligibleSessionIds(sheet.candidates, safeStart, safeEnd),
+                    selectedIds = eligible,
+                    selectedSessionIds = eligible,
+                    previewPdfBytes = null,
+                    isLoadingPreview = false,
                 ),
             )
         }
@@ -586,32 +620,123 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun onSelectAllReportSessions() {
+        previewRequestId++
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
             val eligible = eligibleSessionIds(sheet.candidates, sheet.startDate, sheet.endDate)
-            val updated = if (sheet.selectedSessionIds == eligible) emptySet() else eligible
-            state.copy(reportSheet = sheet.copy(selectedSessionIds = updated))
+            val updated = if (sheet.effectiveSelectedIds == eligible) emptySet() else eligible
+            state.copy(
+                reportSheet = sheet.copy(
+                    selectedIds = updated,
+                    selectedSessionIds = updated,
+                    previewPdfBytes = null,
+                    isLoadingPreview = false,
+                ),
+            )
         }
     }
 
     fun onToggleReportSession(sessionId: String) {
+        previewRequestId++
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
-            val selected = sheet.selectedSessionIds
+            val selected = sheet.effectiveSelectedIds
             val updated = if (sessionId in selected) selected - sessionId else selected + sessionId
-            state.copy(reportSheet = sheet.copy(selectedSessionIds = updated))
+            state.copy(
+                reportSheet = sheet.copy(
+                    selectedIds = updated,
+                    selectedSessionIds = updated,
+                    previewPdfBytes = null,
+                    isLoadingPreview = false,
+                ),
+            )
+        }
+    }
+
+    fun onUpdatePatientReportConfig(config: ReportConfig) {
+        previewRequestId++
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            val isRestrictedCensor = sheet.isPatientCodename &&
+                config.patientNameOption == PatientNameOption.CENSOR
+            val effectiveConfig = if (isRestrictedCensor) {
+                config.copy(patientNameOption = sheet.config.patientNameOption)
+            } else {
+                config
+            }
+            state.copy(
+                reportSheet = sheet.copy(config = effectiveConfig, previewPdfBytes = null, isLoadingPreview = false),
+            )
+        }
+    }
+
+    fun onAcknowledgePatientReportWarning(acknowledged: Boolean) {
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            state.copy(reportSheet = sheet.copy(isWarningAcknowledged = acknowledged))
+        }
+    }
+
+    fun onPreviewPatientReport() {
+        val patient = patientId ?: return
+        val sheet = internalState.value.reportSheet ?: return
+        val scope = PatientReportScope(
+            startDate = sheet.startDate,
+            endDate = sheet.endDate,
+            sessionIds = sheet.effectiveSelectedIds,
+        )
+        val requestId = ++previewRequestId
+        viewModelScope.launch {
+            if (requestId != previewRequestId) return@launch
+            internalState.update { state ->
+                val current = state.reportSheet ?: return@update state
+                state.copy(reportSheet = current.copy(isLoadingPreview = true, error = null))
+            }
+            previewPatientReportUseCase(patient, scope, sheet.config).fold(
+                onSuccess = { pdfBytes ->
+                    internalState.update { state ->
+                        if (requestId != previewRequestId) return@update state
+                        val current = state.reportSheet ?: return@update state
+                        state.copy(
+                            reportSheet = current.copy(
+                                step = ReportSheetStep.PREVIEW,
+                                previewPdfBytes = pdfBytes,
+                                isLoadingPreview = false,
+                                error = null,
+                            ),
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    internalState.update { state ->
+                        if (requestId != previewRequestId) return@update state
+                        val current = state.reportSheet ?: return@update state
+                        state.copy(
+                            reportSheet = current.copy(
+                                isLoadingPreview = false,
+                                error = error.message ?: "Could not preview report.",
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun onBackToPatientReportConfig() {
+        previewRequestId++
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            state.copy(reportSheet = sheet.copy(step = ReportSheetStep.CONFIGURATION, isLoadingPreview = false))
         }
     }
 
     fun onGeneratePatientReport() {
+        previewRequestId++
         val patient = patientId
         val sheet = internalState.value.reportSheet
         if (patient == null || sheet == null || sheet.isGenerating) return
-        // The selection can only ever hold eligible-in-range sessions (see
-        // onReportDateRangeSelected/onToggleReportSession), so an empty selection here means
-        // there is nothing left to report on — not that nothing was ever verified. A distinct
-        // message keeps that honest rather than reusing the use case's blanket failure string.
-        if (sheet.selectedSessionIds.isEmpty()) {
+        if (sheet.effectiveSelectedIds.isEmpty()) {
             internalState.update {
                 it.copy(reportSheet = sheet.copy(error = NO_VERIFIED_SAMPLES_IN_RANGE))
             }
@@ -622,9 +747,13 @@ class SessionsViewModel @Inject constructor(
             val scope = PatientReportScope(
                 startDate = sheet.startDate,
                 endDate = sheet.endDate,
-                sessionIds = sheet.selectedSessionIds,
+                sessionIds = sheet.effectiveSelectedIds,
             )
-            generatePatientReportUseCase(patient, scope)
+            generatePatientReportUseCase(
+                patientId = patient,
+                scope = scope,
+                config = sheet.config,
+            )
                 .onSuccess { report ->
                     internalState.update { it.copy(reportSheet = null) }
                     eventChannel.send(SessionsEvent.PatientReportGenerated(report.pdfFilePath))

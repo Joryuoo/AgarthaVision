@@ -2,8 +2,10 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.supabase.SyncReportUseCase
+import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportPatient
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -17,11 +19,12 @@ import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
-import com.agarthavision.domain.usecase.reports.aggregateLpfPerSpecies
 import com.agarthavision.domain.sync.SyncScheduler
+import com.agarthavision.domain.usecase.reports.aggregateLpfPerSpecies
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /**
@@ -46,7 +49,10 @@ class GenerateSessionReportUseCase @Inject constructor(
     private val syncReportUseCase: SyncReportUseCase,
     private val syncScheduler: SyncScheduler,
 ) {
-    suspend operator fun invoke(sessionId: String): Result<Report> = runCatching {
+    suspend operator fun invoke(
+        sessionId: String,
+        config: ReportConfig = ReportConfig(),
+    ): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
         }
@@ -85,8 +91,10 @@ class GenerateSessionReportUseCase @Inject constructor(
         // One instant for both the report's timestamp and the patient's age, so a report never
         // prints an age computed a beat apart from the "Generated at" line beside it.
         val generatedAt = Instant.now()
-        val generatedByName = resolveGeneratedByName(userId)
-        val reportPatient = buildReportPatient(patient, generatedAt)
+        val identity = authRepository.observeLocalIdentity().first()
+        val generatedByName = resolveGeneratedByName(userId, identity)
+        val formattedPatientName = formatPatientNameForReport(patient, config.patientNameOption)
+        val reportPatient = buildReportPatient(patient, generatedAt, formattedPatientName)
 
         val metadata = ReportMetadata(
             reportId = reportId,
@@ -101,8 +109,18 @@ class GenerateSessionReportUseCase @Inject constructor(
             lpfPerSpecies = lpfPerSpecies,
         )
 
-        val pdfDoc = reportPdfBuilder.build(metadata, samples, detectionsBySample)
-        val pdfBytes = reportPdfRenderer.render(pdfDoc)
+        // Render the final data and identity together; preview bytes are transient only.
+        val pdfBytes = run {
+            val pdfDoc = reportPdfBuilder.build(
+                metadata = metadata,
+                samples = samples,
+                detectionsBySample = detectionsBySample,
+                config = config,
+                generatedByEmail = identity?.email,
+                organizationName = deriveOrganizationFromEmail(identity?.email),
+            )
+            reportPdfRenderer.render(pdfDoc)
+        }
         val pdfPath = reportFileStore.writePdf(reportId, sessionId, pdfBytes)
 
         val report = Report(
@@ -118,6 +136,7 @@ class GenerateSessionReportUseCase @Inject constructor(
             csvFilePath = null,
             pdfFilePath = pdfPath,
             supabaseStatus = ReportSyncStatus.PENDING,
+            patientName = formattedPatientName,
         )
         reportRepository.insert(report)
         // Direct push first, as before. The scheduler is the fallback for when it does not
@@ -125,6 +144,8 @@ class GenerateSessionReportUseCase @Inject constructor(
         syncReportUseCase(reportId)
         syncScheduler.requestSync()
         report
+    }.onFailure { throwable ->
+        if (throwable is CancellationException) throw throwable
     }
 
     /**
@@ -132,8 +153,7 @@ class GenerateSessionReportUseCase @Inject constructor(
      * then the raw user id — mirroring the convention used wherever a medtech's identity is
      * shown without a guaranteed display name.
      */
-    private suspend fun resolveGeneratedByName(userId: String): String {
-        val identity = authRepository.observeLocalIdentity().first()
+    private fun resolveGeneratedByName(userId: String, identity: LocalIdentity?): String {
         return identity?.displayName?.takeIf { it.isNotBlank() }
             ?: identity?.email?.takeIf { it.isNotBlank() }
             ?: userId
@@ -142,11 +162,12 @@ class GenerateSessionReportUseCase @Inject constructor(
     private suspend fun buildReportPatient(
         patient: Patient,
         generatedAt: Instant,
+        patientName: String,
     ): ReportPatient {
         val barangay = psgcRepository.getBarangay(patient.psgcBarangayCode)
         val barangayLabel = barangay?.fullAddress ?: patient.psgcBarangayCode
         return ReportPatient(
-            name = patient.displayName,
+            name = patientName,
             sex = patient.sex,
             ageYears = patient.ageYears(generatedAt),
             barangayLabel = barangayLabel,

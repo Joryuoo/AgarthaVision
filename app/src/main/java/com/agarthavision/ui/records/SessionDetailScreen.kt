@@ -238,7 +238,7 @@ fun SessionDetailScreen(
             totalReports = state.totalReports,
             currentPage = state.currentPage,
             isGenerating = state.isGenerating,
-            onGenerate = viewModel::generateReport,
+            onGenerate = viewModel::onOpenGenerateReport,
             onOpenReport = { report ->
                 val result = if (report.pdfFilePath != null) {
                     viewReportPdf(context, report.pdfFilePath)
@@ -286,6 +286,20 @@ fun SessionDetailScreen(
                 }
             }
         }
+    }
+
+    state.reportSheet?.let { sheetState ->
+        SessionReportSheet(
+            state = sheetState,
+            sessionLabel = sessionDetail.label ?: "Session ${sessionDetail.id}",
+            sessionDate = "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}",
+            onDismiss = viewModel::onDismissReportSheet,
+            onConfigChange = viewModel::onUpdateReportConfig,
+            onAcknowledgeWarning = viewModel::onAcknowledgeReportWarning,
+            onPreview = viewModel::onPreviewSessionReport,
+            onBackToConfig = viewModel::onBackToReportConfig,
+            onGeneratePdf = viewModel::onFinalizeSessionReport,
+        )
     }
 }
 

@@ -26,6 +26,7 @@ internal fun buildReportSpeciesRows(lpfPerSpecies: Map<String, LpfDensity>): Lis
                 min = density.min,
                 max = density.max,
                 descriptor = density.descriptor,
+                burdenLevel = density.burdenLevel,
             )
         }
         .sortedBy { it.speciesDisplayName }

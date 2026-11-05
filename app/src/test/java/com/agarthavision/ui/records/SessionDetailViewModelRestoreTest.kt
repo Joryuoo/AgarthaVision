@@ -122,6 +122,8 @@ class SessionDetailViewModelRestoreTest {
             observeSessionPendingCountUseCase = observePendingCount,
             sessionEggCountUseCase = mock(),
             generateSessionReportUseCase = mock(),
+            previewSessionReportUseCase = mock(),
+            patientRepository = mock(),
             restoreReportFilesUseCase = RestoreReportFilesUseCase(reportDao, remote, fileStore),
             sessionManager = sessionManager,
         )

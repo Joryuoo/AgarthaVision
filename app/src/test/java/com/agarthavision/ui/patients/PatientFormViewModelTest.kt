@@ -176,6 +176,7 @@ class PatientFormViewModelTest {
         verify(patientRepository).insert(captor.capture())
         val saved = captor.firstValue
         assertEquals("CUSTOM-001", saved.lastname)
+        assertTrue(saved.isCodename)
         assertEquals("", saved.firstname)
     }
 

@@ -3,11 +3,15 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.supabase.SyncReportUseCase
+import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.PatientReportSessionRow
 import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.domain.model.ReportPdfSampleItem
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
+import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
@@ -24,6 +28,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 /**
@@ -57,6 +62,7 @@ class GeneratePatientReportUseCase @Inject constructor(
     suspend operator fun invoke(
         patientId: String,
         scope: PatientReportScope = PatientReportScope(),
+        config: ReportConfig = ReportConfig(),
     ): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
@@ -82,7 +88,8 @@ class GeneratePatientReportUseCase @Inject constructor(
         // One instant for the report's timestamp, the patient's age, and the PDF's
         // "Generated at" line, mirroring GenerateSessionReportUseCase.
         val generatedAt = Instant.now()
-        val generatedByName = resolveGeneratedByName(userId)
+        val identity = authRepository.observeLocalIdentity().first()
+        val generatedByName = resolveGeneratedByName(userId, identity)
         val barangay = psgcRepository.getBarangay(patient.psgcBarangayCode)
         val address = barangay?.fullAddress ?: patient.psgcBarangayCode
 
@@ -92,22 +99,32 @@ class GeneratePatientReportUseCase @Inject constructor(
         val pooledLpfPerSpecies = aggregateLpfPerSpecies(breakdown.allFindings, totalSamples)
         val positiveSpecies = pooledLpfPerSpecies.filterValues { it.max > 0 }.keys.sorted()
 
-        val pdfDoc = patientReportPdfBuilder.build(
-            reportId = reportId,
-            patientDisplayName = patient.displayName,
-            ageYears = patient.ageYears(generatedAt),
-            sex = patient.sex,
-            address = address,
-            scope = scope,
-            generatedByName = generatedByName,
-            generatedAt = generatedAt,
-            pooledLpfPerSpecies = pooledLpfPerSpecies,
-            totalSamples = totalSamples,
-            totalEggsConfirmed = totalEggsConfirmed,
-            positiveSpecies = positiveSpecies,
-            sessionRows = sessionRows,
-        )
-        val pdfBytes = patientReportPdfRenderer.render(pdfDoc)
+        val formattedPatientName = formatPatientNameForReport(patient, config.patientNameOption)
+        val appendixSamples = buildAppendixSamplesIfNeeded(breakdown, config)
+
+        // Render the final data and identity together; preview bytes are transient only.
+        val pdfBytes = run {
+            val pdfDoc = patientReportPdfBuilder.build(
+                reportId = reportId,
+                patientDisplayName = formattedPatientName,
+                ageYears = patient.ageYears(generatedAt),
+                sex = patient.sex,
+                address = address,
+                scope = scope,
+                generatedByName = generatedByName,
+                generatedAt = generatedAt,
+                pooledLpfPerSpecies = pooledLpfPerSpecies,
+                totalSamples = totalSamples,
+                totalEggsConfirmed = totalEggsConfirmed,
+                positiveSpecies = positiveSpecies,
+                sessionRows = sessionRows,
+                config = config,
+                generatedByEmail = identity?.email,
+                organizationName = deriveOrganizationFromEmail(identity?.email),
+                appendixSamples = appendixSamples,
+            )
+            patientReportPdfRenderer.render(pdfDoc)
+        }
         val pdfPath = reportFileStore.writePatientPdf(reportId, patientId, pdfBytes)
 
         val report = Report(
@@ -125,11 +142,32 @@ class GeneratePatientReportUseCase @Inject constructor(
             csvFilePath = null,
             pdfFilePath = pdfPath,
             supabaseStatus = ReportSyncStatus.PENDING,
+            patientName = formattedPatientName,
         )
         reportRepository.insert(report)
         syncReportUseCase(reportId)
         syncScheduler.requestSync()
         report
+    }.onFailure { throwable ->
+        if (throwable is CancellationException) throw throwable
+    }
+
+    private suspend fun buildAppendixSamplesIfNeeded(
+        breakdown: SessionBreakdown,
+        config: ReportConfig,
+    ): List<ReportPdfSampleItem> {
+        if (!config.includeSampleImages) return emptyList()
+        val detectionsBySample = breakdown.verifiedSamples.associate { sample ->
+            sample.id to detectionRepository.getDetectionsForSample(sample.id)
+        }
+        val sessionLabelById = breakdown.includedSessions.associate { session ->
+            session.id to (session.label ?: session.id)
+        }
+        return buildAppendixSamples(
+            samples = breakdown.verifiedSamples,
+            detectionsBySample = detectionsBySample,
+            sessionLabelById = sessionLabelById,
+        )
     }
 
     /** The per-session rows, pooled findings, and running totals [invoke] builds the report from. */
@@ -138,6 +176,8 @@ class GeneratePatientReportUseCase @Inject constructor(
         val allFindings: List<SampleSpeciesFindingEntity>,
         val totalSamples: Int,
         val totalEggsConfirmed: Int,
+        val includedSessions: List<Session>,
+        val verifiedSamples: List<Sample>,
     )
 
     /**
@@ -150,6 +190,8 @@ class GeneratePatientReportUseCase @Inject constructor(
     ): SessionBreakdown {
         val sessionRows = mutableListOf<PatientReportSessionRow>()
         val allFindings = mutableListOf<SampleSpeciesFindingEntity>()
+        val includedSessions = mutableListOf<Session>()
+        val verifiedSamples = mutableListOf<Sample>()
         var totalSamples = 0
         var totalEggsConfirmed = 0
 
@@ -159,6 +201,9 @@ class GeneratePatientReportUseCase @Inject constructor(
             // nobody verified anything in was never examined, and including it would let an
             // empty smear pad the "sessions covered" count on a clinical document.
             if (samples.isEmpty()) continue
+
+            includedSessions += session
+            verifiedSamples += samples
 
             val eggCounts = detectionRepository.getConfirmedEggCountsForSession(session.id, userId)
             val findings = findingDao.getFindingsForSession(session.id, userId)
@@ -180,11 +225,17 @@ class GeneratePatientReportUseCase @Inject constructor(
             )
         }
 
-        return SessionBreakdown(sessionRows, allFindings, totalSamples, totalEggsConfirmed)
+        return SessionBreakdown(
+            sessionRows = sessionRows,
+            allFindings = allFindings,
+            totalSamples = totalSamples,
+            totalEggsConfirmed = totalEggsConfirmed,
+            includedSessions = includedSessions,
+            verifiedSamples = verifiedSamples,
+        )
     }
 
-    private suspend fun resolveGeneratedByName(userId: String): String {
-        val identity = authRepository.observeLocalIdentity().first()
+    private fun resolveGeneratedByName(userId: String, identity: LocalIdentity?): String {
         return identity?.displayName?.takeIf { it.isNotBlank() }
             ?: identity?.email?.takeIf { it.isNotBlank() }
             ?: userId

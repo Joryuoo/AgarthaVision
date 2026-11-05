@@ -2,7 +2,7 @@
 type: process
 status: verified
 verified: 2026-11-05
-commit: 2cc16989
+commit: ce41b5ca
 ---
 
 # report
@@ -10,7 +10,7 @@ commit: 2cc16989
 Turning a session's verified samples into a number a lab can act on, and a file it can hand
 over.
 
-**Input** — a session id and a signed-in medtech.
+**Input** — a session id and a signed-in medtech (or a patient id, signed-in medtech, and scope for a patient report).
 **Output** — a persisted [`Report`](../objects/Report.md) row and a PDF file in
 `Documents/AgarthaVision/`. PDF-only (86d4be47c) — a report never carries a CSV any more;
 `csv_file_path` survives only as a legacy column for reports generated before this change.
@@ -24,21 +24,21 @@ over.
 1. **Require cached identity, ownership, and the session's patient on-device.**
    `GenerateSessionReportUseCase` fails if there is no cached local identity, if the session is
    missing, if the session is not owned by the current user, or if the session's patient has
-   never synced to this device (`GenerateSessionReportUseCase::invoke`). A session with no
+   never synced to this device (`GenerateSessionReportUseCase.kt::GenerateSessionReportUseCase`). A session with no
    verified samples is refused too. Works offline when signed in and the patient is already local.
    On a colleague's session Session Detail offers no generate button and names the author instead
-   (`SessionDetailContentState.readOnlyAuthor`, 14zcqntjph6); the reports that session already has
-   stay listed and open for the assigned medtech, files included (`RestoreReportFilesUseCase`
+   (`SessionDetailContentState.kt::SessionDetailContentState`, 14zcqntjph6); the reports that session already has
+   stay listed and open for the assigned medtech, files included (`RestoreReportFilesUseCase.kt::RestoreReportFilesUseCase`
    builds the path from the report's own `user_id`).
 2. **Gather.** Fetch the session's live verified samples (`deleted_at is null`), their detections,
-   and findings (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
+   and findings (`GenerateSessionReportUseCase.kt::GenerateSessionReportUseCase`).
 3. **Count.** `getConfirmedEggCountsForSession` groups by `COALESCE(expert_class, class_label)`,
    joins to live samples, and excludes flagged samples and false positives
    (`DetectionDao.kt::getConfirmedEggCountsForSession`).
 4. **Fetch Findings.** Fetch the per-species egg counts logged by the medtech for each field
-   (`data/local/dao/SampleSpeciesFindingDao.kt`).
+   (`SampleSpeciesFindingDao.kt::SampleSpeciesFindingDao`).
 5. **Compute LPF Density.** Philippine medtechs use Direct Smear, so density is reported per 
-   Low Power Field (LPF) via `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`).
+   Low Power Field (LPF) via `aggregateLpfPerSpecies` (`LpfAggregation.kt::aggregateLpfPerSpecies`).
    - **Range Definition:** Per species, `min(eggCount) .. max(eggCount)` across all fields recorded in the session. A field with none of that species contributes `0`, NOT absence (dropping empty fields would systematically overstate every result). Zero-egg fields exist because zero-detection inference results are persisted (`86d4a6prb`).
    - **Denominator:** Whatever the medtech recorded — no floor, no cap. Ten fields is typical practice, not an app-enforced rule.
    - **Descriptor & Burden Level:** The qualitative descriptor comes from the highest single field (worst field), NOT the mean: `rare` (1–2), `few` (3–5), `moderate` (6–10), `numerous` (>10). A single heavy field must not be averaged away by clean ones (`LpfDensity.kt::LpfDescriptor`). Accompanied by an estimated parasite burden level (`LpfDensity.kt::ParasiteBurdenLevel`).
@@ -46,101 +46,71 @@ over.
    - **Wholly negative session:** A session with 0 eggs across all fields is a valid result (`0–0 LPF`) and generates a report stating no parasites found.
    - **No verified field yet:** Not a negative result. No report can be generated, and Session Detail's LPF card says no field has been verified instead of "No parasites found" (`SessionDetailScreen.kt::LpfHeroCard`, `14zcqntk7bg`).
 6. **Normalise species** to canonical names.
-7. **Resolve the patient header.** Name, sex, age (computed at the same instant as the report's
-   `generatedAt`), and the full address via `PsgcBarangay.fullAddress` (or the raw PSGC code when
-   it no longer resolves — the same display form the patient report and the session patient card
-   use) are assembled into a `ReportPatient`
-   (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
-8. **Build the PDF.** `ReportPdfBuilder` builds the clinical document with a patient block,
-   session metadata and per-species LPF ranges; `AndroidReportPdfRenderer` draws it. PDF is the
-   only format (86d4be47c).
-9. **Write the file** to `Documents/AgarthaVision/`
-   (`data/repository/DocumentsReportFileStore.kt`).
-10. **Insert the row** with `supabase_status = pending`, then push it inline. `SyncReportUseCase`
-    pushes the row and uploads the PDF to the `reports` bucket
-    (see [`sync`](sync.md) and [`StorageObject`](../objects/StorageObject.md)), and
-    `syncScheduler.requestSync()` is the fallback when that push cannot land.
+7. **Resolve the patient header.** Name (adjusted according to `ReportConfig.kt::PatientNameOption`: `SHOW`, `CENSOR`, or `EXCLUDE`), sex, age (computed at the same instant as the report's `generatedAt`), and the full address via `PsgcBarangay.kt::PsgcBarangay` (or the raw PSGC code when it no longer resolves — the same display form the patient report and the session patient card use) are assembled into a `ReportPatient` (`GenerateSessionReportUseCase.kt::GenerateSessionReportUseCase`).
+8. **Build the PDF.** `ReportPdfBuilder.kt::ReportPdfBuilder` builds the clinical document; `AndroidReportPdfRenderer.kt::AndroidReportPdfRenderer` draws it using `PdfChrome.kt::PdfChrome`. PDF is the only format (86d4be47c).
+9. **Write the file** to `Documents/AgarthaVision/` (`DocumentsReportFileStore.kt::DocumentsReportFileStore`).
+10. **Insert the row** with `supabase_status = pending`, then push it inline. `SyncReportUseCase.kt::SyncReportUseCase` pushes the row and uploads the PDF to the `reports` bucket (see [`sync`](sync.md) and [`StorageObject`](../objects/StorageObject.md)), and `SyncScheduler.kt::SyncScheduler` is the fallback when that push cannot land.
+
+## Report Configuration & Warning Flow
+
+Both session and multi-session patient reports support user configuration before generation:
+- **Configuration options:** Encapsulated in `ReportConfig.kt::ReportConfig`:
+  - `includeSampleImages: Boolean` (default `false`) — controls whether verified sample micrographs are appended to the document.
+  - `patientNameOption: PatientNameOption` (`ReportConfig.kt::PatientNameOption`, default `SHOW`) — determines whether the patient name is fully displayed (`SHOW`), masked with asterisks (`CENSOR`), or completely omitted (`EXCLUDE`).
+- **Low sample count soft-limit:** Reliable direct fecal smear microscopy recommends at least 10 examined fields (`ReportSheetComponents.kt::RECOMMENDED_MIN_SAMPLES`). When 1 to 9 verified samples are included:
+  - Configuration step displays an amber banner (`ReportSheetComponents.kt::SampleCountWarningBanner`).
+  - Preview step requires the medtech to explicitly check an acknowledgment checkbox (`ReportSheetComponents.kt::SampleCountAcknowledgmentCard`) before the "Generate PDF" action becomes enabled (`ReportSheetComponents.kt::ReportSheetTestTags`).
+
+## Interactive Preview Flow
+
+Prior to writing a report row to the database or saving a final PDF file to device storage, the medtech can review an interactive in-memory preview:
+1. **Request preview:** The bottom sheets (`SessionReportSheet.kt::SessionReportSheet`, `PatientReportSheet.kt::PatientReportSheet`) transition from `ReportSheetStep.CONFIGURATION` to `ReportSheetStep.PREVIEW` by invoking `PreviewSessionReportUseCase.kt::PreviewSessionReportUseCase` or `PreviewPatientReportUseCase.kt::PreviewPatientReportUseCase`.
+2. **In-memory rendering:** The preview use cases construct the document with temporary IDs and render it to a `ByteArray` without hitting the file store, Room database, or sync scheduler.
+3. **Viewport & pagination:** `ReportSheetComponents.kt::PdfPreviewViewport` renders the PDF pages into display bitmaps and presents them with swipeable pagination and page counter captions.
+4. **Pre-rendered handoff:** When the medtech taps "Generate PDF", the pre-rendered `ByteArray` is passed directly into `GenerateSessionReportUseCase.kt::GenerateSessionReportUseCase` or `GeneratePatientReportUseCase.kt::GeneratePatientReportUseCase` as `preRenderedPdf`. If provided, generation skips duplicate PDF construction and rendering, writing the verified bytes straight to storage and database. If generation is invoked directly without preview, the use cases render the PDF on the fly using `ReportConfig.kt::ReportConfig`.
+5. **Editing options:** Medtechs can tap "Edit options" in `ReportSheetStep.PREVIEW` to return to `ReportSheetStep.CONFIGURATION` and adjust parameters.
+
+## Redesigned PDF Layout
+
+Both single-session and multi-session patient PDFs share a redesigned clinical document design:
+- **Chrome & Header:** `PdfChrome.kt::PdfChrome` renders a branded clinical header including an email-derived organization label (`ReportOrganizationUtils.kt::deriveOrganizationFromEmail`, e.g. "DEPARTMENT OF HEALTH" or healthcare facility domain), document title, generation timestamp, and medtech credentials.
+- **Microscopy Results Hero Card:** Rendered with deep maroon brand styling displaying identified species rows, Low Power Field density ranges (`min..max / LPF`), qualitative descriptors, and high-visibility parasite burden level pill badges (`ReportSpeciesRows.kt::buildReportSpeciesRows`, `PdfChrome.kt::PdfChrome`).
+- **Sample Image Appendix:** When `includeSampleImages = true`, verified field images are laid out in a balanced 2×2 grid per appendix page (`ReportOrganizationUtils.kt::buildAppendixSamples`), complete with field IDs, timestamps, and confirmed egg detections, powered by `AndroidReportPdfRenderer.kt::AndroidReportPdfRenderer` and `AndroidPatientReportPdfRenderer.kt::AndroidPatientReportPdfRenderer`.
 
 ## Live LPF, without a report
 
-`SessionEggCountUseCase` runs the same aggregation without writing anything. It is what 
-Session Detail displays before anyone generates a report.
+`SessionEggCountUseCase.kt::SessionEggCountUseCase` runs the same aggregation without writing anything. It is what Session Detail displays before anyone generates a report.
 
 ## Hits
 
-- **The counting rule.** Any change to the WHERE clause in
-  `DetectionDao.kt::getConfirmedEggCountsForSession` or how findings are stored in `sample_species_findings`
-  silently changes counts everywhere.
+- **The counting rule.** Any change to the WHERE clause in `DetectionDao.kt::getConfirmedEggCountsForSession` or how findings are stored in `sample_species_findings` silently changes counts everywhere.
 - **The report format**, which is a clinical document handed to patients and health workers.
-- Report generation is idempotent in the sense that it always creates a *new* row; it never
-  updates an existing one.
+- Report generation is idempotent in the sense that it always creates a *new* row; it never updates an existing one.
 
 ## Does not hit
 
-- **Existing reports or their files.** Regenerating writes a new row and a new file under a new
-  report id. Old reports stay on disk under their old names.
-- **The row's file paths on other devices.** `pdf_file_path` stays device-local (and
-  `csv_file_path` is legacy-only); another device reads the PDF from the `reports` bucket through
-  `RestoreReportFilesUseCase`, which repoints its own copy of the row at the file it writes.
-- **Sample or detection state.** Reporting is read-only over both. Generating a report does not
-  mark anything as reported.
+- **Existing reports or their files.** Regenerating writes a new row and a new file under a new report id. Old reports stay on disk under their old names.
+- **The row's file paths on other devices.** `pdf_file_path` stays device-local (and `csv_file_path` is legacy-only); another device reads the PDF from the `reports` bucket through `RestoreReportFilesUseCase.kt::RestoreReportFilesUseCase`, which repoints its own copy of the row at the file it writes.
+- **Sample or detection state.** Reporting is read-only over both. Generating a report does not mark anything as reported.
 
 ## Patient report
 
-14zcqntj2uz. Pools every session `PatientReportScope` resolves to into one PDF-only document,
-rather than a session's own smear. Written by `GeneratePatientReportUseCase`
-(`domain/usecase/records/GeneratePatientReportUseCase.kt`), reached from the Sessions screen's
-"Generate report" sheet (`ui/sessions/PatientReportSheet.kt`).
+14zcqntj2uz. Pools every session `PatientReportScope.kt::PatientReportScope` resolves to into one PDF-only document, rather than a session's own smear. Written by `GeneratePatientReportUseCase.kt::GeneratePatientReportUseCase`, reached from the Sessions screen's "Generate report" sheet (`PatientReportSheet.kt::PatientReportSheet`).
 
-**Input** — a patient id, a signed-in medtech, and a `PatientReportScope` (a date range and/or
-an explicit session-id subset; both default to "every session").
-**Output** — a persisted `Report` row with `report_type = 'patient'`, `patient_id` set,
-`session_id` null, and `session_ids` naming every session actually included; a PDF in
-`Documents/AgarthaVision/`.
+**Input** — a patient id, a signed-in medtech, a `PatientReportScope.kt::PatientReportScope` (a date range and/or an explicit session-id subset; both default to "every session"), and a `ReportConfig.kt::ReportConfig`.
+**Output** — a persisted `Report` row with `report_type = 'patient'`, `patient_id` set, `session_id` null, and `session_ids` naming every session actually included; a PDF in `Documents/AgarthaVision/`.
 
-1. **Resolve scope.** `resolvePatientReportSessions` (pure, C2) filters the patient's sessions
-   by the scope's inclusive date range and/or session-id subset. A session id in the subset that
-   does not belong to the patient is a caller error (`IllegalArgumentException`), not a silent
-   drop.
-2. **Drop empty sessions.** Any resolved session with zero verified samples is excluded
-   entirely — not reported as a zero row — so an unexamined smear cannot pad the "sessions
-   covered" count on a clinical document. If nothing survives, generation fails with
-   `NO_VERIFIED_SAMPLES_MESSAGE`. The "generate report" sheet shows these sessions disabled
-   rather than hiding them (`GetPatientReportCandidatesUseCase`), and they never start checked.
-   Picking a date range re-derives the checklist's selection to sessions that are both eligible
-   and inside it (`SessionsViewModel.onReportDateRangeSelected`), so a checked session can never
-   silently fall out of scope. If the medtech still taps Generate with nothing selected — e.g. a
-   range with no eligible sessions in it — the sheet shows "No verified samples in the selected
-   range." without calling the use case at all, distinct from `NO_VERIFIED_SAMPLES_MESSAGE`,
-   which means the patient has no verified samples anywhere.
-3. **Pool, don't sum per-session ranges.** Every surviving session's findings are collected into
-   one list and passed to a single `aggregateLpfPerSpecies(all, totalFieldsAcrossSessions)` call
-   — the headline species table is the pooled range across every included session, not each
-   session's range combined after the fact. The per-session breakdown table keeps each smear's
-   own range visible alongside the pooled figure.
-4. **Resolve the patient header.** Full `displayName`, age computed at the same instant as
-   `generatedAt`, sex, and the full address via `PsgcBarangay.fullAddress` (falling back to the
-   raw PSGC code when the barangay no longer resolves).
-5. **Build and write.** `PatientReportPdfBuilder` assembles the pure-data document;
-   `AndroidPatientReportPdfRenderer` paginates it — an unbounded session count means the
-   per-session table can span multiple pages, repeating its column headers on each new one.
-6. **Insert and sync.** Same shape as a session report: insert with `supabase_status = pending`,
-   then push row and PDF bytes to `public.reports` / the `reports` Storage bucket
-   (`data/supabase/SyncReportUseCase.kt`). RLS additionally requires the inserting user to hold
-   a `patient_users` link to the patient (`supabase/migrations/0015_patient_reports.sql`), and
-   `session_ids` to name at least one session, every one of them the writer's own and this
-   patient's (`supabase/migrations/0016_patient_report_own_patient_sessions.sql`).
+1. **Resolve scope.** `resolvePatientReportSessions` (`GeneratePatientReportUseCase.kt::resolvePatientReportSessions`, pure, C2) filters the patient's sessions by the scope's inclusive date range and/or session-id subset. A session id in the subset that does not belong to the patient is a caller error (`IllegalArgumentException`), not a silent drop.
+2. **Drop empty sessions.** Any resolved session with zero verified samples is excluded entirely — not reported as a zero row — so an unexamined smear cannot pad the "sessions covered" count on a clinical document. If nothing survives, generation fails with `NO_VERIFIED_SAMPLES_MESSAGE`. The "generate report" sheet shows these sessions disabled rather than hiding them (`GetPatientReportCandidatesUseCase.kt::GetPatientReportCandidatesUseCase`), and they never start checked. Picking a date range re-derives the checklist's selection to sessions that are both eligible and inside it (`SessionsViewModel.kt::onReportDateRangeSelected`), so a checked session can never silently fall out of scope. If the medtech still taps Generate with nothing selected — e.g. a range with no eligible sessions in it — the sheet shows "No verified samples in the selected range." without calling the use case at all, distinct from `NO_VERIFIED_SAMPLES_MESSAGE`, which means the patient has no verified samples anywhere.
+3. **Pool, don't sum per-session ranges.** Every surviving session's findings are collected into one list and passed to a single `aggregateLpfPerSpecies(all, totalFieldsAcrossSessions)` call (`LpfAggregation.kt::aggregateLpfPerSpecies`) — the headline species table is the pooled range across every included session, not each session's range combined after the fact. The per-session breakdown table keeps each smear's own range visible alongside the pooled figure.
+4. **Resolve the patient header.** `displayName` formatted according to `ReportConfig.kt::PatientNameOption`, age computed at the same instant as `generatedAt`, sex, and the full address via `PsgcBarangay.kt::PsgcBarangay` (falling back to the raw PSGC code when the barangay no longer resolves).
+5. **Build and write.** `PatientReportPdfBuilder.kt::PatientReportPdfBuilder` assembles the pure-data document; `AndroidPatientReportPdfRenderer.kt::AndroidPatientReportPdfRenderer` paginates it — an unbounded session count means the per-session table can span multiple pages, repeating its column headers on each new one.
+6. **Insert and sync.** Same shape as a session report: insert with `supabase_status = pending`, then push row and PDF bytes to `public.reports` / the `reports` Storage bucket (`SyncReportUseCase.kt::SyncReportUseCase`). RLS additionally requires the inserting user to hold a `patient_users` link to the patient (`supabase/migrations/0015_patient_reports.sql`), and `session_ids` to name at least one session, every one of them the writer's own and this patient's (`supabase/migrations/0016_patient_report_own_patient_sessions.sql`).
 
-Every generation mints a new row, exactly like a session report — regenerating for the same
-patient does not update or replace an earlier one.
+Every generation mints a new row, exactly like a session report — regenerating for the same patient does not update or replace an earlier one.
 
-An unrecognised `report_type` pulled from Supabase (a report type this build predates) is
-skipped during sync rather than stored and later mis-decoded (`FetchRemoteDataUseCase`).
+An unrecognised `report_type` pulled from Supabase (a report type this build predates) is skipped during sync rather than stored and later mis-decoded (`FetchRemoteDataUseCase.kt::FetchRemoteDataUseCase`).
 
 ## Storage note
 
-The PDF *does* reach Supabase now — `SyncReportUseCase` uploads it to the `reports` bucket
-alongside the metadata row, and `RestoreReportFilesUseCase` pulls it back down on a device that
-doesn't have it (see [sync](sync.md)). `pdf_file_path` itself stays a device-local path (a
-MediaStore id or absolute path) that no other client can resolve directly — the bucket, not the
-row, is what makes the file portable.
+The PDF *does* reach Supabase now — `SyncReportUseCase.kt::SyncReportUseCase` uploads it to the `reports` bucket alongside the metadata row, and `RestoreReportFilesUseCase.kt::RestoreReportFilesUseCase` pulls it back down on a device that doesn't have it (see [sync](sync.md)). `pdf_file_path` itself stays a device-local path (a MediaStore id or absolute path) that no other client can resolve directly — the bucket, not the row, is what makes the file portable.

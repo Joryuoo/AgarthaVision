@@ -3,6 +3,8 @@ package com.agarthavision.domain.model
 import java.time.Instant
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PatientTest {
@@ -46,6 +48,15 @@ class PatientTest {
     }
 
     // ── ageYears ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `custom codename patient with blank firstname is treated as codename and never masked`() {
+        val customCodename = patient(lastname = "VISION-01-01", firstname = "", middleName = null)
+        assertTrue(customCodename.isCodename)
+        assertEquals("VISION-01-01", customCodename.displayName)
+        assertEquals("VISION-01-01", customCodename.maskedDisplayName)
+        assertFalse(patient().isCodename)
+    }
 
     @Test
     fun `age is one less on the day before a birthday`() {
