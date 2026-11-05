@@ -14,6 +14,7 @@ import java.time.Instant
 data class ReportPdfDocument(
     val header: ReportPdfHeader,
     val speciesRows: List<ReportPdfSpeciesRow>,
+    val appendixSamples: List<ReportPdfSampleItem> = emptyList(),
 )
 
 /**
@@ -32,10 +33,14 @@ data class ReportPdfHeader(
     val fieldsExamined: Int,
     /** The medtech's display name (or email, or user id) who generated the report. */
     val generatedByName: String,
+    val generatedByEmail: String? = null,
+    val organizationName: String? = null,
     val generatedAt: Instant,
     val totalEggsConfirmed: Int,
     /** Canonical species names (per [EggSpecies.canonicalClass]) with at least one confirmed egg. */
     val positiveSpecies: List<String>,
+    val includeSampleImages: Boolean = false,
+    val totalPages: Int = 1,
 )
 
 /**
@@ -58,4 +63,17 @@ data class ReportPdfSpeciesRow(
      * describing the same range differently.
      */
     val descriptor: LpfDescriptor? = null,
+    val burdenLevel: ParasiteBurdenLevel? = null,
+)
+
+/**
+ * One sample item rendered in the appendix section when sample images are included.
+ */
+data class ReportPdfSampleItem(
+    val sampleId: String,
+    val sessionLabel: String?,
+    val fieldIndex: Int,
+    val imagePath: String?,
+    val eggCount: Int,
+    val findingsSummary: String,
 )
