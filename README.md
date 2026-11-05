@@ -36,6 +36,16 @@ The project is a decision-support and preprocessing tool. It does not replace qu
 
 Phase 2 work — owned capture/inference hardware and a fuller self-hosted backend stack — is documented but intentionally deferred; see [`docs/features.md`](docs/features.md).
 
+## Deployment
+
+| Part | Where | Platform |
+| --- | --- | --- |
+| Mobile app (Android 8.0 or newer) | [Release v0.1.0-mvp](https://github.com/Joryuoo/AgarthaVision/releases/tag/v0.1.0-mvp): download `AgarthaVision-v0.1.0-mvp.apk` under Assets | GitHub Releases (signed APK) |
+| Admin console (web) | <https://agarthan-admin.vercel.app> ([repository](https://github.com/kazuretsu/AgarthaVision-Admin)) | Vercel |
+| Backend | Not opened directly: the app and the console sign in and store data through it | Supabase (Auth, Postgres, Storage) |
+
+To install the app, open the release on an Android phone, download the APK, and allow installs from that source when Android asks. APK files are attached to the release, never committed to this repository.
+
 ## Tech Stack
 
 | Area | Technology |
@@ -120,7 +130,7 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
    cp local.properties.example local.properties
    ```
 
-4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. The Supabase key is the publishable one (`sb_publishable_…`, Project Settings → API Keys), never the legacy `anon` JWT. Never commit real keys.
+4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. The Supabase key is the publishable one (`sb_publishable_…`, Project Settings → API Keys), never the legacy `anon` JWT. Never commit real keys. See [Environment variables](#environment-variables) for the full list.
 
 5. Open the project in Android Studio and let Gradle sync, or verify from the command line:
 
@@ -129,6 +139,22 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
    ```
 
 On Windows PowerShell, use `.\gradlew.bat assembleDebug` if the shell does not resolve `./gradlew`.
+
+### Environment variables
+
+The app reads these from `local.properties` (gitignored) into `BuildConfig` at build time (`app/build.gradle.kts`). A debug build uses the `_DEV` values and a release build uses the `_PROD` values. [`local.properties.example`](local.properties.example) is the committed template, with placeholders only.
+
+| Name (`_DEV` and `_PROD`) | What it holds |
+| --- | --- |
+| `SUPABASE_URL` | The Supabase project URL, `https://<project-ref>.supabase.co` |
+| `SUPABASE_ANON_KEY` | The project's publishable key (`sb_publishable_…`) |
+| `TURNSTILE_SITE_KEY` | The Cloudflare Turnstile widget's site key, for the sign-in human check |
+| `TURNSTILE_HOSTNAME` | The hostname that Turnstile widget is registered for |
+| `INFERENCE_URL` | The cloud inference server's base URL |
+
+There is no inference key: the app sends the signed-in user's Supabase access token. Secret keys (the Supabase service-role key, the Turnstile secret) never go in the app.
+
+A signed release build also needs a keystore. Keep it outside the project folder; `.gitignore` ignores `*.keystore` and `*.jks` as a backstop.
 
 ### Common Commands
 

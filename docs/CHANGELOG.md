@@ -9,6 +9,19 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## docs/readme-release-and-env — the README names the deployment and every build variable · 2026-11-05
+
+### README deployment and environment variables · `14zcqntnr07`
+
+- `README.md` gains a Deployment section: the GitHub release that will carry the signed APK
+  (`v0.1.0-mvp`), the admin console URL, and Supabase as the backend.
+- `README.md` lists the five `local.properties` names (each `_DEV` for debug builds and
+  `_PROD` for release builds), matching `local.properties.example` and `app/build.gradle.kts`.
+- `.gitignore` ignores `*.jks` beside `*.keystore`, the format Android Studio saves a new
+  release keystore in.
+
+---
+
 ## fix/inference-verifies-supabase-jwt — cloud inference accepts the app's signed-in user again · 2026-11-05
 
 ### Inference container verifies the Supabase JWT · `14zcqnttfeq`
