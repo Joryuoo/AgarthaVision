@@ -152,6 +152,7 @@ class SessionDetailViewModel @Inject constructor(
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
     private val generationState = MutableStateFlow(GenerationState())
+    private var previewRequestId = 0L
     private val reportSheetState = MutableStateFlow<SessionReportSheetState?>(null)
 
     /** Zero-based reports page; moved by [goToNextReportPage] / [goToPreviousReportPage]. */
@@ -245,6 +246,7 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     fun onOpenGenerateReport() {
+        previewRequestId++
         val currentSession = state.value.session ?: return
         val verifiedCount = currentSession.samples.size
         viewModelScope.launch {
@@ -261,10 +263,12 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     fun onDismissReportSheet() {
+        previewRequestId++
         reportSheetState.value = null
     }
 
     fun onUpdateReportConfig(config: ReportConfig) {
+        previewRequestId++
         reportSheetState.update { current ->
             if (current == null) return@update null
             val isRestrictedCensor = current.isPatientCodename &&
@@ -274,7 +278,7 @@ class SessionDetailViewModel @Inject constructor(
             } else {
                 config
             }
-            current.copy(config = effectiveConfig, previewPdfBytes = null)
+            current.copy(config = effectiveConfig, previewPdfBytes = null, isLoadingPreview = false)
         }
     }
 
@@ -286,11 +290,14 @@ class SessionDetailViewModel @Inject constructor(
 
     fun onPreviewSessionReport() {
         val currentSheet = reportSheetState.value ?: return
+        val requestId = ++previewRequestId
         viewModelScope.launch {
+            if (requestId != previewRequestId) return@launch
             reportSheetState.update { it?.copy(isLoadingPreview = true, error = null) }
             previewSessionReportUseCase(sessionId, currentSheet.config).fold(
                 onSuccess = { pdfBytes ->
                     reportSheetState.update {
+                        if (requestId != previewRequestId) return@update it
                         it?.copy(
                             step = ReportSheetStep.PREVIEW,
                             previewPdfBytes = pdfBytes,
@@ -301,6 +308,7 @@ class SessionDetailViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     reportSheetState.update {
+                        if (requestId != previewRequestId) return@update it
                         it?.copy(
                             isLoadingPreview = false,
                             error = error.message ?: error::class.simpleName,
@@ -312,19 +320,20 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     fun onBackToReportConfig() {
+        previewRequestId++
         reportSheetState.update { current ->
-            current?.copy(step = ReportSheetStep.CONFIGURATION)
+            current?.copy(step = ReportSheetStep.CONFIGURATION, isLoadingPreview = false)
         }
     }
 
     fun onFinalizeSessionReport() {
+        previewRequestId++
         val currentSheet = reportSheetState.value
         val config = currentSheet?.config ?: ReportConfig()
-        val previewBytes = currentSheet?.previewPdfBytes
         viewModelScope.launch {
             reportSheetState.update { it?.copy(isGenerating = true, error = null) }
             generationState.update { it.copy(isGenerating = true, error = null) }
-            generateSessionReportUseCase(sessionId, config, previewBytes).fold(
+            generateSessionReportUseCase(sessionId, config).fold(
                 onSuccess = { report ->
                     generationState.update { GenerationState() }
                     reportSheetState.value = null

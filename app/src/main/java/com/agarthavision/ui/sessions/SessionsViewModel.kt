@@ -133,6 +133,7 @@ class SessionsViewModel @Inject constructor(
     private val observeColleagueNamesUseCase: ObserveColleagueNamesUseCase,
 ) : ViewModel() {
 
+    private var previewRequestId = 0L
     private val internalState = MutableStateFlow(SessionsState())
     private val eventChannel = Channel<SessionsEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
@@ -501,6 +502,7 @@ class SessionsViewModel @Inject constructor(
      * they believe covers a smear it silently drops.
      */
     fun onOpenGenerateReport() {
+        previewRequestId++
         val patientId = patientId ?: return
         val currentPatient = internalState.value.patient
         val displayName = currentPatient?.displayName.orEmpty()
@@ -563,6 +565,7 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun onDismissReportSheet() {
+        previewRequestId++
         internalState.update { it.copy(reportSheet = null) }
     }
 
@@ -576,6 +579,7 @@ class SessionsViewModel @Inject constructor(
      * survive to generation (14zcqntj2uz follow-up).
      */
     fun onReportDateRangeSelected(start: LocalDate?, end: LocalDate?) {
+        previewRequestId++
         val (safeStart, safeEnd) = sanitizeDateRange(start, end)
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
@@ -587,6 +591,7 @@ class SessionsViewModel @Inject constructor(
                     selectedIds = eligible,
                     selectedSessionIds = eligible,
                     previewPdfBytes = null,
+                    isLoadingPreview = false,
                 ),
             )
         }
@@ -615,6 +620,7 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun onSelectAllReportSessions() {
+        previewRequestId++
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
             val eligible = eligibleSessionIds(sheet.candidates, sheet.startDate, sheet.endDate)
@@ -624,12 +630,14 @@ class SessionsViewModel @Inject constructor(
                     selectedIds = updated,
                     selectedSessionIds = updated,
                     previewPdfBytes = null,
+                    isLoadingPreview = false,
                 ),
             )
         }
     }
 
     fun onToggleReportSession(sessionId: String) {
+        previewRequestId++
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
             val selected = sheet.effectiveSelectedIds
@@ -639,12 +647,14 @@ class SessionsViewModel @Inject constructor(
                     selectedIds = updated,
                     selectedSessionIds = updated,
                     previewPdfBytes = null,
+                    isLoadingPreview = false,
                 ),
             )
         }
     }
 
     fun onUpdatePatientReportConfig(config: ReportConfig) {
+        previewRequestId++
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
             val isRestrictedCensor = sheet.isPatientCodename &&
@@ -654,7 +664,9 @@ class SessionsViewModel @Inject constructor(
             } else {
                 config
             }
-            state.copy(reportSheet = sheet.copy(config = effectiveConfig, previewPdfBytes = null))
+            state.copy(
+                reportSheet = sheet.copy(config = effectiveConfig, previewPdfBytes = null, isLoadingPreview = false),
+            )
         }
     }
 
@@ -673,7 +685,9 @@ class SessionsViewModel @Inject constructor(
             endDate = sheet.endDate,
             sessionIds = sheet.effectiveSelectedIds,
         )
+        val requestId = ++previewRequestId
         viewModelScope.launch {
+            if (requestId != previewRequestId) return@launch
             internalState.update { state ->
                 val current = state.reportSheet ?: return@update state
                 state.copy(reportSheet = current.copy(isLoadingPreview = true, error = null))
@@ -681,6 +695,7 @@ class SessionsViewModel @Inject constructor(
             previewPatientReportUseCase(patient, scope, sheet.config).fold(
                 onSuccess = { pdfBytes ->
                     internalState.update { state ->
+                        if (requestId != previewRequestId) return@update state
                         val current = state.reportSheet ?: return@update state
                         state.copy(
                             reportSheet = current.copy(
@@ -694,6 +709,7 @@ class SessionsViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     internalState.update { state ->
+                        if (requestId != previewRequestId) return@update state
                         val current = state.reportSheet ?: return@update state
                         state.copy(
                             reportSheet = current.copy(
@@ -708,13 +724,15 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun onBackToPatientReportConfig() {
+        previewRequestId++
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
-            state.copy(reportSheet = sheet.copy(step = ReportSheetStep.CONFIGURATION))
+            state.copy(reportSheet = sheet.copy(step = ReportSheetStep.CONFIGURATION, isLoadingPreview = false))
         }
     }
 
     fun onGeneratePatientReport() {
+        previewRequestId++
         val patient = patientId
         val sheet = internalState.value.reportSheet
         if (patient == null || sheet == null || sheet.isGenerating) return
@@ -735,7 +753,6 @@ class SessionsViewModel @Inject constructor(
                 patientId = patient,
                 scope = scope,
                 config = sheet.config,
-                preRenderedPdf = sheet.previewPdfBytes,
             )
                 .onSuccess { report ->
                     internalState.update { it.copy(reportSheet = null) }

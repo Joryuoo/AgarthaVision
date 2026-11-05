@@ -64,8 +64,7 @@ internal object PdfChrome {
 
     private const val CARD_PADDING = 16f
     private const val CARD_BOTTOM_SPACING = 24f
-    private const val META_CARD_ROW_HEIGHT = 36f
-    private const val META_CARD_1ROW_HEIGHT = 44f
+    private const val META_VALUE_LINE_HEIGHT = 13f
     private const val HERO_LABEL_TO_CARD_GAP = 10f
     private const val HERO_PADDING_X = 16f
     private const val HERO_PADDING_TOP = 14f
@@ -103,7 +102,6 @@ internal object PdfChrome {
     private const val TEXT_SIZE_HERO_LPF_UNIT = 9f
     private const val TEXT_SIZE_HERO_EMPTY = 10.5f
     private const val TEXT_SIZE_SIGNOFF_HEADER = 9.5f
-    private const val TEXT_SIZE_SIGNOFF_NAME = 13.5f
     private const val TEXT_SIZE_SIGNOFF_SUB = 10.5f
     private const val TEXT_SIZE_FOOTER = 8.5f
     private const val TEXT_SIZE_APPENDIX_FINDING = 10.5f
@@ -252,7 +250,10 @@ internal object PdfChrome {
         cells: List<Pair<String, String>>,
         numRows: Int = 2,
     ): Float {
-        val cardHeight = if (numRows == 1) META_CARD_1ROW_HEIGHT else (META_CARD_ROW_HEIGHT * 2) + CARD_PADDING - 2f
+        val colWidth = (PAGE_WIDTH - 2f * MARGIN) / 2f
+        val maxCellWidth = colWidth - CARD_PADDING * 1.5f
+        val valuePaint = metadataValuePaint()
+        val cardHeight = calculateMetadataCardHeight(cells, numRows, valuePaint)
         val cardRect = RectF(MARGIN, startY, PAGE_WIDTH - MARGIN, startY + cardHeight)
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AppColors.Warm100.toArgb()
@@ -266,22 +267,39 @@ internal object PdfChrome {
             weight = 700,
             letterSpacing = 0.07f,
         )
-        val valuePaint = pdfPaint(
-            color = AppColors.Gray900,
-            textSize = TEXT_SIZE_META_VALUE,
-            weight = 600,
-            letterSpacing = 0.01f,
-        )
-
-        val colWidth = cardRect.width() / 2f
+        val cardColWidth = cardRect.width() / 2f
         val col0X = MARGIN + CARD_PADDING
-        val col1X = MARGIN + colWidth + CARD_PADDING / 2f
-        val maxCellWidth = colWidth - CARD_PADDING * 1.5f
+        val col1X = MARGIN + cardColWidth + CARD_PADDING / 2f
 
         drawMetadataRows(canvas, startY, cells, numRows, col0X, col1X, maxCellWidth, labelPaint, valuePaint)
         val bottomGap = if (numRows == 1) 14f else CARD_BOTTOM_SPACING
         return startY + cardHeight + bottomGap
     }
+
+    fun calculateMetadataCardHeight(
+        cells: List<Pair<String, String>>,
+        numRows: Int,
+        paint: Paint = metadataValuePaint(),
+    ): Float {
+        val maxCellWidth = (PAGE_WIDTH - 2f * MARGIN) / 2f - CARD_PADDING * 1.5f
+        val rowCount = if (numRows == 1) 1 else 2
+        return (0 until rowCount).sumOf { row ->
+            val first = cells.getOrNull(row * 2)?.second.orEmpty()
+            val second = cells.getOrNull(row * 2 + 1)?.second.orEmpty()
+            val valueLines = maxOf(
+                wrapText(paint, first, maxCellWidth).size,
+                wrapText(paint, second, maxCellWidth).size,
+            )
+            (30f + valueLines * META_VALUE_LINE_HEIGHT).toDouble()
+        }.toFloat() + CARD_PADDING - 2f
+    }
+
+    private fun metadataValuePaint() = pdfPaint(
+        color = AppColors.Gray900,
+        textSize = TEXT_SIZE_META_VALUE,
+        weight = 600,
+        letterSpacing = 0.01f,
+    )
 
     @Suppress("LongParameterList")
     private fun drawMetadataRows(
@@ -295,27 +313,24 @@ internal object PdfChrome {
         labelPaint: Paint,
         valuePaint: Paint,
     ) {
-        val row0LabelY = startY + 20f
-        val row0ValY = startY + 35f
-        if (cells.isNotEmpty()) {
-            canvas.drawText(cells[0].first, col0X, row0LabelY, labelPaint)
-            canvas.drawText(truncate(valuePaint, cells[0].second, maxCellWidth), col0X, row0ValY, valuePaint)
-        }
-        if (cells.size > 1) {
-            canvas.drawText(cells[1].first, col1X, row0LabelY, labelPaint)
-            canvas.drawText(truncate(valuePaint, cells[1].second, maxCellWidth), col1X, row0ValY, valuePaint)
-        }
-        if (numRows > 1) {
-            val row1LabelY = startY + 56f
-            val row1ValY = startY + 71f
-            if (cells.size > 2) {
-                canvas.drawText(cells[2].first, col0X, row1LabelY, labelPaint)
-                canvas.drawText(truncate(valuePaint, cells[2].second, maxCellWidth), col0X, row1ValY, valuePaint)
+        var rowTop = startY + 17f
+        val rowCount = if (numRows == 1) 1 else 2
+        repeat(rowCount) { row ->
+            val labelY = rowTop
+            val valueY = labelY + 15f
+            val left = cells.getOrNull(row * 2)
+            val right = cells.getOrNull(row * 2 + 1)
+            left?.let { canvas.drawText(it.first, col0X, labelY, labelPaint) }
+            right?.let { canvas.drawText(it.first, col1X, labelY, labelPaint) }
+            val leftLines = left?.let { wrapText(valuePaint, it.second, maxCellWidth) }.orEmpty()
+            val rightLines = right?.let { wrapText(valuePaint, it.second, maxCellWidth) }.orEmpty()
+            leftLines.forEachIndexed { index, line ->
+                canvas.drawText(line, col0X, valueY + index * META_VALUE_LINE_HEIGHT, valuePaint)
             }
-            if (cells.size > 3) {
-                canvas.drawText(cells[3].first, col1X, row1LabelY, labelPaint)
-                canvas.drawText(truncate(valuePaint, cells[3].second, maxCellWidth), col1X, row1ValY, valuePaint)
+            rightLines.forEachIndexed { index, line ->
+                canvas.drawText(line, col1X, valueY + index * META_VALUE_LINE_HEIGHT, valuePaint)
             }
+            rowTop += 30f + maxOf(leftLines.size, rightLines.size) * META_VALUE_LINE_HEIGHT
         }
     }
 
@@ -541,10 +556,9 @@ internal object PdfChrome {
     }
 
     fun calculateSignoffHeight(organizationName: String?, reviewerEmail: String?): Float {
-        var height = 10f + 32f + 16f + 12f
-        if (!organizationName.isNullOrBlank()) height += 13f
-        if (!reviewerEmail.isNullOrBlank()) height += 13f
-        return height
+        return 10f + 32f + 16f + 12f +
+            (if (!reviewerEmail.isNullOrBlank()) 13f else 0f) +
+            (if (!organizationName.isNullOrBlank()) 13f else 0f)
     }
 
     fun drawReviewerSignoff(
@@ -569,15 +583,7 @@ internal object PdfChrome {
         }
         canvas.drawLine(MARGIN, lineY, MARGIN + SIGNATURE_LINE_WIDTH, lineY, linePaint)
 
-        val namePaint = pdfPaint(
-            color = AppColors.Gray900,
-            textSize = TEXT_SIZE_SIGNOFF_NAME,
-            weight = 700,
-            letterSpacing = 0.01f,
-        )
         val nameY = lineY + 16f
-        canvas.drawText(params.reviewerName, MARGIN, nameY, namePaint)
-
         val subPaint = pdfPaint(
             color = AppColors.Gray500,
             textSize = TEXT_SIZE_SIGNOFF_SUB,
@@ -590,14 +596,14 @@ internal object PdfChrome {
             weight = 400,
             letterSpacing = 0.01f,
         )
-        var currentY = nameY
-        if (!params.organizationName.isNullOrBlank()) {
-            currentY += 13f
-            canvas.drawText(params.organizationName, MARGIN, currentY, subPaint)
-        }
+        var currentY = nameY - 3f
         if (!params.reviewerEmail.isNullOrBlank()) {
             currentY += 13f
             canvas.drawText(params.reviewerEmail, MARGIN, currentY, emailPaint)
+        }
+        if (!params.organizationName.isNullOrBlank()) {
+            currentY += 13f
+            canvas.drawText(params.organizationName, MARGIN, currentY, subPaint)
         }
 
         return currentY + 12f
@@ -655,18 +661,36 @@ internal object PdfChrome {
         canvas.drawRoundRect(cardRect, CORNER_RADIUS_CARD, CORNER_RADIUS_CARD, borderPaint)
 
         val imageSize = cardRect.width() - APPENDIX_CARD_PADDING * 2
+        val contentLeft = cardRect.left + APPENDIX_CARD_PADDING
+        val contentRight = cardRect.right - APPENDIX_CARD_PADDING
+        val maxTextWidth = contentRight - contentLeft
+        val fieldSubPaint = pdfPaint(
+            color = AppColors.Gray500,
+            textSize = TEXT_SIZE_APPENDIX_FIELD,
+            weight = 400,
+            letterSpacing = 0.01f,
+        )
+        val fieldSubText = context.getString(
+            R.string.report_pdf_appendix_field_subtitle,
+            item.sessionLabel ?: "",
+            item.fieldIndex,
+        )
+        val fieldSubLines = wrapText(fieldSubPaint, fieldSubText, maxTextWidth)
+        val extraSubtitleHeight = (fieldSubLines.size - 1) * 9f
+        // Keep every caption line inside the card when the page header reduces row height.
+        val captionHeight = 13f + 11f + extraSubtitleHeight + 5f + 10f
+        val imageHeight = minOf(
+            imageSize - 12f - extraSubtitleHeight,
+            cardRect.height() - APPENDIX_CARD_PADDING * 2f - captionHeight,
+        )
         val imageRect = RectF(
             cardRect.left + APPENDIX_CARD_PADDING,
             cardRect.top + APPENDIX_CARD_PADDING,
             cardRect.right - APPENDIX_CARD_PADDING,
-            cardRect.top + APPENDIX_CARD_PADDING + (imageSize - 12f),
+            cardRect.top + APPENDIX_CARD_PADDING + imageHeight,
         )
 
         drawAppendixImage(context, canvas, item.imagePath, imageRect)
-
-        val contentLeft = cardRect.left + APPENDIX_CARD_PADDING
-        val contentRight = cardRect.right - APPENDIX_CARD_PADDING
-        val maxTextWidth = contentRight - contentLeft
 
         val isBinomial = isBinomialSpecies(item.findingsSummary)
         val summaryPaint = pdfPaint(
@@ -679,25 +703,16 @@ internal object PdfChrome {
         val summaryY = imageRect.bottom + 13f
         canvas.drawText(truncate(summaryPaint, item.findingsSummary, maxTextWidth), contentLeft, summaryY, summaryPaint)
 
-        val fieldSubPaint = pdfPaint(
-            color = AppColors.Gray500,
-            textSize = TEXT_SIZE_APPENDIX_FIELD,
-            weight = 400,
-            letterSpacing = 0.01f,
-        )
-        val fieldSubText = context.getString(
-            R.string.report_pdf_appendix_field_subtitle,
-            item.sessionLabel ?: "",
-            item.fieldIndex,
-        )
         val fieldSubY = summaryY + 11f
-        canvas.drawText(truncate(fieldSubPaint, fieldSubText, maxTextWidth), contentLeft, fieldSubY, fieldSubPaint)
+        fieldSubLines.forEachIndexed { index, line ->
+            canvas.drawText(line, contentLeft, fieldSubY + index * 9f, fieldSubPaint)
+        }
 
         val rulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = AppColors.Gray200.toArgb()
             strokeWidth = RULE_STROKE_WIDTH
         }
-        val dividerY = fieldSubY + 5f
+        val dividerY = fieldSubY + (fieldSubLines.size - 1) * 9f + 5f
         canvas.drawLine(contentLeft, dividerY, contentRight, dividerY, rulePaint)
 
         val eggsPaint = pdfPaint(
@@ -797,12 +812,19 @@ internal object PdfChrome {
         val metaBottom = drawMetadataCard(canvas, titleBottom, metaCells, numRows = 1)
 
         val gridTopY = metaBottom
+        val gridBottomY = PAGE_HEIGHT - FOOTER_RULE_BOTTOM_OFFSET - APPENDIX_GRID_GAP
+        val rowCount = (samplesChunk.size + 1) / 2
+        // Metadata can wrap, so fit the existing page's rows above the footer.
+        val cardHeight = minOf(
+            APPENDIX_CARD_HEIGHT,
+            (gridBottomY - gridTopY - (rowCount - 1) * APPENDIX_GRID_GAP) / rowCount,
+        )
         samplesChunk.forEachIndexed { index, item ->
             val col = index % 2
             val row = index / 2
             val left = MARGIN + col * (APPENDIX_CARD_WIDTH + APPENDIX_GRID_GAP)
-            val top = gridTopY + row * (APPENDIX_CARD_HEIGHT + APPENDIX_GRID_GAP)
-            val cardRect = RectF(left, top, left + APPENDIX_CARD_WIDTH, top + APPENDIX_CARD_HEIGHT)
+            val top = gridTopY + row * (cardHeight + APPENDIX_GRID_GAP)
+            val cardRect = RectF(left, top, left + APPENDIX_CARD_WIDTH, top + cardHeight)
             drawAppendixCard(context, canvas, item, cardRect)
         }
 
@@ -850,8 +872,32 @@ internal object PdfChrome {
         canvas.drawText("$label:", MARGIN, y, labelPaint)
         val valuePaint = pdfPaint(AppColors.Gray900, BODY_TEXT_SIZE, weight = 400, letterSpacing = 0.01f)
         val maxValueWidth = PAGE_WIDTH - MARGIN - LABEL_COLUMN_WIDTH
-        canvas.drawText(truncate(valuePaint, value, maxValueWidth), LABEL_COLUMN_WIDTH, y, valuePaint)
-        return y + LINE_HEIGHT
+        val lines = wrapText(valuePaint, value, maxValueWidth)
+        lines.forEachIndexed { index, line ->
+            canvas.drawText(line, LABEL_COLUMN_WIDTH, y + index * LINE_HEIGHT, valuePaint)
+        }
+        return y + maxOf(1, lines.size) * LINE_HEIGHT
+    }
+
+    fun wrapText(paint: Paint, text: String, maxWidth: Float): List<String> {
+        if (text.isEmpty()) return listOf("")
+        val lines = mutableListOf<String>()
+        text.split('\n').forEach { paragraph ->
+            var remaining = paragraph
+            while (remaining.isNotEmpty()) {
+                val count = paint.breakText(remaining, true, maxWidth, null).coerceAtLeast(1)
+                val cut = wrappedLineEnd(remaining, count)
+                lines += remaining.substring(0, cut).trimEnd()
+                remaining = remaining.substring(cut).trimStart()
+            }
+        }
+        return lines.ifEmpty { listOf("") }
+    }
+
+    private fun wrappedLineEnd(text: String, count: Int): Int {
+        if (count >= text.length) return count
+        val space = text.lastIndexOf(' ', count)
+        return if (space > 0) space else count
     }
 
     fun truncate(paint: Paint, text: String, maxWidth: Float): String {

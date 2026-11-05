@@ -562,8 +562,10 @@
     <string name="report_pdf_subtitle_standard">Microscopy findings</string>
     <string name="report_pdf_subtitle_with_appendix">Microscopy findings · image appendix on page %1$d</string>
     <string name="report_pdf_meta_patient">PATIENT</string>
-    <string name="report_pdf_meta_patient_details">PATIENT DETAILS / BARANGAY</string>
+    <string name="report_pdf_meta_patient_details">PATIENT DETAILS</string>
     <string name="report_pdf_meta_patient_details_address">PATIENT DETAILS / ADDRESS</string>
+    <string name="report_pdf_meta_address">ADDRESS</string>
+    <string name="report_pdf_meta_barangay">BARANGAY</string>
     <string name="report_pdf_meta_session_id">SESSION ID</string>
     <string name="report_pdf_meta_sessions_included">SESSIONS INCLUDED</string>
     <string name="report_pdf_meta_exam_date">EXAM DATE</string>

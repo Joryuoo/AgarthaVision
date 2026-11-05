@@ -106,10 +106,10 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
             .format(document.header.generatedAt)
         val sessionsScope = "${document.header.totalSessions} · ${formatScope(document.header)}"
         val metadataCells = listOf(
-            context.getString(R.string.report_pdf_meta_patient) to document.header.patientDisplayName,
+            context.getString(R.string.report_pdf_meta_patient_details) to
+                "${document.header.patientDisplayName} · $sexLabel · $ageValue",
             context.getString(R.string.report_pdf_meta_sessions_included) to sessionsScope,
-            context.getString(R.string.report_pdf_meta_patient_details_address) to
-                "$sexLabel · $ageValue · ${document.header.address}",
+            context.getString(R.string.report_pdf_meta_address) to document.header.address,
             context.getString(R.string.report_pdf_meta_report_date) to reportDate,
         )
         val metaBottom = PdfChrome.drawMetadataCard(cursor.canvas, titleBottom, metadataCells, numRows = 2)
@@ -127,24 +127,15 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
             speciesRows = document.speciesRows,
             emptyMessage = emptyMessage,
         )
-        cursor.y = PdfChrome.drawMicroscopyHeroCard(context, cursor.canvas, heroParams, metaBottom)
+        cursor.y = metaBottom
+        val heroBlockHeight = HERO_SECTION_TITLE_HEIGHT +
+            PdfChrome.calculateHeroCardHeight(document.speciesRows.size) + HERO_GAP_AFTER
+        cursor.newPageIfNeeded(heroBlockHeight)
+        cursor.y = PdfChrome.drawMicroscopyHeroCard(context, cursor.canvas, heroParams, cursor.y)
     }
 
     private fun drawSessionTable(cursor: PageCursor, rows: List<PatientReportSessionRow>) {
-        val titlePaint = PdfChrome.pdfPaint(
-            color = AppColors.Maroon,
-            textSize = TABLE_TITLE_SIZE,
-            weight = 700,
-            letterSpacing = 0.08f,
-        )
-        val titleBaseline = cursor.y + TABLE_TITLE_BASELINE_OFFSET
-        cursor.canvas.drawText(
-            context.getString(R.string.patient_report_pdf_session_table_title).uppercase(),
-            PdfChrome.MARGIN,
-            titleBaseline,
-            titlePaint,
-        )
-        cursor.y = titleBaseline + TABLE_TITLE_ADVANCE_OFFSET
+        drawSessionTableTitle(cursor)
 
         drawSessionTableHeader(cursor)
 
@@ -175,7 +166,7 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
             style = Paint.Style.FILL
         }
         val warmBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AppColors.Warm50.toArgb()
+            color = AppColors.MaroonTint2.toArgb()
             style = Paint.Style.FILL
         }
 
@@ -183,7 +174,14 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
 
         rows.forEachIndexed { index, row ->
             val findingLines = formatFindingLines(row, findingsPaint, maxFindingsWidth)
-            val rowHeight = maxOf(1, findingLines.size) * ROW_LINE_HEIGHT + ROW_PADDING_VERTICAL
+            val dateLines = PdfChrome.wrapText(cellPaint, dateFormatter.format(row.startedAt), DATE_COLUMN_WIDTH)
+            val sessionLines = PdfChrome.wrapText(
+                cellPaint,
+                row.sessionLabel ?: row.sessionId,
+                SESSION_COLUMN_WIDTH,
+            )
+            val contentLines = maxOf(1, findingLines.size, dateLines.size, sessionLines.size)
+            val rowHeight = contentLines * ROW_LINE_HEIGHT + ROW_PADDING_VERTICAL
             val wasNewPage = cursor.newPageIfNeeded(rowHeight)
             if (wasNewPage) drawSessionTableHeader(cursor)
 
@@ -197,13 +195,12 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
             }
 
             val baseBaseline = cursor.y + ROW_BASELINE_OFFSET
-            cursor.canvas.drawText(dateFormatter.format(row.startedAt), DATE_COLUMN_X, baseBaseline, cellPaint)
-            cursor.canvas.drawText(
-                row.sessionLabel ?: row.sessionId.take(SESSION_ID_TAKE),
-                SESSION_COLUMN_X,
-                baseBaseline,
-                cellPaint,
-            )
+            dateLines.forEachIndexed { lineIdx, line ->
+                cursor.canvas.drawText(line, DATE_COLUMN_X, baseBaseline + lineIdx * ROW_LINE_HEIGHT, cellPaint)
+            }
+            sessionLines.forEachIndexed { lineIdx, line ->
+                cursor.canvas.drawText(line, SESSION_COLUMN_X, baseBaseline + lineIdx * ROW_LINE_HEIGHT, cellPaint)
+            }
             cursor.canvas.drawText(row.sampleCount.toString(), SAMPLES_COLUMN_X, baseBaseline, cellPaint)
             cursor.canvas.drawText(row.eggsConfirmed.toString(), EGGS_COLUMN_X, baseBaseline, cellPaint)
 
@@ -215,6 +212,23 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
             cursor.y += rowHeight
         }
         cursor.y += TABLE_BOTTOM_GAP
+    }
+
+    private fun drawSessionTableTitle(cursor: PageCursor) {
+        val titlePaint = PdfChrome.pdfPaint(
+            color = AppColors.Maroon,
+            textSize = TABLE_TITLE_SIZE,
+            weight = 700,
+            letterSpacing = 0.08f,
+        )
+        val titleBaseline = cursor.y + TABLE_TITLE_BASELINE_OFFSET
+        cursor.canvas.drawText(
+            context.getString(R.string.patient_report_pdf_session_table_title).uppercase(),
+            PdfChrome.MARGIN,
+            titleBaseline,
+            titlePaint,
+        )
+        cursor.y = titleBaseline + TABLE_TITLE_ADVANCE_OFFSET
     }
 
     private fun drawSessionTableHeader(cursor: PageCursor) {
@@ -306,26 +320,6 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
         return splitTextLines(text, paint, maxWidth)
     }
 
-    private fun splitTextLines(text: String, paint: Paint, maxWidth: Float): List<String> {
-        val lines = mutableListOf<String>()
-        var remaining = text
-        while (remaining.isNotEmpty()) {
-            val count = paint.breakText(remaining, true, maxWidth, null)
-            if (count <= 0) {
-                lines.add(remaining)
-                break
-            }
-            val cut = if (count < remaining.length && remaining.lastIndexOf(' ', count) > 0) {
-                remaining.lastIndexOf(' ', count)
-            } else {
-                count
-            }
-            lines.add(remaining.substring(0, cut).trim())
-            remaining = remaining.substring(cut).trim()
-        }
-        return lines
-    }
-
     private fun drawSignoff(cursor: PageCursor, header: PatientReportPdfHeader) {
         val signoffHeight = PdfChrome.calculateSignoffHeight(
             header.organizationName,
@@ -347,9 +341,27 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
 
         simY += LETTERHEAD_SIM_HEIGHT
         simY += TITLE_SIM_HEIGHT
-        simY += META_CARD_SIM_HEIGHT
-        val heroHeight = PdfChrome.calculateHeroCardHeight(document.speciesRows.size)
-        simY += HERO_SECTION_TITLE_HEIGHT + heroHeight + HERO_GAP_AFTER
+        val sexLabel = context.getString(PdfChrome.sexLabelRes(document.header.sex))
+        val ageValue = context.getString(R.string.report_pdf_age_value, document.header.ageYears)
+        val reportDate = DateTimeFormatter.ofPattern(DATE_PATTERN)
+            .withZone(ZoneId.systemDefault())
+            .format(document.header.generatedAt)
+        val metadataCells = listOf(
+            context.getString(R.string.report_pdf_meta_patient_details) to
+                "${document.header.patientDisplayName} · $sexLabel · $ageValue",
+            context.getString(R.string.report_pdf_meta_sessions_included) to
+                "${document.header.totalSessions} · ${formatScope(document.header)}",
+            context.getString(R.string.report_pdf_meta_address) to document.header.address,
+            context.getString(R.string.report_pdf_meta_report_date) to reportDate,
+        )
+        simY += PdfChrome.calculateMetadataCardHeight(metadataCells, numRows = 2) + META_CARD_BOTTOM_GAP
+        val heroBlockHeight = HERO_SECTION_TITLE_HEIGHT +
+            PdfChrome.calculateHeroCardHeight(document.speciesRows.size) + HERO_GAP_AFTER
+        if (simY + heroBlockHeight > maxContentY) {
+            simPage++
+            simY = PdfChrome.MARGIN
+        }
+        simY += heroBlockHeight
 
         val tableHeaderBlockHeight = TABLE_TITLE_BLOCK_HEIGHT + TABLE_HEADER_HEIGHT
         if (simY + tableHeaderBlockHeight > maxContentY) {
@@ -369,7 +381,16 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
 
         document.sessionRows.forEach { row ->
             val findingLines = formatFindingLines(row, findingsPaint, maxFindingsWidth)
-            val rowHeight = maxOf(1, findingLines.size) * ROW_LINE_HEIGHT + ROW_PADDING_VERTICAL
+            val dateText = DateTimeFormatter.ofPattern(SCOPE_DATE_PATTERN).withZone(ZoneId.systemDefault())
+                .format(row.startedAt)
+            val dateLines = PdfChrome.wrapText(findingsPaint, dateText, DATE_COLUMN_WIDTH)
+            val sessionLines = PdfChrome.wrapText(
+                findingsPaint,
+                row.sessionLabel ?: row.sessionId,
+                SESSION_COLUMN_WIDTH,
+            )
+            val contentLines = maxOf(1, findingLines.size, dateLines.size, sessionLines.size)
+            val rowHeight = contentLines * ROW_LINE_HEIGHT + ROW_PADDING_VERTICAL
             if (simY + rowHeight > maxContentY) {
                 simPage++
                 simY = PdfChrome.MARGIN + TABLE_HEADER_HEIGHT + rowHeight
@@ -458,7 +479,6 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
     private companion object {
         private const val DATE_PATTERN = "yyyy-MM-dd HH:mm"
         private const val SCOPE_DATE_PATTERN = "yyyy-MM-dd"
-        private const val SESSION_ID_TAKE = 8
 
         private const val TABLE_TITLE_SIZE = 9.5f
         private const val TABLE_TITLE_BASELINE_OFFSET = 10f
@@ -479,7 +499,9 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
 
         private const val PAGE_RIGHT = PdfChrome.PAGE_WIDTH - PdfChrome.MARGIN
         private const val DATE_COLUMN_X = 52f
+        private const val DATE_COLUMN_WIDTH = 68f
         private const val SESSION_COLUMN_X = 128f
+        private const val SESSION_COLUMN_WIDTH = 88f
         private const val SAMPLES_COLUMN_X = 224f
         private const val EGGS_COLUMN_X = 276f
         private const val FINDINGS_COLUMN_X = 322f
@@ -488,8 +510,28 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
         private const val FOOTER_RESERVE = 16f
         private const val LETTERHEAD_SIM_HEIGHT = 66f
         private const val TITLE_SIM_HEIGHT = 56f
-        private const val META_CARD_SIM_HEIGHT = 110f
+        private const val META_CARD_BOTTOM_GAP = 24f
         private const val HERO_SECTION_TITLE_HEIGHT = 20f
         private const val HERO_GAP_AFTER = 24f
     }
+}
+
+private fun splitTextLines(text: String, paint: Paint, maxWidth: Float): List<String> {
+    val lines = mutableListOf<String>()
+    var remaining = text
+    while (remaining.isNotEmpty()) {
+        val count = paint.breakText(remaining, true, maxWidth, null)
+        if (count <= 0) {
+            lines.add(remaining)
+            break
+        }
+        val cut = if (count < remaining.length && remaining.lastIndexOf(' ', count) > 0) {
+            remaining.lastIndexOf(' ', count)
+        } else {
+            count
+        }
+        lines.add(remaining.substring(0, cut).trim())
+        remaining = remaining.substring(cut).trim()
+    }
+    return lines
 }

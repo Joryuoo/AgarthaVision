@@ -94,11 +94,11 @@ class AndroidReportPdfRenderer @Inject constructor(
             .withZone(ZoneId.systemDefault())
             .format(document.header.generatedAt)
         val metadataCells = listOf(
-            context.getString(R.string.report_pdf_meta_patient) to document.header.patientName,
+            context.getString(R.string.report_pdf_meta_patient_details) to
+                "${document.header.patientName} · $sexLabel · $ageValue",
             context.getString(R.string.report_pdf_meta_session_id) to
                 (document.header.sessionLabel ?: document.header.sessionId),
-            context.getString(R.string.report_pdf_meta_patient_details) to
-                "$sexLabel · $ageValue · ${document.header.barangayLabel}",
+            context.getString(R.string.report_pdf_meta_barangay) to document.header.barangayLabel,
             context.getString(R.string.report_pdf_meta_exam_date) to examDate,
         )
         val metaBottom = PdfChrome.drawMetadataCard(canvas, titleBottom, metadataCells, numRows = 2)

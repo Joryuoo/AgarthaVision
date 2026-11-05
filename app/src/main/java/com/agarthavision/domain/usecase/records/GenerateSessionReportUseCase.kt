@@ -52,7 +52,6 @@ class GenerateSessionReportUseCase @Inject constructor(
     suspend operator fun invoke(
         sessionId: String,
         config: ReportConfig = ReportConfig(),
-        preRenderedPdf: ByteArray? = null,
     ): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
@@ -110,7 +109,8 @@ class GenerateSessionReportUseCase @Inject constructor(
             lpfPerSpecies = lpfPerSpecies,
         )
 
-        val pdfBytes = preRenderedPdf ?: run {
+        // Render the final data and identity together; preview bytes are transient only.
+        val pdfBytes = run {
             val pdfDoc = reportPdfBuilder.build(
                 metadata = metadata,
                 samples = samples,

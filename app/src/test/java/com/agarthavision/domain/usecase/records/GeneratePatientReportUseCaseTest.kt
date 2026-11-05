@@ -323,7 +323,7 @@ class GeneratePatientReportUseCaseTest {
     }
 
     @Test
-    fun `preRenderedPdf skips pdf renderer and writes bytes directly to file store`() = runTest {
+    fun `final pdf identity and data match persisted report`() = runTest {
         val reportRepository = PrFakeReportRepository()
         val fileStore = PrFakeReportFileStore()
         val renderer = PrFakePdfRenderer()
@@ -332,20 +332,22 @@ class GeneratePatientReportUseCaseTest {
             fileStore = fileStore,
             renderer = renderer,
         )
-        val customPdf = byteArrayOf(10, 20, 30, 40)
 
         val result = useCase(
             patientId = "patient-1",
             config = ReportConfig(patientNameOption = PatientNameOption.CENSOR),
-            preRenderedPdf = customPdf,
         )
 
         assertTrue(result.isSuccess)
         val report = result.getOrThrow()
-        assertEquals(0, renderer.renderCallCount)
-        assertNull(renderer.lastDocument)
+        assertEquals(1, renderer.renderCallCount)
+        val document = renderer.lastDocument!!
+        assertEquals(report.id, document.header.reportId)
+        assertEquals(report.generatedAt, document.header.generatedAt)
+        assertEquals(report.patientName, document.header.patientDisplayName)
+        assertEquals(report.totalSamples, document.header.totalSamples)
         assertEquals(report.id, fileStore.lastPatientPdfReportId)
-        assertTrue(customPdf.contentEquals(fileStore.lastPdfBytes))
+        assertTrue("%PDF".toByteArray().contentEquals(fileStore.lastPdfBytes))
         assertEquals("/Documents/AgarthaVision/patient-report-${report.id}.pdf", report.pdfFilePath)
         assertEquals(prPatient().maskedDisplayName, report.patientName)
         assertEquals(report.id, reportRepository.lastInserted?.id)

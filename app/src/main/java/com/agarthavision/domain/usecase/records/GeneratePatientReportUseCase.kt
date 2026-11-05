@@ -63,7 +63,6 @@ class GeneratePatientReportUseCase @Inject constructor(
         patientId: String,
         scope: PatientReportScope = PatientReportScope(),
         config: ReportConfig = ReportConfig(),
-        preRenderedPdf: ByteArray? = null,
     ): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
@@ -103,7 +102,8 @@ class GeneratePatientReportUseCase @Inject constructor(
         val formattedPatientName = formatPatientNameForReport(patient, config.patientNameOption)
         val appendixSamples = buildAppendixSamplesIfNeeded(breakdown, config)
 
-        val pdfBytes = preRenderedPdf ?: run {
+        // Render the final data and identity together; preview bytes are transient only.
+        val pdfBytes = run {
             val pdfDoc = patientReportPdfBuilder.build(
                 reportId = reportId,
                 patientDisplayName = formattedPatientName,

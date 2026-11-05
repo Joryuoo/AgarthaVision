@@ -28,6 +28,8 @@ import com.agarthavision.domain.usecase.records.SessionSamplesResult
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
 import com.agarthavision.domain.usecase.reports.SessionEggCounts
 import com.agarthavision.util.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
+import org.mockito.kotlin.doSuspendableAnswer
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -41,7 +43,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -323,7 +324,7 @@ class SessionDetailViewModelReportSheetTest {
 
             whenever(harness.previewUseCase.invoke(eq(SESSION_ID), any()))
                 .thenReturn(Result.success(fakePdf))
-            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), eq(fakePdf)))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any()))
                 .thenReturn(Result.success(expectedReport))
 
             vm.events.test {
@@ -346,7 +347,7 @@ class SessionDetailViewModelReportSheetTest {
                 assertEquals(SessionDetailEvent.ReportGenerated(pdfPath = PDF_PATH), awaitItem())
             }
 
-            verify(harness.generateUseCase).invoke(eq(SESSION_ID), any(), eq(fakePdf))
+            verify(harness.generateUseCase).invoke(eq(SESSION_ID), any())
         }
 
     @Test
@@ -355,7 +356,7 @@ class SessionDetailViewModelReportSheetTest {
             val patient = makePatient(PATIENT_ID, "Santos", "Maria")
             val (vm, harness) = createViewModel(patient = patient, sampleCount = 10)
 
-            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), anyOrNull()))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any()))
                 .thenReturn(Result.failure(RuntimeException("Disk full error")))
 
             vm.state.test {
@@ -381,7 +382,7 @@ class SessionDetailViewModelReportSheetTest {
             val expectedReport = makeReport(SESSION_ID, PDF_PATH)
             val (vm, harness) = createViewModel(patient = patient, sampleCount = 10)
 
-            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), anyOrNull()))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any()))
                 .thenReturn(Result.success(expectedReport))
 
             vm.events.test {
@@ -397,6 +398,37 @@ class SessionDetailViewModelReportSheetTest {
                     assertNull(finalState.reportSheet)
                 }
                 assertEquals(SessionDetailEvent.ReportGenerated(pdfPath = PDF_PATH), awaitItem())
+            }
+        }
+
+    @Test
+    fun `stale session preview cannot restore patient name after exclusion or reopening`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            for (reopen in listOf(false, true)) {
+                val pending = CompletableDeferred<Result<ByteArray>>()
+                val (vm, harness) = createViewModel(makePatient(PATIENT_ID, "Santos", "Maria"))
+                whenever(harness.previewUseCase.invoke(eq(SESSION_ID), any()))
+                    .doSuspendableAnswer { pending.await() }
+                vm.state.test {
+                    advanceUntilIdle()
+                    vm.onOpenGenerateReport()
+                    advanceUntilIdle()
+                    vm.onPreviewSessionReport()
+                    advanceUntilIdle()
+                    if (reopen) {
+                        vm.onDismissReportSheet()
+                        vm.onOpenGenerateReport()
+                        advanceUntilIdle()
+                    }
+                    vm.onUpdateReportConfig(ReportConfig(patientNameOption = PatientNameOption.EXCLUDE))
+                    pending.complete(Result.success(byteArrayOf(1, 2, 3)))
+                    advanceUntilIdle()
+                    val sheet = expectMostRecentItem().reportSheet!!
+                    assertEquals(PatientNameOption.EXCLUDE, sheet.config.patientNameOption)
+                    assertEquals(ReportSheetStep.CONFIGURATION, sheet.step)
+                    assertNull(sheet.previewPdfBytes)
+                    assertFalse(sheet.isLoadingPreview)
+                }
             }
         }
 

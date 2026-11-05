@@ -48,7 +48,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
+import kotlinx.coroutines.CompletableDeferred
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doThrow
@@ -1681,7 +1682,7 @@ class SessionsViewModelTest {
                 cancelAndIgnoreRemainingEvents()
             }
             // The use case is never reached — there is nothing left to hand it.
-            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any(), any(), anyOrNull())
+            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any(), any())
         }
 
     @Test
@@ -1789,7 +1790,7 @@ class SessionsViewModelTest {
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.success(
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
                     fakePatientReport(),
                 )
             }
@@ -1822,7 +1823,7 @@ class SessionsViewModelTest {
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.failure(
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.failure(
                     IllegalStateException("boom"),
                 )
             }
@@ -1853,7 +1854,7 @@ class SessionsViewModelTest {
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.success(
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
                     fakePatientReport(),
                 )
             }
@@ -1868,7 +1869,7 @@ class SessionsViewModelTest {
             vm.onGeneratePatientReport()
             advanceUntilIdle()
 
-            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any(), any(), anyOrNull())
+            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any(), any())
         }
 
     @Test
@@ -2037,7 +2038,49 @@ class SessionsViewModelTest {
         }
 
     @Test
-    fun `generating patient report passes config and previewPdfBytes to generate use case`() =
+    fun `stale patient preview is discarded after exclusion scope changes or reopening`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            for (change in listOf("config", "scope", "reopen")) {
+                val pending = CompletableDeferred<Result<ByteArray>>()
+                val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                    onBlocking { invoke(any()) } doReturn Result.success(listOf(
+                        PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                    ))
+                }
+                val previewUseCase = mock<PreviewPatientReportUseCase>()
+                whenever(previewUseCase.invoke(any(), any(), any()))
+                    .doSuspendableAnswer { pending.await() }
+                val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, previewUseCase = previewUseCase)
+                vm.state.test {
+                    advanceUntilIdle()
+                    vm.onOpenGenerateReport()
+                    advanceUntilIdle()
+                    vm.onPreviewPatientReport()
+                    advanceUntilIdle()
+                    when (change) {
+                        "config" -> vm.onUpdatePatientReportConfig(
+                            ReportConfig(patientNameOption = PatientNameOption.EXCLUDE),
+                        )
+                        "scope" -> vm.onToggleReportSession("s1")
+                        else -> {
+                            vm.onDismissReportSheet()
+                            vm.onOpenGenerateReport()
+                            advanceUntilIdle()
+                        }
+                    }
+                    pending.complete(Result.success(byteArrayOf(1, 2, 3)))
+                    advanceUntilIdle()
+                    val sheet = expectMostRecentItem().reportSheet!!
+                    assertEquals(ReportSheetStep.CONFIGURATION, sheet.step)
+                    assertNull(sheet.previewPdfBytes)
+                    assertFalse(sheet.isLoadingPreview)
+                    cancelAndIgnoreRemainingEvents()
+                }
+            }
+        }
+
+    @Test
+    fun `generating patient report passes current config to generate use case`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidates = listOf(
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
@@ -2050,7 +2093,7 @@ class SessionsViewModelTest {
                 onBlocking { invoke(any(), any(), any()) } doReturn Result.success(fakePdfBytes)
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.success(
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
                     fakePatientReport(),
                 )
             }
@@ -2078,7 +2121,6 @@ class SessionsViewModelTest {
                 vm.onGeneratePatientReport()
                 advanceUntilIdle()
 
-                val pdfCaptor = argumentCaptor<ByteArray>()
                 verify(generateUseCase).invoke(
                     patientId = eq("patient-1"),
                     scope = eq(
@@ -2089,9 +2131,7 @@ class SessionsViewModelTest {
                         ),
                     ),
                     config = eq(customConfig),
-                    preRenderedPdf = pdfCaptor.capture(),
                 )
-                assertTrue(fakePdfBytes.contentEquals(pdfCaptor.firstValue))
                 assertNull(expectMostRecentItem().reportSheet)
                 cancelAndIgnoreRemainingEvents()
             }
