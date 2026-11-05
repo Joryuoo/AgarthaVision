@@ -2,12 +2,17 @@ package com.agarthavision.data.repository
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
+import androidx.compose.ui.graphics.toArgb
 import com.agarthavision.R
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.PatientReportPdfDocument
 import com.agarthavision.domain.model.PatientReportPdfHeader
 import com.agarthavision.domain.model.PatientReportSessionRow
 import com.agarthavision.domain.repository.PatientReportPdfRenderer
+import com.agarthavision.ui.theme.AppColors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
 import java.time.ZoneId
@@ -21,6 +26,7 @@ import javax.inject.Inject
  * hero card, followed by the paginated per-session breakdown table and reviewer sign-off block.
  * When sample images are included, 2×2 image appendix pages are appended.
  */
+@Suppress("MagicNumber")
 class AndroidPatientReportPdfRenderer @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) : PatientReportPdfRenderer {
@@ -125,61 +131,199 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
     }
 
     private fun drawSessionTable(cursor: PageCursor, rows: List<PatientReportSessionRow>) {
-        cursor.newPageIfNeeded(PdfChrome.LINE_HEIGHT * 2)
-        cursor.y = PdfChrome.drawSectionHeader(
-            cursor.canvas,
-            context.getString(R.string.patient_report_pdf_session_table_title),
-            cursor.y,
+        val titlePaint = PdfChrome.pdfPaint(
+            color = AppColors.Maroon,
+            textSize = TABLE_TITLE_SIZE,
+            weight = 700,
+            letterSpacing = 0.08f,
         )
+        val titleBaseline = cursor.y + TABLE_TITLE_BASELINE_OFFSET
+        cursor.canvas.drawText(
+            context.getString(R.string.patient_report_pdf_session_table_title).uppercase(),
+            PdfChrome.MARGIN,
+            titleBaseline,
+            titlePaint,
+        )
+        cursor.y = titleBaseline + TABLE_TITLE_ADVANCE_OFFSET
+
         drawSessionTableHeader(cursor)
 
         val dateFormatter = DateTimeFormatter.ofPattern(SCOPE_DATE_PATTERN).withZone(ZoneId.systemDefault())
-        val rowPaint = PdfChrome.paintFor(PdfChrome.TextStyle.VALUE)
-        rows.forEach { row ->
-            val wasNewPage = cursor.newPageIfNeeded(PdfChrome.LINE_HEIGHT)
+        val cellPaint = PdfChrome.pdfPaint(
+            color = AppColors.Gray900,
+            textSize = ROW_TEXT_SIZE,
+            weight = 400,
+            letterSpacing = 0.01f,
+        )
+        val findingsPaint = PdfChrome.pdfPaint(
+            color = AppColors.Gray900,
+            textSize = ROW_TEXT_SIZE,
+            weight = 500,
+            letterSpacing = 0.01f,
+        )
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = ROW_BORDER_WIDTH
+        }
+        val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            strokeWidth = ROW_BORDER_WIDTH
+        }
+        val whiteBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.White.toArgb()
+            style = Paint.Style.FILL
+        }
+        val warmBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Warm50.toArgb()
+            style = Paint.Style.FILL
+        }
+
+        val maxFindingsWidth = PAGE_RIGHT - FINDINGS_COLUMN_X - FINDINGS_RIGHT_MARGIN
+
+        rows.forEachIndexed { index, row ->
+            val findingLines = formatFindingLines(row, findingsPaint, maxFindingsWidth)
+            val rowHeight = maxOf(1, findingLines.size) * ROW_LINE_HEIGHT + ROW_PADDING_VERTICAL
+            val wasNewPage = cursor.newPageIfNeeded(rowHeight)
             if (wasNewPage) drawSessionTableHeader(cursor)
 
-            cursor.canvas.drawText(dateFormatter.format(row.startedAt), PdfChrome.MARGIN, cursor.y, rowPaint)
+            val rowRect = RectF(PdfChrome.MARGIN, cursor.y, PAGE_RIGHT, cursor.y + rowHeight)
+            val bgPaint = if (index % 2 == 1) warmBgPaint else whiteBgPaint
+            cursor.canvas.drawRect(rowRect, bgPaint)
+            cursor.canvas.drawRect(rowRect, borderPaint)
+
+            DIVIDER_XS.forEach { divX ->
+                cursor.canvas.drawLine(divX, cursor.y, divX, cursor.y + rowHeight, dividerPaint)
+            }
+
+            val baseBaseline = cursor.y + ROW_BASELINE_OFFSET
+            cursor.canvas.drawText(dateFormatter.format(row.startedAt), DATE_COLUMN_X, baseBaseline, cellPaint)
             cursor.canvas.drawText(
                 row.sessionLabel ?: row.sessionId.take(SESSION_ID_TAKE),
                 SESSION_COLUMN_X,
-                cursor.y,
-                rowPaint,
+                baseBaseline,
+                cellPaint,
             )
-            cursor.canvas.drawText(row.sampleCount.toString(), SAMPLES_COLUMN_X, cursor.y, rowPaint)
-            cursor.canvas.drawText(row.eggsConfirmed.toString(), EGGS_COLUMN_X, cursor.y, rowPaint)
-            val findings = if (row.positiveSpecies.isEmpty()) {
-                context.getString(R.string.patient_report_pdf_session_negative)
-            } else {
-                row.positiveSpecies.joinToString(SEMICOLON_SEPARATOR) { species ->
-                    val density = row.lpfPerSpecies[species]
-                    if (density != null) "$species %d–%d".format(density.min, density.max) else species
-                }
+            cursor.canvas.drawText(row.sampleCount.toString(), SAMPLES_COLUMN_X, baseBaseline, cellPaint)
+            cursor.canvas.drawText(row.eggsConfirmed.toString(), EGGS_COLUMN_X, baseBaseline, cellPaint)
+
+            findingLines.forEachIndexed { lineIdx, line ->
+                val lineBaseline = baseBaseline + lineIdx * ROW_LINE_HEIGHT
+                cursor.canvas.drawText(line, FINDINGS_COLUMN_X, lineBaseline, findingsPaint)
             }
-            val maxFindingsWidth = PdfChrome.PAGE_WIDTH - FINDINGS_COLUMN_X - PdfChrome.MARGIN
-            cursor.canvas.drawText(
-                PdfChrome.truncate(rowPaint, findings, maxFindingsWidth),
-                FINDINGS_COLUMN_X,
-                cursor.y,
-                rowPaint,
-            )
-            cursor.y += PdfChrome.LINE_HEIGHT
+
+            cursor.y += rowHeight
         }
+        cursor.y += TABLE_BOTTOM_GAP
     }
 
     private fun drawSessionTableHeader(cursor: PageCursor) {
-        val headerPaint = PdfChrome.paintFor(PdfChrome.TextStyle.TABLE_HEADER)
-        val dateLabel = context.getString(R.string.patient_report_pdf_column_date)
-        val sessionLabel = context.getString(R.string.patient_report_pdf_column_session)
-        val samplesLabel = context.getString(R.string.patient_report_pdf_column_samples)
-        val eggsLabel = context.getString(R.string.patient_report_pdf_column_eggs)
-        val findingsLabel = context.getString(R.string.patient_report_pdf_column_findings)
-        cursor.canvas.drawText(dateLabel, PdfChrome.MARGIN, cursor.y, headerPaint)
-        cursor.canvas.drawText(sessionLabel, SESSION_COLUMN_X, cursor.y, headerPaint)
-        cursor.canvas.drawText(samplesLabel, SAMPLES_COLUMN_X, cursor.y, headerPaint)
-        cursor.canvas.drawText(eggsLabel, EGGS_COLUMN_X, cursor.y, headerPaint)
-        cursor.canvas.drawText(findingsLabel, FINDINGS_COLUMN_X, cursor.y, headerPaint)
-        cursor.y += PdfChrome.LINE_HEIGHT
+        val headerRect = RectF(PdfChrome.MARGIN, cursor.y, PAGE_RIGHT, cursor.y + TABLE_HEADER_HEIGHT)
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Warm100.toArgb()
+            style = Paint.Style.FILL
+        }
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = ROW_BORDER_WIDTH
+        }
+        val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            strokeWidth = ROW_BORDER_WIDTH
+        }
+        cursor.canvas.drawRect(headerRect, bgPaint)
+        cursor.canvas.drawRect(headerRect, borderPaint)
+
+        DIVIDER_XS.forEach { divX ->
+            cursor.canvas.drawLine(divX, cursor.y, divX, cursor.y + TABLE_HEADER_HEIGHT, dividerPaint)
+        }
+
+        val headerTextPaint = PdfChrome.pdfPaint(
+            color = AppColors.Gray700,
+            textSize = TABLE_HEADER_TEXT_SIZE,
+            weight = 700,
+            letterSpacing = 0.03f,
+        )
+        val textBaseline = cursor.y + TABLE_HEADER_BASELINE_OFFSET
+        cursor.canvas.drawText(
+            context.getString(R.string.patient_report_pdf_column_date),
+            DATE_COLUMN_X,
+            textBaseline,
+            headerTextPaint,
+        )
+        cursor.canvas.drawText(
+            context.getString(R.string.patient_report_pdf_column_session),
+            SESSION_COLUMN_X,
+            textBaseline,
+            headerTextPaint,
+        )
+        cursor.canvas.drawText(
+            context.getString(R.string.patient_report_pdf_column_samples),
+            SAMPLES_COLUMN_X,
+            textBaseline,
+            headerTextPaint,
+        )
+        cursor.canvas.drawText(
+            context.getString(R.string.patient_report_pdf_column_eggs),
+            EGGS_COLUMN_X,
+            textBaseline,
+            headerTextPaint,
+        )
+        cursor.canvas.drawText(
+            context.getString(R.string.patient_report_pdf_column_findings),
+            FINDINGS_COLUMN_X,
+            textBaseline,
+            headerTextPaint,
+        )
+
+        cursor.y += TABLE_HEADER_HEIGHT
+    }
+
+    private fun formatFindingLines(
+        row: PatientReportSessionRow,
+        paint: Paint,
+        maxWidth: Float,
+    ): List<String> {
+        if (row.positiveSpecies.isEmpty()) {
+            return listOf(context.getString(R.string.patient_report_pdf_session_negative))
+        }
+        return row.positiveSpecies.flatMap { species ->
+            formatSpeciesLines(species, row.lpfPerSpecies[species], paint, maxWidth)
+        }
+    }
+
+    private fun formatSpeciesLines(
+        species: String,
+        density: LpfDensity?,
+        paint: Paint,
+        maxWidth: Float,
+    ): List<String> {
+        val text = if (density != null) "$species ${density.min}–${density.max} LPF" else species
+        if (paint.measureText(text) <= maxWidth) {
+            return listOf(text)
+        }
+        return splitTextLines(text, paint, maxWidth)
+    }
+
+    private fun splitTextLines(text: String, paint: Paint, maxWidth: Float): List<String> {
+        val lines = mutableListOf<String>()
+        var remaining = text
+        while (remaining.isNotEmpty()) {
+            val count = paint.breakText(remaining, true, maxWidth, null)
+            if (count <= 0) {
+                lines.add(remaining)
+                break
+            }
+            val cut = if (count < remaining.length && remaining.lastIndexOf(' ', count) > 0) {
+                remaining.lastIndexOf(' ', count)
+            } else {
+                count
+            }
+            lines.add(remaining.substring(0, cut).trim())
+            remaining = remaining.substring(cut).trim()
+        }
+        return lines
     }
 
     private fun drawSignoff(cursor: PageCursor, header: PatientReportPdfHeader) {
@@ -205,24 +349,36 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
         simY += TITLE_SIM_HEIGHT
         simY += META_CARD_SIM_HEIGHT
         val heroHeight = PdfChrome.calculateHeroCardHeight(document.speciesRows.size)
-        simY += HERO_LABEL_TO_CARD_GAP + heroHeight + PdfChrome.SECTION_GAP
+        simY += HERO_SECTION_TITLE_HEIGHT + heroHeight + HERO_GAP_AFTER
 
-        val tableHeaderHeight = PdfChrome.LINE_HEIGHT * 2
-        if (simY + tableHeaderHeight > maxContentY) {
+        val tableHeaderBlockHeight = TABLE_TITLE_BLOCK_HEIGHT + TABLE_HEADER_HEIGHT
+        if (simY + tableHeaderBlockHeight > maxContentY) {
             simPage++
-            simY = PdfChrome.MARGIN + tableHeaderHeight
+            simY = PdfChrome.MARGIN + tableHeaderBlockHeight
         } else {
-            simY += tableHeaderHeight
+            simY += tableHeaderBlockHeight
         }
 
-        document.sessionRows.forEach { _ ->
-            if (simY + PdfChrome.LINE_HEIGHT > maxContentY) {
+        val findingsPaint = PdfChrome.pdfPaint(
+            color = AppColors.Gray900,
+            textSize = ROW_TEXT_SIZE,
+            weight = 500,
+            letterSpacing = 0.01f,
+        )
+        val maxFindingsWidth = PAGE_RIGHT - FINDINGS_COLUMN_X - FINDINGS_RIGHT_MARGIN
+
+        document.sessionRows.forEach { row ->
+            val findingLines = formatFindingLines(row, findingsPaint, maxFindingsWidth)
+            val rowHeight = maxOf(1, findingLines.size) * ROW_LINE_HEIGHT + ROW_PADDING_VERTICAL
+            if (simY + rowHeight > maxContentY) {
                 simPage++
-                simY = PdfChrome.MARGIN + PdfChrome.LINE_HEIGHT * 2
+                simY = PdfChrome.MARGIN + TABLE_HEADER_HEIGHT + rowHeight
             } else {
-                simY += PdfChrome.LINE_HEIGHT
+                simY += rowHeight
             }
         }
+
+        simY += TABLE_BOTTOM_GAP
 
         val signoffHeight = PdfChrome.calculateSignoffHeight(
             document.header.organizationName,
@@ -303,17 +459,37 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
         private const val DATE_PATTERN = "yyyy-MM-dd HH:mm"
         private const val SCOPE_DATE_PATTERN = "yyyy-MM-dd"
         private const val SESSION_ID_TAKE = 8
-        private const val SEMICOLON_SEPARATOR = "; "
 
-        private const val SESSION_COLUMN_X = 110f
-        private const val SAMPLES_COLUMN_X = 230f
-        private const val EGGS_COLUMN_X = 290f
-        private const val FINDINGS_COLUMN_X = 340f
+        private const val TABLE_TITLE_SIZE = 9.5f
+        private const val TABLE_TITLE_BASELINE_OFFSET = 10f
+        private const val TABLE_TITLE_ADVANCE_OFFSET = 10f
+        private const val TABLE_TITLE_BLOCK_HEIGHT = 20f
 
-        private const val FOOTER_RESERVE = 24f
-        private const val LETTERHEAD_SIM_HEIGHT = 52f
-        private const val TITLE_SIM_HEIGHT = 48f
-        private const val META_CARD_SIM_HEIGHT = 84f
-        private const val HERO_LABEL_TO_CARD_GAP = 8f
+        private const val TABLE_HEADER_HEIGHT = 26f
+        private const val TABLE_HEADER_TEXT_SIZE = 9.5f
+        private const val TABLE_HEADER_BASELINE_OFFSET = 17f
+
+        private const val ROW_PADDING_VERTICAL = 10f
+        private const val ROW_LINE_HEIGHT = 14f
+        private const val ROW_BASELINE_OFFSET = 16f
+        private const val ROW_BORDER_WIDTH = 1f
+        private const val ROW_TEXT_SIZE = 9.5f
+        private const val TABLE_BOTTOM_GAP = 16f
+        private const val FINDINGS_RIGHT_MARGIN = 12f
+
+        private const val PAGE_RIGHT = PdfChrome.PAGE_WIDTH - PdfChrome.MARGIN
+        private const val DATE_COLUMN_X = 52f
+        private const val SESSION_COLUMN_X = 128f
+        private const val SAMPLES_COLUMN_X = 224f
+        private const val EGGS_COLUMN_X = 276f
+        private const val FINDINGS_COLUMN_X = 322f
+        private val DIVIDER_XS = floatArrayOf(124f, 220f, 272f, 318f)
+
+        private const val FOOTER_RESERVE = 16f
+        private const val LETTERHEAD_SIM_HEIGHT = 66f
+        private const val TITLE_SIM_HEIGHT = 56f
+        private const val META_CARD_SIM_HEIGHT = 110f
+        private const val HERO_SECTION_TITLE_HEIGHT = 20f
+        private const val HERO_GAP_AFTER = 24f
     }
 }

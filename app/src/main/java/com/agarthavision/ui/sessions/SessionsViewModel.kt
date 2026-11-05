@@ -7,6 +7,7 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.isColleagueRecord
@@ -504,11 +505,13 @@ class SessionsViewModel @Inject constructor(
         val currentPatient = internalState.value.patient
         val displayName = currentPatient?.displayName.orEmpty()
         val maskedName = currentPatient?.maskedDisplayName.orEmpty()
+        val isCodename = currentPatient?.isCodename == true
         internalState.update {
             it.copy(
                 reportSheet = PatientReportSheetState(
                     patientDisplayName = displayName,
                     patientMaskedName = maskedName,
+                    isPatientCodename = isCodename,
                     isLoadingCandidates = true,
                 ),
             )
@@ -517,6 +520,7 @@ class SessionsViewModel @Inject constructor(
             val patient = currentPatient ?: patientRepository.getPatientById(patientId)
             val resolvedDisplay = patient?.displayName ?: displayName
             val resolvedMasked = patient?.maskedDisplayName ?: maskedName
+            val resolvedCodename = patient?.isCodename ?: isCodename
             getPatientReportCandidatesUseCase(patientId)
                 .onSuccess { candidates ->
                     val eligible = eligibleSessionIds(candidates, start = null, end = null)
@@ -525,6 +529,7 @@ class SessionsViewModel @Inject constructor(
                             reportSheet = it.reportSheet?.copy(
                                 patientDisplayName = resolvedDisplay,
                                 patientMaskedName = resolvedMasked,
+                                isPatientCodename = resolvedCodename,
                                 candidates = candidates,
                                 selectedIds = eligible,
                                 selectedSessionIds = eligible,
@@ -532,6 +537,7 @@ class SessionsViewModel @Inject constructor(
                             ) ?: PatientReportSheetState(
                                 patientDisplayName = resolvedDisplay,
                                 patientMaskedName = resolvedMasked,
+                                isPatientCodename = resolvedCodename,
                                 candidates = candidates,
                                 selectedIds = eligible,
                                 selectedSessionIds = eligible,
@@ -544,6 +550,9 @@ class SessionsViewModel @Inject constructor(
                     internalState.update {
                         it.copy(
                             reportSheet = it.reportSheet?.copy(
+                                patientDisplayName = resolvedDisplay,
+                                patientMaskedName = resolvedMasked,
+                                isPatientCodename = resolvedCodename,
                                 isLoadingCandidates = false,
                                 error = error.message ?: "Could not load sessions.",
                             ),
@@ -638,7 +647,14 @@ class SessionsViewModel @Inject constructor(
     fun onUpdatePatientReportConfig(config: ReportConfig) {
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
-            state.copy(reportSheet = sheet.copy(config = config, previewPdfBytes = null))
+            val isRestrictedCensor = sheet.isPatientCodename &&
+                config.patientNameOption == PatientNameOption.CENSOR
+            val effectiveConfig = if (isRestrictedCensor) {
+                config.copy(patientNameOption = sheet.config.patientNameOption)
+            } else {
+                config
+            }
+            state.copy(reportSheet = sheet.copy(config = effectiveConfig, previewPdfBytes = null))
         }
     }
 

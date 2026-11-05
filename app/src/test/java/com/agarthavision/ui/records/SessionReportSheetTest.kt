@@ -14,12 +14,14 @@ import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
@@ -149,6 +151,67 @@ class SessionReportSheetTest {
 
         composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_SHOW).performClick()
         assertEquals(PatientNameOption.SHOW, selectedOption)
+    }
+
+    @Test
+    fun `configuration step clicking censor when patient is codename shows toast and does not invoke callback`() {
+        var updatedConfig: ReportConfig? = null
+        val state = SessionReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            config = ReportConfig(patientNameOption = PatientNameOption.SHOW),
+            isPatientCodename = true,
+            verifiedSampleCount = 10,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SessionReportSheetContent(
+                    state = state,
+                    sessionLabel = "Session #1",
+                    sessionDate = "Oct 24, 2026",
+                    onDismiss = {},
+                    onConfigChange = { updatedConfig = it },
+                    onAcknowledgeWarning = {},
+                    onPreview = {},
+                    onBackToConfig = {},
+                    onGeneratePdf = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR).performClick()
+        assertNull(updatedConfig)
+        assertEquals("Patient uses a codename and cannot be censored.", ShadowToast.getTextOfLatestToast())
+    }
+
+    @Test
+    fun `configuration step clicking censor when patient is not codename updates config`() {
+        var updatedConfig: ReportConfig? = null
+        val state = SessionReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            config = ReportConfig(patientNameOption = PatientNameOption.SHOW),
+            isPatientCodename = false,
+            verifiedSampleCount = 10,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SessionReportSheetContent(
+                    state = state,
+                    sessionLabel = "Session #1",
+                    sessionDate = "Oct 24, 2026",
+                    onDismiss = {},
+                    onConfigChange = { updatedConfig = it },
+                    onAcknowledgeWarning = {},
+                    onPreview = {},
+                    onBackToConfig = {},
+                    onGeneratePdf = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR).performClick()
+        assertEquals(PatientNameOption.CENSOR, updatedConfig?.patientNameOption)
     }
 
     @Test
@@ -375,6 +438,34 @@ class SessionReportSheetTest {
             .assertIsEnabled()
             .performClick()
         assertTrue(previewTriggered)
+    }
+
+    @Test
+    fun `configuration step preview button displays View preview label`() {
+        val state = SessionReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            verifiedSampleCount = 5,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SessionReportSheetContent(
+                    state = state,
+                    sessionLabel = "Session #1",
+                    sessionDate = "Oct 24, 2026",
+                    onDismiss = {},
+                    onConfigChange = {},
+                    onAcknowledgeWarning = {},
+                    onPreview = {},
+                    onBackToConfig = {},
+                    onGeneratePdf = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON)
+            .assertIsDisplayed()
+            .assertTextEquals("View preview")
     }
 
     @Test

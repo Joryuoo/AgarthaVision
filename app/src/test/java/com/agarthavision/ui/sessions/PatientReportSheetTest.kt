@@ -21,12 +21,14 @@ import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
@@ -319,6 +321,69 @@ class PatientReportSheetTest {
     }
 
     @Test
+    fun `configuration step clicking censor when patient is codename shows toast and does not invoke callback`() {
+        var updatedConfig: ReportConfig? = null
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+            isPatientCodename = true,
+            config = ReportConfig(patientNameOption = PatientNameOption.SHOW),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheetContent(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                    onConfigChange = { updatedConfig = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR)
+            .performScrollTo()
+            .performClick()
+        assertNull(updatedConfig)
+        assertEquals("Patient uses a codename and cannot be censored.", ShadowToast.getTextOfLatestToast())
+    }
+
+    @Test
+    fun `configuration step clicking censor when patient is not codename updates config`() {
+        var updatedConfig: ReportConfig? = null
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+            isPatientCodename = false,
+            config = ReportConfig(patientNameOption = PatientNameOption.SHOW),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheetContent(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                    onConfigChange = { updatedConfig = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR)
+            .performScrollTo()
+            .performClick()
+        assertEquals(PatientNameOption.CENSOR, updatedConfig?.patientNameOption)
+    }
+
+    @Test
     fun `configuration step selected patient name caption reflects SHOW option`() {
         val sheetState = PatientReportSheetState(
             step = ReportSheetStep.CONFIGURATION,
@@ -492,6 +557,33 @@ class PatientReportSheetTest {
             .assertIsEnabled()
             .performClick()
         assertTrue(previewCalled)
+    }
+
+    @Test
+    fun `configuration step preview button displays View preview label`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertTextEquals("View preview")
     }
 
     // -------------------------------------------------------------------------

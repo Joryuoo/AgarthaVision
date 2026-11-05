@@ -102,6 +102,54 @@ class SessionDetailViewModelReportSheetTest {
                 assertEquals("", sheet?.patientDisplayName)
                 assertEquals("", sheet?.patientMaskedName)
                 assertEquals(5, sheet?.verifiedSampleCount)
+                assertFalse(sheet?.isPatientCodename ?: true)
+            }
+        }
+
+    @Test
+    fun `onOpenGenerateReport with codenamed patient sets isPatientCodename true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val codenamePatient = makePatient(PATIENT_ID, "M24-001", "")
+            assertTrue(codenamePatient.isCodename)
+            val (vm, _) = createViewModel(patient = codenamePatient, sampleCount = 3)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertTrue(sheet?.isPatientCodename ?: false)
+            }
+        }
+
+    @Test
+    fun `onUpdateReportConfig ignores CENSOR when isPatientCodename is true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val codenamePatient = makePatient(PATIENT_ID, "M24-001", "")
+            val (vm, _) = createViewModel(patient = codenamePatient, sampleCount = 3)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertTrue(sheet?.isPatientCodename ?: false)
+                assertEquals(PatientNameOption.SHOW, sheet?.config?.patientNameOption)
+
+                val censorConfig = ReportConfig(
+                    includeSampleImages = true,
+                    patientNameOption = PatientNameOption.CENSOR,
+                )
+                vm.onUpdateReportConfig(censorConfig)
+                advanceUntilIdle()
+
+                val updatedSheet = expectMostRecentItem().reportSheet
+                assertEquals(PatientNameOption.SHOW, updatedSheet?.config?.patientNameOption)
+                assertTrue(updatedSheet?.config?.includeSampleImages ?: false)
             }
         }
 

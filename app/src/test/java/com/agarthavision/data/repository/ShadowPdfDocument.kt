@@ -27,13 +27,21 @@ class ShadowPdfDocument {
         check(!isClosed) { "document is closed!" }
         val bitmap = Bitmap.createBitmap(pageInfo.pageWidth, pageInfo.pageHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val pageConstructor = PdfDocument.Page::class.java.getDeclaredConstructors().first().apply {
-            isAccessible = true
-        }
-        val page = if (pageConstructor.parameterTypes.size == 2) {
-            pageConstructor.newInstance(canvas, pageInfo) as PdfDocument.Page
+        val twoArgConstructor = PdfDocument.Page::class.java.declaredConstructors
+            .firstOrNull { it.parameterTypes.size == 2 }
+            ?.apply { isAccessible = true }
+        val page = if (twoArgConstructor != null) {
+            twoArgConstructor.newInstance(canvas, pageInfo) as PdfDocument.Page
         } else {
-            pageConstructor.newInstance() as PdfDocument.Page
+            val defaultConstructor = PdfDocument.Page::class.java.declaredConstructors.first().apply {
+                isAccessible = true
+            }
+            (defaultConstructor.newInstance() as PdfDocument.Page).also { p ->
+                runCatching {
+                    val field = PdfDocument.Page::class.java.getDeclaredField("mCanvas").apply { isAccessible = true }
+                    field.set(p, canvas)
+                }
+            }
         }
         currentPage = page
         return page

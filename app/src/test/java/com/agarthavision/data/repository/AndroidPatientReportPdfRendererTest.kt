@@ -284,6 +284,91 @@ class AndroidPatientReportPdfRendererTest {
         }
     }
 
+    @Test
+    fun `render patient report with multi-species session rows wrapping across multiple lines produces valid pdf`() =
+        runTest {
+        val sessionRows = listOf(
+            PatientReportSessionRow(
+                sessionId = "sess-multi-001",
+                sessionLabel = "SESSION 1",
+                startedAt = Instant.parse("2026-11-01T08:00:00Z"),
+                sampleCount = 10,
+                eggsConfirmed = 12,
+                positiveSpecies = listOf(
+                    EggSpecies.ASCARIS.displayName,
+                    EggSpecies.HOOKWORM.displayName,
+                    EggSpecies.TRICHURIS.displayName,
+                    "Atypical Species With Extremely Long Name That Exceeds Findings Column Width",
+                ),
+                lpfPerSpecies = mapOf(
+                    EggSpecies.ASCARIS.displayName to LpfDensity(min = 1, max = 5),
+                    EggSpecies.HOOKWORM.displayName to LpfDensity(min = 0, max = 3),
+                    EggSpecies.TRICHURIS.displayName to LpfDensity(min = 2, max = 4),
+                ),
+            ),
+        )
+        val speciesRows = listOf(
+            ReportPdfSpeciesRow(
+                speciesDisplayName = EggSpecies.ASCARIS.displayName,
+                min = 1,
+                max = 5,
+                descriptor = LpfDescriptor.MODERATE,
+                burdenLevel = ParasiteBurdenLevel.MODERATE,
+            ),
+            ReportPdfSpeciesRow(
+                speciesDisplayName = EggSpecies.HOOKWORM.displayName,
+                min = 0,
+                max = 3,
+                descriptor = LpfDescriptor.FEW,
+                burdenLevel = ParasiteBurdenLevel.LOW,
+            ),
+            ReportPdfSpeciesRow(
+                speciesDisplayName = EggSpecies.TRICHURIS.displayName,
+                min = 2,
+                max = 4,
+                descriptor = LpfDescriptor.MODERATE,
+                burdenLevel = ParasiteBurdenLevel.MODERATE,
+            ),
+        )
+        val doc = createPatientDocument(
+            speciesRows = speciesRows,
+            sessionRows = sessionRows,
+        )
+        val bytes = renderer.render(doc)
+
+        assertValidPdf(bytes, expectedPages = 1)
+    }
+
+    @Test
+    fun `render patient report with many multi-species tall rows paginates cleanly across pages`() =
+        runTest {
+        val sessionRows = (1..15).map { i ->
+            PatientReportSessionRow(
+                sessionId = "sess-%03d".format(i),
+                sessionLabel = "SESSION $i",
+                startedAt = Instant.parse("2026-10-01T08:00:00Z").plusSeconds((i * 86400).toLong()),
+                sampleCount = 5,
+                eggsConfirmed = 6,
+                positiveSpecies = listOf(
+                    EggSpecies.ASCARIS.displayName,
+                    EggSpecies.HOOKWORM.displayName,
+                    EggSpecies.TRICHURIS.displayName,
+                ),
+                lpfPerSpecies = mapOf(
+                    EggSpecies.ASCARIS.displayName to LpfDensity(min = 1, max = 3),
+                    EggSpecies.HOOKWORM.displayName to LpfDensity(min = 0, max = 2),
+                    EggSpecies.TRICHURIS.displayName to LpfDensity(min = 1, max = 1),
+                ),
+            )
+        }
+        val doc = createPatientDocument(
+            sessionRows = sessionRows,
+        )
+        val bytes = renderer.render(doc)
+
+        assertValidPdf(bytes, expectedPages = 2)
+    }
+
     private fun assertValidPdf(bytes: ByteArray, expectedPages: Int) {
         assertNotNull(bytes)
         assertTrue("PDF bytes must not be empty", bytes.isNotEmpty())

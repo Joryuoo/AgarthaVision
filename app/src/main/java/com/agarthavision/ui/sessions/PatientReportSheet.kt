@@ -93,6 +93,7 @@ data class PatientReportSheetState(
     val isLoadingCandidates: Boolean = false,
     val error: String? = null,
     val selectedSessionIds: Set<String> = selectedIds,
+    val isPatientCodename: Boolean = false,
 ) {
     val effectiveSelectedIds: Set<String>
         get() = if (selectedIds.isNotEmpty()) selectedIds else selectedSessionIds
@@ -134,6 +135,7 @@ data class PatientReportSheetState(
         if (isGenerating != other.isGenerating) return false
         if (isLoadingCandidates != other.isLoadingCandidates) return false
         if (error != other.error) return false
+        if (isPatientCodename != other.isPatientCodename) return false
         return true
     }
 
@@ -153,6 +155,7 @@ data class PatientReportSheetState(
         result = 31 * result + isGenerating.hashCode()
         result = 31 * result + isLoadingCandidates.hashCode()
         result = 31 * result + (error?.hashCode() ?: 0)
+        result = 31 * result + isPatientCodename.hashCode()
         return result
     }
 }
@@ -322,6 +325,7 @@ internal fun PatientReportSheetContent(
                     patientNameOption = sheet.config.patientNameOption,
                     onPatientNameOptionChange = { onConfigChange(sheet.config.copy(patientNameOption = it)) },
                     patientNamePreview = patientNamePreview,
+                    isPatientCodename = sheet.isPatientCodename,
                 )
 
                 if (sheet.requiresWarningAck) {
@@ -347,10 +351,10 @@ internal fun PatientReportSheetContent(
                         disabledContainerColor = colors.brandFill.copy(alpha = 0.4f),
                         disabledContentColor = colors.onBrandFill.copy(alpha = 0.7f),
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(49.dp)
                         .testTag(ReportSheetTestTags.PREVIEW_BUTTON),
                 ) {
                     if (sheet.isLoadingPreview) {
@@ -417,10 +421,10 @@ internal fun PatientReportSheetContent(
                         disabledContainerColor = colors.brandFill.copy(alpha = 0.4f),
                         disabledContentColor = colors.onBrandFill.copy(alpha = 0.7f),
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(49.dp)
                         .testTag(ReportSheetTestTags.GENERATE_PDF_BUTTON),
                 ) {
                     if (sheet.isGenerating) {
@@ -445,7 +449,7 @@ internal fun PatientReportSheetContent(
                         containerColor = Color.Transparent,
                         contentColor = colors.textSecondary,
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp)

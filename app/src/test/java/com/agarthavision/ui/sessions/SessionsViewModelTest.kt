@@ -1465,6 +1465,7 @@ class SessionsViewModelTest {
         candidatesUseCase: GetPatientReportCandidatesUseCase = mock(),
         generateUseCase: GeneratePatientReportUseCase = mock(),
         previewUseCase: PreviewPatientReportUseCase = mock(),
+        patient: Patient? = defaultTestPatient,
     ): SessionsViewModel {
         val identityFlow = MutableStateFlow<LocalIdentity?>(LocalIdentity(userId = "u1", email = "user@example.com"))
         val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
@@ -1478,7 +1479,7 @@ class SessionsViewModelTest {
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
             generateSessionLabelUseCase = stubLabelUseCase(),
-            patientRepository = stubPatientRepository(),
+            patientRepository = stubPatientRepository(patient),
             psgcRepository = stubPsgcRepository(),
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
             getPatientReportCandidatesUseCase = candidatesUseCase,
@@ -1513,6 +1514,107 @@ class SessionsViewModelTest {
                 // contribute a finding, and a checked box on it would misrepresent the report.
                 assertEquals(setOf("s1"), sheet.selectedSessionIds)
                 assertFalse(sheet.isLoadingCandidates)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `opening patient report sheet for codenamed patient marks isPatientCodename true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val codenamePatient = defaultTestPatient.copy(lastname = "M24-001", firstname = "")
+            assertTrue(codenamePatient.isCodename)
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                patient = codenamePatient,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertTrue(sheet!!.isPatientCodename)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `updating config with CENSOR is ignored when isPatientCodename is true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val codenamePatient = defaultTestPatient.copy(lastname = "M24-001", firstname = "")
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                patient = codenamePatient,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertTrue(sheet!!.isPatientCodename)
+                assertEquals(PatientNameOption.SHOW, sheet.config.patientNameOption)
+
+                vm.onUpdatePatientReportConfig(
+                    ReportConfig(patientNameOption = PatientNameOption.CENSOR, includeSampleImages = true),
+                )
+                advanceUntilIdle()
+
+                val updatedSheet = expectMostRecentItem().reportSheet
+                assertNotNull(updatedSheet)
+                assertEquals(PatientNameOption.SHOW, updatedSheet!!.config.patientNameOption)
+                assertTrue(updatedSheet.config.includeSampleImages)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `updating config with CENSOR is applied when isPatientCodename is false`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                patient = defaultTestPatient,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertFalse(sheet!!.isPatientCodename)
+
+                vm.onUpdatePatientReportConfig(
+                    ReportConfig(patientNameOption = PatientNameOption.CENSOR),
+                )
+                advanceUntilIdle()
+
+                val updatedSheet = expectMostRecentItem().reportSheet
+                assertNotNull(updatedSheet)
+                assertEquals(PatientNameOption.CENSOR, updatedSheet!!.config.patientNameOption)
                 cancelAndIgnoreRemainingEvents()
             }
         }

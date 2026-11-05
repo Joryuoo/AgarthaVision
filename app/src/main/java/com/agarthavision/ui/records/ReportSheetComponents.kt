@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -93,9 +94,11 @@ fun ReportOptionsSection(
     patientNameOption: PatientNameOption,
     onPatientNameOptionChange: (PatientNameOption) -> Unit,
     patientNamePreview: String,
+    isPatientCodename: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    val context = LocalContext.current
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -183,7 +186,17 @@ fun ReportOptionsSection(
                 PatientNameOptionPill(
                     label = stringResource(R.string.report_option_name_censor),
                     isSelected = patientNameOption == PatientNameOption.CENSOR,
-                    onClick = { onPatientNameOptionChange(PatientNameOption.CENSOR) },
+                    onClick = {
+                        if (isPatientCodename) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.report_option_censor_codename_toast),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        } else {
+                            onPatientNameOptionChange(PatientNameOption.CENSOR)
+                        }
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .testTag(ReportSheetTestTags.PATIENT_NAME_CENSOR),

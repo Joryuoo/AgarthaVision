@@ -7,6 +7,7 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.supabase.RestoreReportFilesUseCase
 import com.agarthavision.domain.model.LpfDensity
+import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.repository.PatientRepository
@@ -254,6 +255,7 @@ class SessionDetailViewModel @Inject constructor(
                 verifiedSampleCount = verifiedCount,
                 patientDisplayName = patient?.displayName.orEmpty(),
                 patientMaskedName = patient?.maskedDisplayName.orEmpty(),
+                isPatientCodename = patient?.isCodename == true,
             )
         }
     }
@@ -264,7 +266,15 @@ class SessionDetailViewModel @Inject constructor(
 
     fun onUpdateReportConfig(config: ReportConfig) {
         reportSheetState.update { current ->
-            current?.copy(config = config, previewPdfBytes = null)
+            if (current == null) return@update null
+            val isRestrictedCensor = current.isPatientCodename &&
+                config.patientNameOption == PatientNameOption.CENSOR
+            val effectiveConfig = if (isRestrictedCensor) {
+                config.copy(patientNameOption = current.config.patientNameOption)
+            } else {
+                config
+            }
+            current.copy(config = effectiveConfig, previewPdfBytes = null)
         }
     }
 

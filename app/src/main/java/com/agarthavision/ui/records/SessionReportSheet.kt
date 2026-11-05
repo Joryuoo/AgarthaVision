@@ -59,6 +59,7 @@ data class SessionReportSheetState(
     val isGenerating: Boolean = false,
     val isWarningAcknowledged: Boolean = false,
     val error: String? = null,
+    val isPatientCodename: Boolean = false,
 ) {
     val requiresWarningAck: Boolean get() = verifiedSampleCount < RECOMMENDED_MIN_SAMPLES
     val canGeneratePdf: Boolean get() = !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
@@ -81,6 +82,7 @@ data class SessionReportSheetState(
         if (isGenerating != other.isGenerating) return false
         if (isWarningAcknowledged != other.isWarningAcknowledged) return false
         if (error != other.error) return false
+        if (isPatientCodename != other.isPatientCodename) return false
         return true
     }
 
@@ -95,6 +97,7 @@ data class SessionReportSheetState(
         result = 31 * result + isGenerating.hashCode()
         result = 31 * result + isWarningAcknowledged.hashCode()
         result = 31 * result + (error?.hashCode() ?: 0)
+        result = 31 * result + isPatientCodename.hashCode()
         return result
     }
 }
@@ -195,6 +198,7 @@ internal fun SessionReportSheetContent(
                     patientNameOption = state.config.patientNameOption,
                     onPatientNameOptionChange = { onConfigChange(state.config.copy(patientNameOption = it)) },
                     patientNamePreview = patientNamePreview,
+                    isPatientCodename = state.isPatientCodename,
                 )
 
                 if (state.requiresWarningAck) {
@@ -247,10 +251,10 @@ internal fun SessionReportSheetContent(
                         disabledContainerColor = colors.brandFill.copy(alpha = 0.4f),
                         disabledContentColor = colors.onBrandFill.copy(alpha = 0.7f),
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(49.dp)
                         .testTag(ReportSheetTestTags.PREVIEW_BUTTON),
                 ) {
                     if (state.isLoadingPreview) {
@@ -276,7 +280,7 @@ internal fun SessionReportSheetContent(
                         containerColor = Color.Transparent,
                         contentColor = colors.textSecondary,
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp)
@@ -342,10 +346,10 @@ internal fun SessionReportSheetContent(
                         disabledContainerColor = colors.brandFill.copy(alpha = 0.4f),
                         disabledContentColor = colors.onBrandFill.copy(alpha = 0.7f),
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(49.dp)
                         .testTag(ReportSheetTestTags.GENERATE_PDF_BUTTON),
                 ) {
                     if (state.isGenerating) {
@@ -371,7 +375,7 @@ internal fun SessionReportSheetContent(
                         containerColor = Color.Transparent,
                         contentColor = colors.textSecondary,
                     ),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp)

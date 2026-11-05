@@ -527,6 +527,7 @@
     <string name="report_option_name_exclude">Exclude</string>
     <string name="report_option_name_selected_prefix">Selected: %1$s</string>
     <string name="report_option_name_excluded">Excluded</string>
+    <string name="report_option_censor_codename_toast">Patient uses a codename and cannot be censored.</string>
     <string name="report_warning_fewer_samples_title">Only %1$d of %2$d recommended samples selected</string>
     <plurals name="report_warning_fewer_samples_title">
         <item quantity="one">Only %1$d of %2$d recommended sample selected</item>
@@ -548,7 +549,7 @@
     <string name="report_preview_images_included">Included</string>
     <string name="report_preview_images_not_included">Not included</string>
     <string name="report_preview_patient_name_label">Patient name</string>
-    <string name="report_action_preview_report">Preview report</string>
+    <string name="report_action_preview_report">View preview</string>
     <string name="report_action_generate_pdf">Generate PDF</string>
     <string name="report_action_edit_options">Edit options</string>
     <string name="report_action_cancel">Cancel</string>
