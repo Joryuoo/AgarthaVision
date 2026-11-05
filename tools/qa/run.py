@@ -27,6 +27,19 @@ def gradle(*args):
     return GRADLE + list(args)
 
 
+def warn_missing_staged_unit_tests(files, changed_files):
+    """Advisory per subsystem, not a coverage/dependency analysis or a commit blocker."""
+    android_source = lambda path: bool(re.fullmatch(r"app/src/(main|debug|release)/(java|kotlin)/.+\.(kt|java)", path))
+    android_test = lambda path: bool(re.fullmatch(r"app/src/test(?:Debug|Release)?/(java|kotlin)/.+Tests?\.(kt|java)", path))
+    inference_source = lambda path: path.startswith("inference/") and path.endswith(".py") and not path.startswith(("inference/tests/", "inference/export/"))
+    inference_test = lambda path: path.startswith("inference/tests/") and path.endswith(".py") and (Path(path).name.startswith("test_") or Path(path).name.endswith("_test.py"))
+    for label, source, test in (("Android", android_source, android_test), ("inference", inference_source, inference_test)):
+        production = [path for path in files if source(path)]
+        if production and not any(test(path) for path in changed_files):
+            print(f"WARNING: Staged {label} production code changes have no added/modified staged {label} unit test files. Commit checks will continue.")
+            print("  Review whether test updates are needed; this file-based reminder does not measure coverage.")
+
+
 def commands(name, output):
     api = [PYTHON, "-m", "pytest", "inference/tests", "-q", f"--junitxml={output / 'api.xml'}"]
     full = gradle(":app:verifyRoborazziDebug")
@@ -44,6 +57,8 @@ def commands(name, output):
     if name == "pre-commit":
         # A changed production symbol can affect tests anywhere. No guessed dependency mapping.
         files = subprocess.check_output(["git", "diff", "--cached", "--name-only", "-z"], cwd=ROOT).decode().split("\0")
+        changed_files = subprocess.check_output(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], cwd=ROOT).decode().split("\0")
+        warn_missing_staged_unit_tests(files, changed_files)
         tests = [f for f in files if f.endswith("Test.kt") and f.startswith("app/src/test/java/")]
         safe = tests and all(not f or f in tests or f.endswith(".md") for f in files)
         selection = sum((["--tests", f.removeprefix("app/src/test/java/").removesuffix(".kt").replace("/", ".")] for f in tests), []) if safe else ["--tests", "com.agarthavision.domain.*"]

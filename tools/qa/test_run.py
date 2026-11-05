@@ -1,6 +1,7 @@
 """Focused stdlib verification of command routing, report provenance and failure handling."""
 import importlib.util
 import html
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -15,6 +16,53 @@ spec.loader.exec_module(qa)
 
 
 class CommandTests(unittest.TestCase):
+    def test_production_without_staged_unit_tests_warns_and_keeps_existing_commands(self):
+        for path, subsystem in (("app/src/main/java/com/agarthavision/Feature.kt", "Android"), ("app/src/release/kotlin/com/agarthavision/Feature.kt", "Android"), ("inference/server.py", "inference")):
+            with self.subTest(path=path), patch.object(qa.subprocess, "check_output", return_value=(path + "\0").encode()), patch("sys.stdout", new_callable=io.StringIO) as output:
+                commands = qa.commands("pre-commit", Path("output"))
+                self.assertIn(f"Staged {subsystem} production code", output.getvalue())
+                self.assertIn("Commit checks will continue", output.getvalue())
+                self.assertIn("does not measure coverage", output.getvalue())
+                self.assertEqual(commands, [qa.gradle(":app:compileDebugKotlin", ":app:ktlintCheck", ":app:detekt"), qa.gradle(":app:testDebugUnitTest", "--tests", "com.agarthavision.domain.*")])
+
+    def test_matching_staged_unit_tests_suppress_only_their_subsystem_warning(self):
+        android = "app/src/main/java/com/agarthavision/Feature.kt"
+        inference = "inference/server.py"
+        cases = [
+            ([android, "app/src/test/java/com/agarthavision/FeatureTest.kt"], []),
+            ([android, "app/src/testDebug/kotlin/com/agarthavision/FeatureTests.kt"], []),
+            ([inference, "inference/tests/test_server.py"], []),
+            ([inference, "inference/tests/server_test.py"], []),
+            ([android, inference, "app/src/test/java/com/agarthavision/FeatureTest.kt"], ["inference"]),
+            ([android, inference, "inference/tests/test_server.py"], ["Android"]),
+        ]
+        for paths, warnings in cases:
+            with self.subTest(paths=paths), patch("sys.stdout", new_callable=io.StringIO) as output:
+                qa.warn_missing_staged_unit_tests(paths, paths)
+                self.assertEqual(output.getvalue().count("WARNING:"), len(warnings))
+                for subsystem in warnings:
+                    self.assertIn(f"Staged {subsystem} production code", output.getvalue())
+
+    def test_docs_config_resources_and_test_only_changes_do_not_warn(self):
+        paths = ["README.md", "docs/commands.md", "app/build.gradle.kts", "app/src/main/AndroidManifest.xml",
+                 "app/src/main/res/values/strings.xml", "inference/requirements.txt", "inference/export/export_mobile.py",
+                 "inference/tests/test_server.py", "inference/tests/conftest.py", "app/src/test/java/FeatureTest.kt",
+                 "app/src/androidTest/java/FeatureTest.kt", "tools/qa/run.py"]
+        with patch("sys.stdout", new_callable=io.StringIO) as output:
+            qa.warn_missing_staged_unit_tests(paths, paths)
+            self.assertEqual(output.getvalue(), "")
+
+    def test_deleted_unstaged_helper_or_device_tests_do_not_suppress_reminder(self):
+        android = "app/src/main/java/com/agarthavision/Feature.kt"
+        cases = [([], []),  # An unstaged test never appears in staged paths.
+                 (["app/src/test/java/com/agarthavision/FeatureTest.kt"], []),  # deleted
+                 (["app/src/test/java/com/agarthavision/Fixture.kt"], ["app/src/test/java/com/agarthavision/Fixture.kt"]),
+                 (["app/src/androidTest/java/FeatureTest.kt"], ["app/src/androidTest/java/FeatureTest.kt"])]
+        for tests, modified_tests in cases:
+            with self.subTest(tests=tests), patch("sys.stdout", new_callable=io.StringIO) as output:
+                qa.warn_missing_staged_unit_tests([android, *tests], [android, *modified_tests])
+                self.assertIn("WARNING: Staged Android", output.getvalue())
+
     def test_pre_push_runs_roborazzi_once_then_api(self):
         commands = qa.commands("pre-push", Path("output"))
         self.assertEqual(len(commands), 2)

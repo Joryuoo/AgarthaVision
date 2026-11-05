@@ -51,6 +51,16 @@ These are a conservative superset (some mapper/repository tests use fakes), not 
 Supabase permissions, migrations or real cloud/model operation. No tests were moved or renamed.
 
 Pre-commit compiles Kotlin, runs `:app:ktlintCheck :app:detekt`, then focused debug JVM tests.
+It first prints a **warning and continues** when staged production code lacks added/modified
+staged unit test files in the same subsystem. Android production means Kotlin/Java under
+`app/src/{main,debug,release}/{java,kotlin}/`; unit test names end in `Test` or `Tests` under
+`app/src/{test,testDebug,testRelease}/{java,kotlin}/`. Inference production means Python under
+`inference/`, excluding `tests/` and export tooling; matching test files under `inference/tests/`
+are named `test_*.py` or `*_test.py`. A staged test deletion, helper/fixture edit or Android
+instrumentation test does not suppress the reminder. Android test changes do not suppress an
+inference reminder (or vice versa). Docs, resources, config and test-only changes do not warn.
+This is a file-based reminder, not proof of coverage or a dependency analysis; it does not change
+test selection, add API tests to pre-commit, or block the commit by itself.
 If the staged changes contain only `app/src/test/java/**/*Test.kt` and Markdown, it selects
 those exact test classes. Any other change uses the documented broader fast fallback:
 `./gradlew :app:testDebugUnitTest --tests 'com.agarthavision.domain.*'`. This deliberately does
