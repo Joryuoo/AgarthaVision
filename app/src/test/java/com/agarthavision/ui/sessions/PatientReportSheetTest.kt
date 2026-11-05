@@ -1,14 +1,21 @@
 package com.agarthavision.ui.sessions
 
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import com.agarthavision.domain.model.PatientNameOption
+import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
+import com.agarthavision.ui.records.ReportSheetStep
+import com.agarthavision.ui.records.ReportSheetTestTags
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import java.time.LocalDate
 import java.time.ZoneId
@@ -23,6 +30,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
+@Suppress("LargeClass")
 class PatientReportSheetTest {
 
     @get:Rule
@@ -234,5 +242,430 @@ class PatientReportSheetTest {
 
         composeRule.onNodeWithText("Select all").performClick()
         assertTrue(selectAllCalled)
+    }
+
+    // -------------------------------------------------------------------------
+    // Configuration step: ReportOptionsSection, warnings, and preview trigger
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `configuration step toggling include images switch invokes callback`() {
+        var updatedConfig: ReportConfig? = null
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            config = ReportConfig(includeSampleImages = false),
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 3)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                    onConfigChange = { updatedConfig = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH)
+            .performScrollTo()
+            .performClick()
+        assertEquals(true, updatedConfig?.includeSampleImages)
+    }
+
+    @Test
+    fun `configuration step selecting name option pills invokes callback`() {
+        var selectedOption: PatientNameOption? = null
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            config = ReportConfig(patientNameOption = PatientNameOption.SHOW),
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 3)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                    onConfigChange = { selectedOption = it.patientNameOption },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR)
+            .performScrollTo()
+            .performClick()
+        assertEquals(PatientNameOption.CENSOR, selectedOption)
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_EXCLUDE)
+            .performScrollTo()
+            .performClick()
+        assertEquals(PatientNameOption.EXCLUDE, selectedOption)
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_SHOW)
+            .performScrollTo()
+            .performClick()
+        assertEquals(PatientNameOption.SHOW, selectedOption)
+    }
+
+    @Test
+    fun `configuration step selected patient name caption reflects SHOW option`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            config = ReportConfig(patientNameOption = PatientNameOption.SHOW),
+            patientDisplayName = "Dela Cruz, Juan M.",
+            patientMaskedName = "D*** C**z, J**n M.",
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 3)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_SELECTED_CAPTION)
+            .performScrollTo()
+            .assertTextEquals("Selected: Dela Cruz, Juan M.")
+    }
+
+    @Test
+    fun `configuration step selected patient name caption reflects CENSOR option`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            config = ReportConfig(patientNameOption = PatientNameOption.CENSOR),
+            patientDisplayName = "Dela Cruz, Juan M.",
+            patientMaskedName = "D*** C**z, J**n M.",
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 3)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_SELECTED_CAPTION)
+            .performScrollTo()
+            .assertTextEquals("Selected: D*** C**z, J**n M.")
+    }
+
+    @Test
+    fun `configuration step selected patient name caption reflects EXCLUDE option`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            config = ReportConfig(patientNameOption = PatientNameOption.EXCLUDE),
+            patientDisplayName = "Dela Cruz, Juan M.",
+            patientMaskedName = "D*** C**z, J**n M.",
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 3)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_SELECTED_CAPTION)
+            .performScrollTo()
+            .assertTextEquals("Selected: Excluded")
+    }
+
+    @Test
+    fun `configuration step sample warning banner displayed when total verified samples less than 10`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            candidates = listOf(
+                makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 3),
+                makeCandidate("s2", "MEIK-M21-S02", verifiedCount = 4),
+            ),
+            selectedSessionIds = setOf("s1", "s2"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_WARNING_BANNER)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Only 7 of 10 recommended samples selected")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `configuration step sample warning banner hidden when total verified samples at least 10`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            candidates = listOf(
+                makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 5),
+                makeCandidate("s2", "MEIK-M21-S02", verifiedCount = 5),
+            ),
+            selectedSessionIds = setOf("s1", "s2"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_WARNING_BANNER).assertDoesNotExist()
+    }
+
+    @Test
+    fun `configuration step preview report button invokes onPreview callback`() {
+        var previewCalled = false
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.CONFIGURATION,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 3)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                    onPreview = { previewCalled = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON)
+            .performScrollTo()
+            .assertIsEnabled()
+            .performClick()
+        assertTrue(previewCalled)
+    }
+
+    // -------------------------------------------------------------------------
+    // Preview step: Viewport, options summary, ack card, and generate PDF
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `preview step displays viewport and options summary card`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            config = ReportConfig(
+                includeSampleImages = true,
+                patientNameOption = PatientNameOption.SHOW,
+            ),
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertIsDisplayed()
+        composeRule.onNodeWithText("Included").assertIsDisplayed()
+        composeRule.onNodeWithText("Show").assertIsDisplayed()
+    }
+
+    @Test
+    fun `preview step warning acknowledgment card displayed and generate disabled when unacknowledged`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 5)),
+            selectedSessionIds = setOf("s1"),
+            isWarningAcknowledged = false,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CHECKBOX).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `preview step tapping acknowledgment checkbox invokes onAcknowledgeWarning`() {
+        var acknowledged = false
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 5)),
+            selectedSessionIds = setOf("s1"),
+            isWarningAcknowledged = false,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                    onAcknowledgeWarning = { acknowledged = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CHECKBOX).performClick()
+        assertTrue(acknowledged)
+    }
+
+    @Test
+    fun `preview step generate button enabled and invokes onGenerate when warning acknowledged`() {
+        var generateCalled = false
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 5)),
+            selectedSessionIds = setOf("s1"),
+            isWarningAcknowledged = true,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = { generateCalled = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+            .assertIsEnabled()
+            .performClick()
+        assertTrue(generateCalled)
+    }
+
+    @Test
+    fun `preview step sample ack card hidden and generate button enabled when samples at least 10`() {
+        var generateCalled = false
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+            isWarningAcknowledged = false,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = { generateCalled = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+            .assertIsEnabled()
+            .performClick()
+        assertTrue(generateCalled)
+    }
+
+    @Test
+    fun `preview step clicking edit options invokes onBackToConfig callback`() {
+        var backCalled = false
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                    onBackToConfig = { backCalled = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.EDIT_OPTIONS_BUTTON).performClick()
+        assertTrue(backCalled)
     }
 }

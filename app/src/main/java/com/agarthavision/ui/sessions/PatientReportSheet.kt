@@ -1,4 +1,4 @@
-@file:Suppress("LongParameterList", "TooManyFunctions")
+@file:Suppress("LongParameterList", "TooManyFunctions", "CyclomaticComplexMethod")
 
 package com.agarthavision.ui.sessions
 
@@ -30,23 +30,26 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
+import com.agarthavision.domain.model.PatientNameOption
+import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
 import com.agarthavision.ui.components.SingleDatePickerDialog
 import com.agarthavision.ui.icons.AgarthaIcons
@@ -54,10 +57,105 @@ import com.agarthavision.ui.icons.Check
 import com.agarthavision.ui.icons.Close
 import com.agarthavision.ui.icons.DateRange
 import com.agarthavision.ui.icons.Description
+import com.agarthavision.ui.records.PdfPreviewViewport
+import com.agarthavision.ui.records.RECOMMENDED_MIN_SAMPLES
+import com.agarthavision.ui.records.ReportOptionsSection
+import com.agarthavision.ui.records.ReportPreviewSummaryCard
+import com.agarthavision.ui.records.ReportSheetStep
+import com.agarthavision.ui.records.ReportSheetTestTags
+import com.agarthavision.ui.records.SampleCountAcknowledgmentCard
+import com.agarthavision.ui.records.SampleCountWarningBanner
 import com.agarthavision.ui.theme.AgarthaTheme
-import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+object PatientReportSheetTestTags {
+    const val SHEET = "patient_report_sheet"
+    const val GENERATE_BUTTON = "patient_report_generate_button"
+    const val SELECT_ALL = "patient_report_select_all"
+}
+
+/** State backing the patient-report bottom sheet reached from this screen (14zcqntj2uz). */
+data class PatientReportSheetState(
+    val patientDisplayName: String = "",
+    val patientMaskedName: String = "",
+    val candidates: List<PatientReportCandidate> = emptyList(),
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null,
+    val selectedIds: Set<String> = emptySet(),
+    val step: ReportSheetStep = ReportSheetStep.CONFIGURATION,
+    val config: ReportConfig = ReportConfig(),
+    val previewPdfBytes: ByteArray? = null,
+    val isLoadingPreview: Boolean = false,
+    val isWarningAcknowledged: Boolean = false,
+    val isGenerating: Boolean = false,
+    val isLoadingCandidates: Boolean = false,
+    val error: String? = null,
+    val selectedSessionIds: Set<String> = selectedIds,
+) {
+    val effectiveSelectedIds: Set<String>
+        get() = if (selectedIds.isNotEmpty()) selectedIds else selectedSessionIds
+
+    val includedSessionCount: Int
+        get() = candidates.count { it.session.id in effectiveSelectedIds }
+
+    val includedSampleCount: Int
+        get() = candidates.filter { it.session.id in effectiveSelectedIds }.sumOf { it.verifiedSampleCount }
+
+    val requiresWarningAck: Boolean
+        get() = includedSampleCount in 1 until RECOMMENDED_MIN_SAMPLES
+
+    val canGeneratePdf: Boolean
+        get() = includedSessionCount > 0 && !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
+
+    val estimatedPages: Int
+        get() = if (config.includeSampleImages && includedSampleCount > 0) {
+            1 + ((includedSampleCount + 3) / 4)
+        } else {
+            1
+        }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is PatientReportSheetState) return false
+        if (patientDisplayName != other.patientDisplayName) return false
+        if (patientMaskedName != other.patientMaskedName) return false
+        if (candidates != other.candidates) return false
+        if (startDate != other.startDate) return false
+        if (endDate != other.endDate) return false
+        if (selectedIds != other.selectedIds) return false
+        if (selectedSessionIds != other.selectedSessionIds) return false
+        if (step != other.step) return false
+        if (config != other.config) return false
+        if (!previewPdfBytes.contentEquals(other.previewPdfBytes)) return false
+        if (isLoadingPreview != other.isLoadingPreview) return false
+        if (isWarningAcknowledged != other.isWarningAcknowledged) return false
+        if (isGenerating != other.isGenerating) return false
+        if (isLoadingCandidates != other.isLoadingCandidates) return false
+        if (error != other.error) return false
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = patientDisplayName.hashCode()
+        result = 31 * result + patientMaskedName.hashCode()
+        result = 31 * result + candidates.hashCode()
+        result = 31 * result + (startDate?.hashCode() ?: 0)
+        result = 31 * result + (endDate?.hashCode() ?: 0)
+        result = 31 * result + selectedIds.hashCode()
+        result = 31 * result + selectedSessionIds.hashCode()
+        result = 31 * result + step.hashCode()
+        result = 31 * result + config.hashCode()
+        result = 31 * result + (previewPdfBytes?.contentHashCode() ?: 0)
+        result = 31 * result + isLoadingPreview.hashCode()
+        result = 31 * result + isWarningAcknowledged.hashCode()
+        result = 31 * result + isGenerating.hashCode()
+        result = 31 * result + isLoadingCandidates.hashCode()
+        result = 31 * result + (error?.hashCode() ?: 0)
+        return result
+    }
+}
 
 /**
  * The "generate patient report" sheet: a date-range filter plus a checklist of the patient's
@@ -77,6 +175,11 @@ internal fun PatientReportSheet(
     onSelectAll: () -> Unit,
     onToggleSession: (String) -> Unit,
     onGenerate: () -> Unit,
+    onConfigChange: (ReportConfig) -> Unit = {},
+    onAcknowledgeWarning: (Boolean) -> Unit = {},
+    onPreview: () -> Unit = {},
+    onBackToConfig: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -95,80 +198,312 @@ internal fun PatientReportSheet(
             )
         },
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        modifier = modifier,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-        ) {
-            PatientReportSheetHeader(
-                candidateCount = sheet.candidates.size,
-                patientName = patientName,
-                onDismiss = onDismiss,
-            )
+        PatientReportSheetContent(
+            sheet = sheet,
+            patientName = patientName,
+            onDismiss = onDismiss,
+            onDateRangeSelected = onDateRangeSelected,
+            onSelectAll = onSelectAll,
+            onToggleSession = onToggleSession,
+            onGenerate = onGenerate,
+            onConfigChange = onConfigChange,
+            onAcknowledgeWarning = onAcknowledgeWarning,
+            onPreview = onPreview,
+            onBackToConfig = onBackToConfig,
+        )
+    }
+}
 
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.patient_report_sheet_date_range),
-                color = colors.textSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp,
-            )
+@Composable
+internal fun PatientReportSheetContent(
+    sheet: PatientReportSheetState,
+    patientName: String? = null,
+    onDismiss: () -> Unit,
+    onDateRangeSelected: (LocalDate?, LocalDate?) -> Unit,
+    onSelectAll: () -> Unit,
+    onToggleSession: (String) -> Unit,
+    onGenerate: () -> Unit,
+    onConfigChange: (ReportConfig) -> Unit = {},
+    onAcknowledgeWarning: (Boolean) -> Unit = {},
+    onPreview: () -> Unit = {},
+    onBackToConfig: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    var previewCurrentPage by remember { mutableIntStateOf(1) }
+    var previewTotalPages by remember { mutableIntStateOf(sheet.estimatedPages) }
 
-            Spacer(Modifier.height(8.dp))
-            PatientReportDateCards(
-                startDate = sheet.startDate,
-                endDate = sheet.endDate,
-                onRangeSelected = onDateRangeSelected,
-            )
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(PatientReportSheetTestTags.SHEET)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+    ) {
+        when (sheet.step) {
+            ReportSheetStep.CONFIGURATION -> {
+                PatientReportSheetHeader(
+                    candidateCount = sheet.candidates.size,
+                    patientName = patientName,
+                    onDismiss = onDismiss,
+                )
 
-            Spacer(Modifier.height(8.dp))
-            PatientReportQuickRanges(
-                startDate = sheet.startDate,
-                endDate = sheet.endDate,
-                onRangeSelected = onDateRangeSelected,
-            )
-
-            Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    text = stringResource(R.string.patient_report_sheet_sessions_title),
+                    text = stringResource(R.string.patient_report_sheet_date_range),
                     color = colors.textSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
                 )
-                Text(
-                    text = stringResource(R.string.patient_report_select_all),
-                    color = colors.accent,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable(onClick = onSelectAll)
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                )
-            }
 
-            Spacer(Modifier.height(8.dp))
-            PatientReportSessionList(sheet = sheet, onToggleSession = onToggleSession)
-
-            sheet.error?.let { error ->
                 Spacer(Modifier.height(8.dp))
-                Text(text = error, color = colors.danger, fontSize = 12.sp)
+                PatientReportDateCards(
+                    startDate = sheet.startDate,
+                    endDate = sheet.endDate,
+                    onRangeSelected = onDateRangeSelected,
+                )
+
+                Spacer(Modifier.height(8.dp))
+                PatientReportQuickRanges(
+                    startDate = sheet.startDate,
+                    endDate = sheet.endDate,
+                    onRangeSelected = onDateRangeSelected,
+                )
+
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.patient_report_sheet_sessions_title),
+                        color = colors.textSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                    )
+                    Text(
+                        text = stringResource(R.string.patient_report_select_all),
+                        color = colors.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable(onClick = onSelectAll)
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .testTag(PatientReportSheetTestTags.SELECT_ALL),
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+                PatientReportSessionList(sheet = sheet, onToggleSession = onToggleSession)
+
+                Spacer(Modifier.height(16.dp))
+                val patientDisplayName = sheet.patientDisplayName.ifBlank { patientName.orEmpty() }
+                val patientNamePreview = when (sheet.config.patientNameOption) {
+                    PatientNameOption.SHOW ->
+                        patientDisplayName.ifBlank { stringResource(R.string.report_option_name_show) }
+                    PatientNameOption.CENSOR ->
+                        sheet.patientMaskedName.ifBlank {
+                            patientDisplayName.ifBlank { stringResource(R.string.report_option_name_censor) }
+                        }
+                    PatientNameOption.EXCLUDE ->
+                        stringResource(R.string.report_option_name_excluded)
+                }
+
+                ReportOptionsSection(
+                    includeImages = sheet.config.includeSampleImages,
+                    onIncludeImagesChange = { onConfigChange(sheet.config.copy(includeSampleImages = it)) },
+                    patientNameOption = sheet.config.patientNameOption,
+                    onPatientNameOptionChange = { onConfigChange(sheet.config.copy(patientNameOption = it)) },
+                    patientNamePreview = patientNamePreview,
+                )
+
+                if (sheet.requiresWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    SampleCountWarningBanner(sampleCount = sheet.includedSampleCount)
+                }
+
+                sheet.error?.let { error ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = error, color = colors.danger, fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(16.dp))
+                PatientReportSummaryText(sheet = sheet)
+
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = onPreview,
+                    enabled = sheet.includedSessionCount > 0 && !sheet.isLoadingPreview && !sheet.isGenerating,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.brandFill,
+                        contentColor = colors.onBrandFill,
+                        disabledContainerColor = colors.brandFill.copy(alpha = 0.4f),
+                        disabledContentColor = colors.onBrandFill.copy(alpha = 0.7f),
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag(ReportSheetTestTags.PREVIEW_BUTTON),
+                ) {
+                    if (sheet.isLoadingPreview) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = colors.onBrandFill,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.report_action_preview_report),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                PatientReportGenerateButton(sheet = sheet, onGenerate = onGenerate)
             }
+            ReportSheetStep.PREVIEW -> {
+                PatientReportPreviewHeader(
+                    currentPage = previewCurrentPage,
+                    totalPages = previewTotalPages,
+                    onDismiss = onDismiss,
+                )
 
-            Spacer(Modifier.height(16.dp))
-            PatientReportSummaryText(sheet = sheet)
+                Spacer(Modifier.height(16.dp))
+                PdfPreviewViewport(
+                    pdfBytes = sheet.previewPdfBytes,
+                    onPageInfoChanged = { cur, tot ->
+                        previewCurrentPage = cur
+                        previewTotalPages = tot
+                    },
+                )
 
-            Spacer(Modifier.height(12.dp))
-            PatientReportGenerateButton(sheet = sheet, onGenerate = onGenerate)
+                Spacer(Modifier.height(12.dp))
+                ReportPreviewSummaryCard(
+                    includeImages = sheet.config.includeSampleImages,
+                    patientNameOption = sheet.config.patientNameOption,
+                )
+
+                if (sheet.requiresWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    SampleCountAcknowledgmentCard(
+                        sampleCount = sheet.includedSampleCount,
+                        acknowledged = sheet.isWarningAcknowledged,
+                        onAcknowledgedChange = onAcknowledgeWarning,
+                    )
+                }
+
+                sheet.error?.let { error ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(text = error, color = colors.danger, fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = onGenerate,
+                    enabled = sheet.canGeneratePdf,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.brandFill,
+                        contentColor = colors.onBrandFill,
+                        disabledContainerColor = colors.brandFill.copy(alpha = 0.4f),
+                        disabledContentColor = colors.onBrandFill.copy(alpha = 0.7f),
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag(ReportSheetTestTags.GENERATE_PDF_BUTTON),
+                ) {
+                    if (sheet.isGenerating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = colors.onBrandFill,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.report_action_generate_pdf),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onBackToConfig,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = colors.textSecondary,
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag(ReportSheetTestTags.EDIT_OPTIONS_BUTTON),
+                ) {
+                    Text(
+                        text = stringResource(R.string.report_action_edit_options),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatientReportPreviewHeader(
+    currentPage: Int,
+    totalPages: Int,
+    onDismiss: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.report_preview_title),
+                color = colors.textPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+            )
+            Text(
+                text = stringResource(
+                    R.string.report_preview_subtitle,
+                    currentPage,
+                    totalPages,
+                ),
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+            )
+        }
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(colors.surfaceMuted),
+        ) {
+            Icon(
+                imageVector = AgarthaIcons.Close,
+                contentDescription = stringResource(R.string.patient_report_sheet_close),
+                tint = colors.textSecondary,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -430,7 +765,7 @@ private fun PatientReportSessionList(sheet: PatientReportSheetState, onToggleSes
                 PatientReportSessionRow(
                     candidate = candidate,
                     sheet = sheet,
-                    isSelected = candidate.session.id in sheet.selectedSessionIds,
+                    isSelected = candidate.session.id in sheet.effectiveSelectedIds,
                     onToggle = { onToggleSession(candidate.session.id) },
                 )
             }
@@ -595,9 +930,9 @@ private fun ReasonTag(
 @Composable
 private fun PatientReportSummaryText(sheet: PatientReportSheetState) {
     val colors = AgarthaTheme.colors
-    val selectedSessionsCount = sheet.selectedSessionIds.size
+    val selectedSessionsCount = sheet.effectiveSelectedIds.size
     val totalSamplesCount = sheet.candidates
-        .filter { it.session.id in sheet.selectedSessionIds }
+        .filter { it.session.id in sheet.effectiveSelectedIds }
         .sumOf { it.verifiedSampleCount }
 
     val sessionsPart = pluralStringResource(
@@ -626,14 +961,14 @@ private fun PatientReportSummaryText(sheet: PatientReportSheetState) {
 @Composable
 private fun PatientReportGenerateButton(sheet: PatientReportSheetState, onGenerate: () -> Unit) {
     val colors = AgarthaTheme.colors
-    val isEnabled = sheet.selectedSessionIds.isNotEmpty() && !sheet.isGenerating
+    val isEnabled = sheet.effectiveSelectedIds.isNotEmpty() && !sheet.isGenerating
     Button(
         onClick = onGenerate,
         enabled = isEnabled,
         modifier = Modifier
             .fillMaxWidth()
             .height(49.dp)
-            .testTag("patient_report_generate_button"),
+            .testTag(PatientReportSheetTestTags.GENERATE_BUTTON),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.brandFill,
