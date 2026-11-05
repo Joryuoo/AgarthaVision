@@ -83,7 +83,7 @@ PK column is `patient_id`. Key details:
 - `sex` maps through `domain/model/Sex.kt` (`M` / `F`).
 - **Codenamed patients.** A patient can be recorded without a name: the codename
   (`ALPHA-M24`, from `domain/patient/CodenameGenerator.kt`) goes in `lastname` and `firstname`
-  is `''`. The New Patient form starts in codename mode. `CodenameGenerator.isCodename` is how
+  is `''`. The New Patient form starts in codename mode. `Patient.isCodename` (`firstname.isBlank() || CodenameGenerator.isCodename(lastname)`) is how
   every screen tells the two apart, so a real surname shaped like `M24` would read as a codename.
 - `birthdate` is stored as epoch millis at Philippine midnight.
 - `supabase_status` is Room-only (`pending` / `synced` / `sync_failed`).
