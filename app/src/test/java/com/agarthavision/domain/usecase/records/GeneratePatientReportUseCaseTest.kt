@@ -8,10 +8,12 @@ import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.PatientReportPdfDocument
 import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.RecordsTotals
+import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.Sample
@@ -43,7 +45,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-// Every fixture below is prefixed `Pr` (Patient Report) — this file shares a package with
+// Every fixture below is prefixed `Pr` (Patient Report) â€” this file shares a package with
 // GenerateSessionReportUseCaseTest.kt, whose own private fixtures (FakeReportRepository,
 // FakePatientRepository, patient(), reportSession(), etc.) would otherwise collide by name
 // with a same-named private top-level declaration here.
@@ -149,7 +151,7 @@ class GeneratePatientReportUseCaseTest {
         assertEquals(2, doc.header.totalSamples)
         assertEquals(3, doc.header.totalEggsConfirmed)
         // Pooled: Ascaris appears in both fields (one per session), 2 in one and 1 in the
-        // other — every field has it, so the pooled range is 1..2, not 0..2.
+        // other â€” every field has it, so the pooled range is 1..2, not 0..2.
         val ascaris = result.getOrThrow().lpfPerSpecies["Ascaris lumbricoides"]!!
         assertEquals(1, ascaris.min)
         assertEquals(2, ascaris.max)
@@ -278,6 +280,75 @@ class GeneratePatientReportUseCaseTest {
         useCase("patient-1")
 
         assertEquals("9999999999", renderer.lastDocument!!.header.address)
+    }
+
+    @Test
+    fun `config patientNameOption formats patient name on report and pdf`() = runTest {
+        val renderer = PrFakePdfRenderer()
+        val patient = prPatient()
+        val useCase = standardUseCase(renderer = renderer, patient = patient)
+
+        val resultShow = useCase("patient-1", config = ReportConfig(patientNameOption = PatientNameOption.SHOW))
+        assertTrue(resultShow.isSuccess)
+        assertEquals(patient.displayName, resultShow.getOrThrow().patientName)
+        assertEquals(patient.displayName, renderer.lastDocument!!.header.patientDisplayName)
+
+        val resultCensor = useCase("patient-1", config = ReportConfig(patientNameOption = PatientNameOption.CENSOR))
+        assertTrue(resultCensor.isSuccess)
+        assertEquals(patient.maskedDisplayName, resultCensor.getOrThrow().patientName)
+        assertEquals(patient.maskedDisplayName, renderer.lastDocument!!.header.patientDisplayName)
+
+        val resultExclude = useCase("patient-1", config = ReportConfig(patientNameOption = PatientNameOption.EXCLUDE))
+        assertTrue(resultExclude.isSuccess)
+        assertEquals("Excluded", resultExclude.getOrThrow().patientName)
+        assertEquals("Excluded", renderer.lastDocument!!.header.patientDisplayName)
+    }
+
+    @Test
+    fun `config includeSampleImages builds pooled appendix samples across sessions in pdf`() = runTest {
+        val renderer = PrFakePdfRenderer()
+        val useCase = standardUseCase(renderer = renderer)
+
+        useCase("patient-1", config = ReportConfig(includeSampleImages = true))
+        val docWithAppendix = renderer.lastDocument!!
+        assertTrue(docWithAppendix.header.includeSampleImages)
+        assertEquals(2, docWithAppendix.appendixSamples.size)
+        assertEquals("Session 1", docWithAppendix.appendixSamples[0].sessionLabel)
+        assertEquals("Session 2", docWithAppendix.appendixSamples[1].sessionLabel)
+
+        useCase("patient-1", config = ReportConfig(includeSampleImages = false))
+        val docNoAppendix = renderer.lastDocument!!
+        assertTrue(!docNoAppendix.header.includeSampleImages)
+        assertTrue(docNoAppendix.appendixSamples.isEmpty())
+    }
+
+    @Test
+    fun `preRenderedPdf skips pdf renderer and writes bytes directly to file store`() = runTest {
+        val reportRepository = PrFakeReportRepository()
+        val fileStore = PrFakeReportFileStore()
+        val renderer = PrFakePdfRenderer()
+        val useCase = standardUseCase(
+            reportRepository = reportRepository,
+            fileStore = fileStore,
+            renderer = renderer,
+        )
+        val customPdf = byteArrayOf(10, 20, 30, 40)
+
+        val result = useCase(
+            patientId = "patient-1",
+            config = ReportConfig(patientNameOption = PatientNameOption.CENSOR),
+            preRenderedPdf = customPdf,
+        )
+
+        assertTrue(result.isSuccess)
+        val report = result.getOrThrow()
+        assertEquals(0, renderer.renderCallCount)
+        assertNull(renderer.lastDocument)
+        assertEquals(report.id, fileStore.lastPatientPdfReportId)
+        assertTrue(customPdf.contentEquals(fileStore.lastPdfBytes))
+        assertEquals("/Documents/AgarthaVision/patient-report-${report.id}.pdf", report.pdfFilePath)
+        assertEquals(prPatient().maskedDisplayName, report.patientName)
+        assertEquals(report.id, reportRepository.lastInserted?.id)
     }
 
     @Suppress("LongParameterList")
@@ -590,9 +661,11 @@ private class PrFakeReportFileStore : ReportFileStore {
 
 private class PrFakePdfRenderer : PatientReportPdfRenderer {
     var lastDocument: PatientReportPdfDocument? = null
+    var renderCallCount: Int = 0
 
     override suspend fun render(document: PatientReportPdfDocument): ByteArray {
         lastDocument = document
+        renderCallCount++
         return byteArrayOf('%'.code.toByte(), 'P'.code.toByte(), 'D'.code.toByte(), 'F'.code.toByte())
     }
 }
