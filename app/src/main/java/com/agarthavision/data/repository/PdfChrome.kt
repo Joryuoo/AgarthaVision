@@ -2,26 +2,35 @@ package com.agarthavision.data.repository
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.Typeface
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
 import com.agarthavision.R
+import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.ReportPdfSampleItem
+import com.agarthavision.domain.model.ReportPdfSpeciesRow
 import com.agarthavision.domain.model.Sex
+import com.agarthavision.ui.records.labelRes
 import com.agarthavision.ui.theme.AppColors
+import java.io.File
 
 /**
  * Shared letterhead, typography, and low-level drawing primitives for the two
  * `android.graphics.pdf.PdfDocument` renderers ([AndroidReportPdfRenderer] session-scoped,
- * [AndroidPatientReportPdfRenderer] patient-scoped, 14zcqntj2uz).
+ * [AndroidPatientReportPdfRenderer] patient-scoped).
  *
- * Extracted rather than duplicated a second time: both documents share the same brand mark,
- * page geometry, and `label: value` line layout, and a renderer-specific tweak to one that
- * quietly skipped the other is exactly the kind of drift C11 (one design system) exists to
- * prevent. Colors come from [AppColors] (C11: no raw hex outside palette files).
+ * All chrome colors are sourced from [AppColors] (C11: no raw hex outside palette files).
  */
+@Suppress("TooManyFunctions", "LargeClass", "MagicNumber")
 internal object PdfChrome {
     // A4 at 72 dpi (points), matching android.graphics.pdf.PdfDocument's unit.
     const val PAGE_WIDTH = 595
@@ -39,6 +48,67 @@ internal object PdfChrome {
     const val LOGO_SIZE = 36f
     const val LOGO_TITLE_GAP = 10f
     private const val LOGO_SUPERSAMPLE = 8
+
+    const val SAMPLES_PER_APPENDIX_PAGE = 4
+    private const val TARGET_IMAGE_PX = 512
+    private const val SHORT_ID_LENGTH = 8
+    private const val LETTERHEAD_LOGO_SIZE = 30f
+    private const val RULE_STROKE_WIDTH = 1f
+
+    private const val CORNER_RADIUS_CARD = 10f
+    private const val CORNER_RADIUS_HERO = 14f
+    private const val CORNER_RADIUS_PILL = 4f
+    private const val CORNER_RADIUS_IMAGE = 6f
+    private const val SIGNATURE_LINE_WIDTH = 180f
+
+    private const val CARD_PADDING = 14f
+    private const val CARD_BOTTOM_SPACING = 14f
+    private const val META_CARD_ROW_HEIGHT = 28f
+    private const val HERO_LABEL_TO_CARD_GAP = 8f
+    private const val HERO_PADDING_X = 16f
+    private const val HERO_PADDING_TOP = 14f
+    private const val HERO_PADDING_BOTTOM = 14f
+    private const val HERO_ROW_HEIGHT = 38f
+    private const val HERO_HEADER_HEIGHT = 111f
+    private const val HERO_EMPTY_HEIGHT = 22f
+
+    private const val APPENDIX_CARD_PADDING = 10f
+    private const val APPENDIX_GRID_GAP = 13f
+    private const val APPENDIX_CARD_WIDTH = 251f
+    private const val APPENDIX_CARD_HEIGHT = 292f
+
+    private const val FOOTER_RULE_BOTTOM_OFFSET = 38f
+    private const val FOOTER_TEXT_BOTTOM_OFFSET = 24f
+
+    private const val WHITE_ALPHA_HERO_LABEL = 0.8f
+    private const val WHITE_ALPHA_HERO_DIVIDER = 0.2f
+    private const val WHITE_ALPHA_HERO_PILL = 0.18f
+    private const val WHITE_ALPHA_HERO_SUBTEXT = 0.85f
+    private const val WHITE_ALPHA_HERO_EMPTY = 0.9f
+
+    private const val TEXT_SIZE_BRAND = 11f
+    private const val TEXT_SIZE_LETTERHEAD_SUB = 8.5f
+    private const val TEXT_SIZE_MAIN_TITLE = 22f
+    private const val TEXT_SIZE_TITLE_SUB = 10.5f
+    private const val TEXT_SIZE_META_LABEL = 8.5f
+    private const val TEXT_SIZE_META_VALUE = 10.5f
+    private const val TEXT_SIZE_HERO_LABEL = 8.5f
+    private const val TEXT_SIZE_HERO_EGGS = 36f
+    private const val TEXT_SIZE_HERO_META = 11f
+    private const val TEXT_SIZE_HERO_SPECIES = 12f
+    private const val TEXT_SIZE_HERO_PILL = 8f
+    private const val TEXT_SIZE_HERO_LPF = 16f
+    private const val TEXT_SIZE_HERO_LPF_UNIT = 9f
+    private const val TEXT_SIZE_HERO_EMPTY = 10.5f
+    private const val TEXT_SIZE_SIGNOFF_HEADER = 8.5f
+    private const val TEXT_SIZE_SIGNOFF_NAME = 11f
+    private const val TEXT_SIZE_SIGNOFF_SUB = 9f
+    private const val TEXT_SIZE_FOOTER = 8.5f
+    private const val TEXT_SIZE_APPENDIX_FINDING = 10.5f
+    private const val TEXT_SIZE_APPENDIX_FIELD = 8f
+    private const val TEXT_SIZE_APPENDIX_EGGS = 8.5f
+    private const val TEXT_SIZE_PLACEHOLDER_TITLE = 8.5f
+    private const val TEXT_SIZE_PLACEHOLDER_SUB = 7.5f
 
     const val ELLIPSIS = "…"
 
@@ -66,34 +136,640 @@ internal object PdfChrome {
         null -> R.string.patients_sex_unknown
     }
 
-    /**
-     * Draws the AgarthaVision brand mark at the left margin, vertically centered against the
-     * title's baseline band, and returns the X the title should start at. The vector keeps its
-     * own colors — it's a brand drawable, not something to tint — so a missing drawable is the
-     * only failure mode, and it's handled by simply leaving the title at [MARGIN].
-     */
     fun drawLogo(context: Context, canvas: Canvas): Float {
-        val logo = ContextCompat.getDrawable(context, R.drawable.ic_logo) ?: return MARGIN
-        // Rasterize the vector supersampled, then draw it down into the 36pt box. Drawing a
-        // VectorDrawable straight onto the page canvas bakes it at ~72 dpi and looks rough; a
-        // LOGO_SUPERSAMPLE× bitmap embeds a crisp mark that holds up zoomed and printed.
-        val sizePx = (LOGO_SIZE * LOGO_SUPERSAMPLE).toInt()
+        val destination = RectF(MARGIN, MARGIN, MARGIN + LOGO_SIZE, MARGIN + LOGO_SIZE)
+        drawLogo(context, canvas, destination)
+        return MARGIN + LOGO_SIZE + LOGO_TITLE_GAP
+    }
+
+    fun drawLogo(context: Context, canvas: Canvas, destination: RectF) {
+        val logo = ContextCompat.getDrawable(context, R.drawable.ic_logo) ?: return
+        val sizePx = (destination.width() * LOGO_SUPERSAMPLE).toInt()
+        if (sizePx <= 0) return
         val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         logo.setBounds(0, 0, sizePx, sizePx)
         logo.draw(Canvas(bitmap))
-        val destination = RectF(MARGIN, MARGIN, MARGIN + LOGO_SIZE, MARGIN + LOGO_SIZE)
         val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
         canvas.drawBitmap(bitmap, null, destination, logoPaint)
         bitmap.recycle()
-        return MARGIN + LOGO_SIZE + LOGO_TITLE_GAP
     }
+
+    fun drawLetterhead(
+        context: Context,
+        canvas: Canvas,
+        organizationName: String?,
+        startY: Float = MARGIN,
+    ): Float {
+        val logoDest = RectF(MARGIN, startY, MARGIN + LETTERHEAD_LOGO_SIZE, startY + LETTERHEAD_LOGO_SIZE)
+        drawLogo(context, canvas, logoDest)
+
+        val textStartX = MARGIN + LETTERHEAD_LOGO_SIZE + 10f
+        val brandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Maroon.toArgb()
+            textSize = TEXT_SIZE_BRAND
+            isFakeBoldText = true
+        }
+        canvas.drawText(context.getString(R.string.report_pdf_brand_title), textStartX, startY + 12f, brandPaint)
+
+        val subtitle = if (!organizationName.isNullOrBlank()) {
+            context.getString(R.string.report_pdf_letterhead_subtitle_with_org, organizationName.uppercase())
+        } else {
+            context.getString(R.string.report_pdf_letterhead_subtitle_default)
+        }
+        val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray500.toArgb()
+            textSize = TEXT_SIZE_LETTERHEAD_SUB
+        }
+        canvas.drawText(subtitle, textStartX, startY + 24f, subPaint)
+
+        val ruleY = startY + LETTERHEAD_LOGO_SIZE + 8f
+        val rulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            strokeWidth = RULE_STROKE_WIDTH
+        }
+        canvas.drawLine(MARGIN, ruleY, PAGE_WIDTH - MARGIN, ruleY, rulePaint)
+        return ruleY + 14f
+    }
+
+    fun drawReportTitle(canvas: Canvas, title: String, subtitle: String, startY: Float): Float {
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Maroon.toArgb()
+            textSize = TEXT_SIZE_MAIN_TITLE
+            isFakeBoldText = true
+        }
+        val titleBaseline = startY + 18f
+        canvas.drawText(title, MARGIN, titleBaseline, titlePaint)
+
+        val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray500.toArgb()
+            textSize = TEXT_SIZE_TITLE_SUB
+        }
+        val subBaseline = titleBaseline + 16f
+        canvas.drawText(subtitle, MARGIN, subBaseline, subPaint)
+        return subBaseline + 14f
+    }
+
+    fun drawMetadataCard(
+        canvas: Canvas,
+        startY: Float,
+        cells: List<Pair<String, String>>,
+        numRows: Int = 2,
+    ): Float {
+        val cardHeight = if (numRows == 1) {
+            META_CARD_ROW_HEIGHT + CARD_PADDING
+        } else {
+            (META_CARD_ROW_HEIGHT * 2) + CARD_PADDING
+        }
+        val cardRect = RectF(MARGIN, startY, PAGE_WIDTH - MARGIN, startY + cardHeight)
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray100.toArgb()
+            style = Paint.Style.FILL
+        }
+        canvas.drawRoundRect(cardRect, CORNER_RADIUS_CARD, CORNER_RADIUS_CARD, bgPaint)
+
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray500.toArgb()
+            textSize = TEXT_SIZE_META_LABEL
+            isFakeBoldText = true
+        }
+        val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray900.toArgb()
+            textSize = TEXT_SIZE_META_VALUE
+            isFakeBoldText = true
+        }
+
+        val colWidth = cardRect.width() / 2f
+        val col0X = MARGIN + CARD_PADDING
+        val col1X = MARGIN + colWidth + CARD_PADDING / 2f
+        val maxCellWidth = colWidth - CARD_PADDING * 1.5f
+
+        drawMetadataRows(canvas, startY, cells, numRows, col0X, col1X, maxCellWidth, labelPaint, valuePaint)
+        return startY + cardHeight + CARD_BOTTOM_SPACING
+    }
+
+    @Suppress("LongParameterList")
+    private fun drawMetadataRows(
+        canvas: Canvas,
+        startY: Float,
+        cells: List<Pair<String, String>>,
+        numRows: Int,
+        col0X: Float,
+        col1X: Float,
+        maxCellWidth: Float,
+        labelPaint: Paint,
+        valuePaint: Paint,
+    ) {
+        val row0LabelY = startY + 15f
+        val row0ValY = row0LabelY + 13f
+        if (cells.isNotEmpty()) {
+            canvas.drawText(cells[0].first, col0X, row0LabelY, labelPaint)
+            canvas.drawText(truncate(valuePaint, cells[0].second, maxCellWidth), col0X, row0ValY, valuePaint)
+        }
+        if (cells.size > 1) {
+            canvas.drawText(cells[1].first, col1X, row0LabelY, labelPaint)
+            canvas.drawText(truncate(valuePaint, cells[1].second, maxCellWidth), col1X, row0ValY, valuePaint)
+        }
+        if (numRows > 1) {
+            val row1LabelY = row0ValY + 15f
+            val row1ValY = row1LabelY + 13f
+            if (cells.size > 2) {
+                canvas.drawText(cells[2].first, col0X, row1LabelY, labelPaint)
+                canvas.drawText(truncate(valuePaint, cells[2].second, maxCellWidth), col0X, row1ValY, valuePaint)
+            }
+            if (cells.size > 3) {
+                canvas.drawText(cells[3].first, col1X, row1LabelY, labelPaint)
+                canvas.drawText(truncate(valuePaint, cells[3].second, maxCellWidth), col1X, row1ValY, valuePaint)
+            }
+        }
+    }
+
+    fun calculateHeroCardHeight(speciesRowCount: Int): Float {
+        val contentHeight = if (speciesRowCount == 0) {
+            HERO_EMPTY_HEIGHT
+        } else {
+            speciesRowCount * HERO_ROW_HEIGHT
+        }
+        return HERO_HEADER_HEIGHT + contentHeight + HERO_PADDING_BOTTOM
+    }
+
+    fun drawMicroscopyHeroCard(
+        context: Context,
+        canvas: Canvas,
+        params: HeroCardParams,
+        startY: Float,
+    ): Float {
+        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Maroon.toArgb()
+            textSize = TEXT_SIZE_HERO_LABEL
+            isFakeBoldText = true
+        }
+        canvas.drawText(context.getString(R.string.report_pdf_hero_section_title), MARGIN, startY, headerPaint)
+
+        val cardTop = startY + HERO_LABEL_TO_CARD_GAP
+        val cardHeight = calculateHeroCardHeight(params.speciesRows.size)
+        val cardRect = RectF(MARGIN, cardTop, PAGE_WIDTH - MARGIN, cardTop + cardHeight)
+
+        val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                cardRect.left,
+                cardRect.top,
+                cardRect.left,
+                cardRect.bottom,
+                AppColors.Maroon.toArgb(),
+                AppColors.MaroonPressed.toArgb(),
+                Shader.TileMode.CLAMP,
+            )
+        }
+        canvas.drawRoundRect(cardRect, CORNER_RADIUS_HERO, CORNER_RADIUS_HERO, cardPaint)
+
+        val innerLeft = MARGIN + HERO_PADDING_X
+        val innerRight = PAGE_WIDTH - MARGIN - HERO_PADDING_X
+
+        val dividerY = drawHeroHeader(context, canvas, params, cardTop, innerLeft, innerRight)
+
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.copy(alpha = WHITE_ALPHA_HERO_LABEL).toArgb()
+            textSize = TEXT_SIZE_HERO_LABEL
+            isFakeBoldText = true
+        }
+        val densityLabelY = dividerY + 18f
+        canvas.drawText(
+            context.getString(R.string.report_pdf_hero_density_header),
+            innerLeft,
+            densityLabelY,
+            labelPaint,
+        )
+
+        if (params.speciesRows.isEmpty()) {
+            val emptyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.White.copy(alpha = WHITE_ALPHA_HERO_EMPTY).toArgb()
+                textSize = TEXT_SIZE_HERO_EMPTY
+            }
+            canvas.drawText(params.emptyMessage, innerLeft, densityLabelY + 16f, emptyPaint)
+        } else {
+            drawHeroRows(
+                context = context,
+                canvas = canvas,
+                rows = params.speciesRows,
+                bounds = HeroRowBounds(innerLeft, innerRight, densityLabelY + 10f),
+            )
+        }
+
+        return cardTop + cardHeight + SECTION_GAP
+    }
+
+    @Suppress("LongParameterList")
+    private fun drawHeroHeader(
+        context: Context,
+        canvas: Canvas,
+        params: HeroCardParams,
+        cardTop: Float,
+        innerLeft: Float,
+        innerRight: Float,
+    ): Float {
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.copy(alpha = WHITE_ALPHA_HERO_LABEL).toArgb()
+            textSize = TEXT_SIZE_HERO_LABEL
+            isFakeBoldText = true
+        }
+        val totalLabelY = cardTop + HERO_PADDING_TOP + 8f
+        canvas.drawText(context.getString(R.string.report_pdf_hero_total_eggs), innerLeft, totalLabelY, labelPaint)
+
+        val eggsStr = params.totalEggsConfirmed.toString()
+        val eggCountPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.toArgb()
+            textSize = TEXT_SIZE_HERO_EGGS
+            isFakeBoldText = true
+        }
+        val eggY = totalLabelY + 36f
+        canvas.drawText(eggsStr, innerLeft, eggY, eggCountPaint)
+
+        val metaText = if (params.totalSessions != null) {
+            context.getString(
+                R.string.report_pdf_hero_meta_patient,
+                params.speciesCount,
+                params.fieldsExamined,
+                params.totalSessions,
+            )
+        } else {
+            context.getString(
+                R.string.report_pdf_hero_meta_session,
+                params.speciesCount,
+                params.fieldsExamined,
+            )
+        }
+        val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.copy(alpha = WHITE_ALPHA_HERO_SUBTEXT).toArgb()
+            textSize = TEXT_SIZE_HERO_META
+        }
+        val eggWidth = eggCountPaint.measureText(eggsStr)
+        canvas.drawText(metaText, innerLeft + eggWidth + 12f, eggY, metaPaint)
+
+        val dividerY = eggY + 12f
+        val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.copy(alpha = WHITE_ALPHA_HERO_DIVIDER).toArgb()
+            strokeWidth = RULE_STROKE_WIDTH
+        }
+        canvas.drawLine(innerLeft, dividerY, innerRight, dividerY, dividerPaint)
+        return dividerY
+    }
+
+    private data class HeroRowBounds(
+        val innerLeft: Float,
+        val innerRight: Float,
+        val startY: Float,
+    )
+
+    private fun drawHeroRows(
+        context: Context,
+        canvas: Canvas,
+        rows: List<ReportPdfSpeciesRow>,
+        bounds: HeroRowBounds,
+    ) {
+        var rowTop = bounds.startY
+        val pillBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.copy(alpha = WHITE_ALPHA_HERO_PILL).toArgb()
+            style = Paint.Style.FILL
+        }
+        val pillTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.toArgb()
+            textSize = TEXT_SIZE_HERO_PILL
+            isFakeBoldText = true
+        }
+        val lpfValuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.toArgb()
+            textSize = TEXT_SIZE_HERO_LPF
+            isFakeBoldText = true
+        }
+        val lpfUnitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.White.copy(alpha = WHITE_ALPHA_HERO_LABEL).toArgb()
+            textSize = TEXT_SIZE_HERO_LPF_UNIT
+            isFakeBoldText = true
+        }
+
+        rows.forEach { row ->
+            val speciesPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.White.toArgb()
+                textSize = TEXT_SIZE_HERO_SPECIES
+                typeface = if (isBinomialSpecies(row.speciesDisplayName)) {
+                    Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC)
+                } else {
+                    Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                }
+            }
+            val speciesNameY = rowTop + 13f
+            canvas.drawText(row.speciesDisplayName, bounds.innerLeft, speciesNameY, speciesPaint)
+
+            val rangeText = if (row.min == row.max) "${row.min}" else "${row.min}–${row.max}"
+            val unitText = " LPF"
+            val unitWidth = lpfUnitPaint.measureText(unitText)
+            val rangeWidth = lpfValuePaint.measureText(rangeText)
+            val totalRightWidth = rangeWidth + unitWidth
+            val rightStartX = bounds.innerRight - totalRightWidth
+            canvas.drawText(rangeText, rightStartX, speciesNameY, lpfValuePaint)
+            canvas.drawText(unitText, rightStartX + rangeWidth, speciesNameY, lpfUnitPaint)
+
+            val descriptorText = row.descriptor?.let { context.getString(it.labelRes) }
+            val burdenText = row.burdenLevel?.let { context.getString(it.labelRes) }
+            val pillText = listOfNotNull(descriptorText, burdenText).joinToString(" · ")
+            if (pillText.isNotEmpty()) {
+                val pillTextWidth = pillTextPaint.measureText(pillText)
+                val pillRect = RectF(
+                    bounds.innerLeft,
+                    speciesNameY + 4f,
+                    bounds.innerLeft + pillTextWidth + 10f,
+                    speciesNameY + 17f,
+                )
+                canvas.drawRoundRect(pillRect, CORNER_RADIUS_PILL, CORNER_RADIUS_PILL, pillBgPaint)
+                canvas.drawText(pillText, bounds.innerLeft + 5f, speciesNameY + 14f, pillTextPaint)
+            }
+
+            rowTop += HERO_ROW_HEIGHT
+        }
+    }
+
+    fun calculateSignoffHeight(organizationName: String?, reviewerEmail: String?): Float {
+        var height = 16f + 14f + SECTION_GAP
+        if (!organizationName.isNullOrBlank()) height += 12f
+        if (!reviewerEmail.isNullOrBlank()) height += 12f
+        return height
+    }
+
+    fun drawReviewerSignoff(
+        context: Context,
+        canvas: Canvas,
+        params: ReviewerSignoffParams,
+        startY: Float,
+    ): Float {
+        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray500.toArgb()
+            textSize = TEXT_SIZE_SIGNOFF_HEADER
+            isFakeBoldText = true
+        }
+        canvas.drawText(context.getString(R.string.report_pdf_signoff_header), MARGIN, startY, headerPaint)
+
+        val lineY = startY + 16f
+        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            strokeWidth = RULE_STROKE_WIDTH
+        }
+        canvas.drawLine(MARGIN, lineY, MARGIN + SIGNATURE_LINE_WIDTH, lineY, linePaint)
+
+        val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray900.toArgb()
+            textSize = TEXT_SIZE_SIGNOFF_NAME
+            isFakeBoldText = true
+        }
+        val nameY = lineY + 14f
+        canvas.drawText(params.reviewerName, MARGIN, nameY, namePaint)
+
+        val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray500.toArgb()
+            textSize = TEXT_SIZE_SIGNOFF_SUB
+        }
+        var currentY = nameY
+        if (!params.organizationName.isNullOrBlank()) {
+            currentY += 12f
+            canvas.drawText(params.organizationName, MARGIN, currentY, subPaint)
+        }
+        if (!params.reviewerEmail.isNullOrBlank()) {
+            currentY += 12f
+            canvas.drawText(params.reviewerEmail, MARGIN, currentY, subPaint)
+        }
+
+        return currentY + SECTION_GAP
+    }
+
+    fun drawRedesignedFooter(
+        context: Context,
+        canvas: Canvas,
+        params: RedesignedFooterParams,
+    ) {
+        val ruleY = PAGE_HEIGHT - FOOTER_RULE_BOTTOM_OFFSET
+        val rulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            strokeWidth = RULE_STROKE_WIDTH
+        }
+        canvas.drawLine(MARGIN, ruleY, PAGE_WIDTH - MARGIN, ruleY, rulePaint)
+
+        val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray500.toArgb()
+            textSize = TEXT_SIZE_FOOTER
+        }
+        val textY = PAGE_HEIGHT - FOOTER_TEXT_BOTTOM_OFFSET
+        val shortId = params.reportId.take(SHORT_ID_LENGTH).uppercase()
+        val leftText = context.getString(R.string.report_pdf_footer_report_id, shortId)
+        canvas.drawText(leftText, MARGIN, textY, footerPaint)
+
+        val rightText = if (params.isAppendix) {
+            context.getString(R.string.report_pdf_footer_page_appendix, params.pageNumber, params.totalPages)
+        } else {
+            context.getString(R.string.report_pdf_footer_page, params.pageNumber, params.totalPages)
+        }
+        val rightWidth = footerPaint.measureText(rightText)
+        canvas.drawText(rightText, PAGE_WIDTH - MARGIN - rightWidth, textY, footerPaint)
+    }
+
+    fun drawAppendixCard(
+        context: Context,
+        canvas: Canvas,
+        item: ReportPdfSampleItem,
+        cardRect: RectF,
+    ) {
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.White.toArgb()
+            style = Paint.Style.FILL
+        }
+        canvas.drawRoundRect(cardRect, CORNER_RADIUS_CARD, CORNER_RADIUS_CARD, bgPaint)
+
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = RULE_STROKE_WIDTH
+        }
+        canvas.drawRoundRect(cardRect, CORNER_RADIUS_CARD, CORNER_RADIUS_CARD, borderPaint)
+
+        val imageSize = cardRect.width() - APPENDIX_CARD_PADDING * 2
+        val imageRect = RectF(
+            cardRect.left + APPENDIX_CARD_PADDING,
+            cardRect.top + APPENDIX_CARD_PADDING,
+            cardRect.right - APPENDIX_CARD_PADDING,
+            cardRect.top + APPENDIX_CARD_PADDING + imageSize,
+        )
+
+        drawAppendixImage(context, canvas, item.imagePath, imageRect)
+
+        val contentLeft = cardRect.left + APPENDIX_CARD_PADDING
+        val contentRight = cardRect.right - APPENDIX_CARD_PADDING
+        val maxTextWidth = contentRight - contentLeft
+
+        val summaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray900.toArgb()
+            textSize = TEXT_SIZE_APPENDIX_FINDING
+            typeface = if (isBinomialSpecies(item.findingsSummary)) {
+                Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            } else {
+                Typeface.DEFAULT
+            }
+        }
+        val summaryY = imageRect.bottom + 14f
+        canvas.drawText(truncate(summaryPaint, item.findingsSummary, maxTextWidth), contentLeft, summaryY, summaryPaint)
+
+        val fieldSubPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray500.toArgb()
+            textSize = TEXT_SIZE_APPENDIX_FIELD
+        }
+        val fieldSubText = context.getString(
+            R.string.report_pdf_appendix_field_subtitle,
+            item.sessionLabel ?: "",
+            item.fieldIndex,
+        )
+        val fieldSubY = summaryY + 11f
+        canvas.drawText(truncate(fieldSubPaint, fieldSubText, maxTextWidth), contentLeft, fieldSubY, fieldSubPaint)
+
+        val rulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Gray200.toArgb()
+            strokeWidth = RULE_STROKE_WIDTH
+        }
+        val dividerY = fieldSubY + 6f
+        canvas.drawLine(contentLeft, dividerY, contentRight, dividerY, rulePaint)
+
+        val eggsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = AppColors.Maroon.toArgb()
+            textSize = TEXT_SIZE_APPENDIX_EGGS
+            isFakeBoldText = true
+        }
+        val eggsText = context.resources.getQuantityString(
+            R.plurals.report_pdf_appendix_eggs_confirmed,
+            item.eggCount,
+            item.eggCount,
+        )
+        val eggsY = dividerY + 11f
+        canvas.drawText(eggsText, contentLeft, eggsY, eggsPaint)
+    }
+
+    private fun drawAppendixImage(
+        context: Context,
+        canvas: Canvas,
+        imagePath: String?,
+        imageRect: RectF,
+    ) {
+        val bitmap = imagePath?.let { decodeSampleBitmap(it, TARGET_IMAGE_PX) }
+        if (bitmap != null) {
+            canvas.save()
+            val clipPath = Path().apply {
+                addRoundRect(imageRect, CORNER_RADIUS_IMAGE, CORNER_RADIUS_IMAGE, Path.Direction.CW)
+            }
+            canvas.clipPath(clipPath)
+            val srcSize = minOf(bitmap.width, bitmap.height)
+            val srcX = (bitmap.width - srcSize) / 2
+            val srcY = (bitmap.height - srcSize) / 2
+            val srcRect = Rect(srcX, srcY, srcX + srcSize, srcY + srcSize)
+            val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+            canvas.drawBitmap(bitmap, srcRect, imageRect, bmpPaint)
+            canvas.restore()
+            bitmap.recycle()
+        } else {
+            val placeholderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = AppColors.Gray100.toArgb()
+                style = Paint.Style.FILL
+            }
+            canvas.drawRoundRect(imageRect, CORNER_RADIUS_IMAGE, CORNER_RADIUS_IMAGE, placeholderPaint)
+
+            val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = AppColors.Gray500.toArgb()
+                textSize = TEXT_SIZE_PLACEHOLDER_TITLE
+                isFakeBoldText = true
+                textAlign = Paint.Align.CENTER
+            }
+            val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = AppColors.Gray400.toArgb()
+                textSize = TEXT_SIZE_PLACEHOLDER_SUB
+                textAlign = Paint.Align.CENTER
+            }
+            val centerX = imageRect.centerX()
+            val titleY = imageRect.centerY() - 2f
+            val subY = imageRect.centerY() + 11f
+            canvas.drawText(
+                context.getString(R.string.report_pdf_image_placeholder_title),
+                centerX,
+                titleY,
+                titlePaint,
+            )
+            canvas.drawText(
+                context.getString(R.string.report_pdf_image_placeholder_subtitle),
+                centerX,
+                subY,
+                subPaint,
+            )
+        }
+    }
+
+    @Suppress("LongParameterList")
+    fun drawAppendixPage(
+        context: Context,
+        canvas: Canvas,
+        samplesChunk: List<ReportPdfSampleItem>,
+        patientName: String,
+        sessionOrScopeLabel: String,
+        organizationName: String?,
+        footerParams: RedesignedFooterParams,
+    ) {
+        val letterheadBottom = drawLetterhead(context, canvas, organizationName)
+        val titleBottom = drawReportTitle(
+            canvas = canvas,
+            title = context.getString(R.string.report_pdf_appendix_title),
+            subtitle = context.getString(R.string.report_pdf_appendix_subtitle),
+            startY = letterheadBottom,
+        )
+        val metaCells = listOf(
+            context.getString(R.string.report_pdf_meta_patient) to patientName,
+            context.getString(R.string.report_pdf_meta_session_id) to sessionOrScopeLabel,
+        )
+        val metaBottom = drawMetadataCard(canvas, titleBottom, metaCells, numRows = 1)
+
+        val gridTopY = metaBottom
+        samplesChunk.forEachIndexed { index, item ->
+            val col = index % 2
+            val row = index / 2
+            val left = MARGIN + col * (APPENDIX_CARD_WIDTH + APPENDIX_GRID_GAP)
+            val top = gridTopY + row * (APPENDIX_CARD_HEIGHT + APPENDIX_GRID_GAP)
+            val cardRect = RectF(left, top, left + APPENDIX_CARD_WIDTH, top + APPENDIX_CARD_HEIGHT)
+            drawAppendixCard(context, canvas, item, cardRect)
+        }
+
+        drawRedesignedFooter(context, canvas, footerParams)
+    }
+
+    fun decodeSampleBitmap(imagePath: String, targetSizePx: Int): Bitmap? {
+        val file = File(imagePath)
+        if (!file.exists() || !file.isFile) return null
+        return runCatching {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(imagePath, options)
+            val origWidth = options.outWidth
+            val origHeight = options.outHeight
+            if (origWidth > 0 && origHeight > 0) {
+                var sampleSize = 1
+                while (origWidth / (sampleSize * 2) >= targetSizePx && origHeight / (sampleSize * 2) >= targetSizePx) {
+                    sampleSize *= 2
+                }
+                val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                BitmapFactory.decodeFile(imagePath, decodeOptions)
+            } else {
+                null
+            }
+        }.getOrNull()
+    }
+
+    fun isBinomialSpecies(name: String): Boolean =
+        name.contains(' ') && name != EggSpecies.HOOKWORM.displayName && !name.startsWith("No ")
 
     fun drawSectionHeader(canvas: Canvas, title: String, y: Float): Float {
         canvas.drawText(title, MARGIN, y, paintFor(TextStyle.SECTION_HEADER))
         return y + LINE_HEIGHT
     }
 
-    /** Draws each `label: value` pair below [startY], one per line, and returns the next y. */
     fun drawLabeledLines(canvas: Canvas, lines: List<Pair<String, String>>, startY: Float): Float {
         var y = startY
         lines.forEach { (label, value) -> y = drawLabeledLine(canvas, label, value, y) }
@@ -108,7 +784,6 @@ internal object PdfChrome {
         return y + LINE_HEIGHT
     }
 
-    /** Truncates [text] with a trailing ellipsis when it would overflow [maxWidth] under [paint]. */
     fun truncate(paint: Paint, text: String, maxWidth: Float): String {
         if (paint.measureText(text) <= maxWidth) return text
         val availableWidth = maxWidth - paint.measureText(ELLIPSIS)
@@ -116,3 +791,25 @@ internal object PdfChrome {
         return text.substring(0, fittingChars) + ELLIPSIS
     }
 }
+
+internal data class HeroCardParams(
+    val totalEggsConfirmed: Int,
+    val speciesCount: Int,
+    val fieldsExamined: Int,
+    val totalSessions: Int? = null,
+    val speciesRows: List<ReportPdfSpeciesRow>,
+    val emptyMessage: String,
+)
+
+internal data class ReviewerSignoffParams(
+    val reviewerName: String,
+    val organizationName: String? = null,
+    val reviewerEmail: String? = null,
+)
+
+internal data class RedesignedFooterParams(
+    val reportId: String,
+    val pageNumber: Int,
+    val totalPages: Int,
+    val isAppendix: Boolean = false,
+)
