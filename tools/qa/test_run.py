@@ -87,6 +87,47 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(text.count("path: build/qa/"), 2)
         self.assertNotIn("            app/build/", text)
 
+    def test_device_reports_preserve_case_status_artifacts_and_redaction(self):
+        secret = "synthetic-device-token"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def device_results(name, output):
+                results = root / "app/build/outputs/androidTest-results/connected/debug"
+                results.mkdir(parents=True)
+                (results / "TEST-Pixel_6a.xml").write_text(
+                    '<testsuite><testcase classname="Device" name="passes"/>'
+                    f'<testcase classname="Device" name="fails"><failure>{secret}</failure></testcase>'
+                    '<testcase classname="Device" name="skips"><skipped message="fixture unavailable"/></testcase></testsuite>', encoding="utf-8")
+                report = root / "app/build/reports/androidTests/connected/debug"
+                report.mkdir(parents=True)
+                (report / "index.html").write_text(f"<html>{secret}</html>", encoding="utf-8")
+                return [[sys.executable, "-c", "raise SystemExit(1)"]]
+
+            with patch.dict(qa.os.environ, {"QA_SMOKE_TOKEN": secret}), patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "device"]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", side_effect=device_results):
+                self.assertEqual(qa.main(), 1)
+            output = next((root / "build/qa").iterdir())
+            summary = json.loads((output / "summary.json").read_text())
+            cases = {case["case_id"]: case for case in summary["junit"]}
+            self.assertEqual({name: case["status"] for name, case in cases.items()}, {"Device.passes": "pass", "Device.fails": "fail", "Device.skips": "skip"})
+            for case in cases.values():
+                self.assertEqual(case["requirement_id"], "QA-device-instrumentation")
+                self.assertTrue((output / case["artifact"]).is_file())
+                self.assertTrue(case["updated_during_run"])
+            self.assertIn("[REDACTED]", next(output.rglob("index.html")).read_text())
+            self.assertNotIn(secret, next(output.rglob("TEST-Pixel_6a.xml")).read_text())
+            self.assertFalse(any("not executed" in note for note in summary["limitations"]))
+            self.assertTrue(any("System capture/offline" in note for note in summary["limitations"]))
+
+    def test_device_without_case_reports_does_not_claim_case_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "device"]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", return_value=[[sys.executable, "-c", "pass"]]):
+                self.assertEqual(qa.main(), 0)
+            summary = json.loads(next(root.rglob("summary.json")).read_text())
+            self.assertEqual(summary["junit"], [])
+            self.assertTrue(any("No individual instrumentation results" in note for note in summary["limitations"]))
+
     def test_staging_missing_credentials_fails_and_writes_report(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "smoke.json"

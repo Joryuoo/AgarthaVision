@@ -98,6 +98,12 @@ overrides a failed command. JUnit records preserve pass/fail/skip, class/method 
 requirement category IDs, expected/actual outcomes and artifact references. These category IDs
 are QA traceability, not a claim that an evaluator has approved the product requirements.
 The summary includes commit, dirty-tree flag, date, environment and process exit codes.
+Device evidence includes sanitized XML from `app/build/outputs/androidTest-results/` and
+HTML/assets from `app/build/reports/androidTests/`, with individual case statuses categorized
+as `QA-device-instrumentation`. A device invocation reports missing individual case results
+explicitly; other commands label collected device reports as prior/cached evidence rather than
+claiming instrumentation was executed. Instrumentation does not establish the complete capture
+or offline workflow by itself.
 All requested steps execute even after another step fails, and the command returns a nonzero
 status if any step fails. Missing Python dependencies are actionable failures, never passes.
 
@@ -110,7 +116,7 @@ JWTs/configured secret values in streamed logs, copied text reports and directly
 Raw Gradle reports stay local and are never uploaded. Unsupported opaque binary reports are excluded
 with reasons; screenshot PNGs are preserved unchanged. Review artifacts before sharing them.
 
-The summary explicitly lists unavailable device/system, deployed integration, real performance,
+The summary explicitly lists unavailable system, deployed integration, real performance,
 usability and evaluator-acceptance evidence. Completing those requires an actual designated
 fixture/device/deployment, participant observations and evaluator sign-off. Link any genuine
 product defect to its failed case in ClickUp, including expected/actual result, status, fix revision

@@ -94,12 +94,14 @@ def main():
                "working_tree_dirty": dirty, "environment": {"os": platform.platform(), "python": platform.python_version()},
                "records": [], "artifacts": [], "excluded_artifacts": [], "limitations": [
                    "Local fake-model API and Room/fake-HTTP integration do not verify deployed model accuracy, Supabase RLS or migrations.",
-                   "SKIP device/system capture/offline: dedicated device and synthetic workflow required; not run by aggregate checks.",
+                   "System capture/offline workflow requires separate synthetic end-to-end evidence; instrumentation alone does not establish it.",
                    "SKIP deployed backend/staging: deployment revision, URL and test-user token required.",
                    "SKIP usability: participant observations and follow-up not supplied.",
                    "SKIP acceptance: requirement owner/evaluator sign-off not supplied.",
                    "SKIP real-model/device performance: controlled workload and server/device telemetry required."],
                "defects": []}
+    if name != "device":
+        summary["limitations"].append("Device instrumentation was not executed by this command; any collected device reports retain their earlier/cached provenance.")
     failed = 0
     started = time.time()
     for index, command in enumerate(commands(name, output)):
@@ -138,7 +140,8 @@ def main():
             break
     # Keep existing reports too, with provenance: Gradle may reuse UP-TO-DATE outputs.
     # A failed command never turns an old report into a passing result.
-    for source in (ROOT / "app/build/reports/tests", ROOT / "app/build/test-results", ROOT / "app/build/outputs/roborazzi", ROOT / "app/build/reports/roborazzi"):
+    for source in (ROOT / "app/build/reports/tests", ROOT / "app/build/test-results", ROOT / "app/build/outputs/roborazzi", ROOT / "app/build/reports/roborazzi",
+                   ROOT / "app/build/outputs/androidTest-results", ROOT / "app/build/reports/androidTests"):
         if source.exists():
             for path in source.rglob("*"):
                 if path.is_file():
@@ -170,9 +173,12 @@ def main():
                 status = "fail" if case.find("failure") is not None or case.find("error") is not None else "skip" if case.find("skipped") is not None else "pass"
                 artifact = str(path.relative_to(output))
                 provenance = next((a["updated_during_run"] for a in summary["artifacts"] if a["path"] == artifact), True)
-                summary["junit"].append({"case_id": case.get("classname", "") + "." + case.get("name", ""), "requirement_id": "QA-regression", "expected": "assertions pass", "actual": status, "status": status, "artifact": artifact, "updated_during_run": provenance})
+                device_report = "androidTest-results" in path.parts or "androidTests" in path.parts
+                summary["junit"].append({"case_id": case.get("classname", "") + "." + case.get("name", ""), "requirement_id": "QA-device-instrumentation" if device_report else "QA-regression", "expected": "assertions pass", "actual": status, "status": status, "artifact": artifact, "updated_during_run": provenance})
         except ET.ParseError:
             pass
+    if name == "device" and not any(case["requirement_id"] == "QA-device-instrumentation" for case in summary["junit"]):
+        summary["limitations"].append("No individual instrumentation results were available; inspect the device command exit code and log before claiming any device case passed.")
     summary["exit_code"] = failed
     (output / "summary.json").write_text(redact(json.dumps(summary, indent=2)), encoding="utf-8")
     print(f"QA evidence: {output}")
