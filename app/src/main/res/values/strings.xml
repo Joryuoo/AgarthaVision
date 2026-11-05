@@ -549,7 +549,7 @@
     <string name="report_preview_images_included">Included</string>
     <string name="report_preview_images_not_included">Not included</string>
     <string name="report_preview_patient_name_label">Patient name</string>
-    <string name="report_action_preview_report">View preview</string>
+    <string name="report_action_preview_report">Report Preview</string>
     <string name="report_action_generate_pdf">Generate PDF</string>
     <string name="report_action_edit_options">Edit options</string>
     <string name="report_action_cancel">Cancel</string>

@@ -583,7 +583,7 @@ class PatientReportSheetTest {
         composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON)
             .performScrollTo()
             .assertIsDisplayed()
-            .assertTextEquals("View preview")
+            .assertTextEquals("Report Preview")
     }
 
     // -------------------------------------------------------------------------

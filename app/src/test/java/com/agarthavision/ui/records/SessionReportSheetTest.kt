@@ -465,7 +465,7 @@ class SessionReportSheetTest {
 
         composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON)
             .assertIsDisplayed()
-            .assertTextEquals("View preview")
+            .assertTextEquals("Report Preview")
     }
 
     @Test
