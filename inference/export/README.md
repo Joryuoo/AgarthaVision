@@ -20,15 +20,16 @@ Nothing about training changes. This is a format translation.
 
 | Path | Version |
 |---|---|
-| Cloud (`server.py`, PyTorch) | `yolo26n-effv2s-v1-cloud-fp32` |
+| Cloud (`server.py`, PyTorch) | `yolo26n-mobv4hybridl-v1-cloud-fp32`: a different architecture, MobileNetV4-Hybrid-Large, whose weights are in the Kaggle dataset |
 | On device | `yolo26n-effv2s-v1-tflite-fp32` (shipped), `-tflite-fp16`, `-tflite-int8` |
 | No model result | `manual` |
 
 `yolo26n-effv2s` is the architecture `yolo26n-efficientnetv2s.pt` was trained from
 (`yolo26n-efficientnetv2s.yaml` in the fork): timm's `tf_efficientnetv2_s` backbone
 (`TimmBackbone`) under a YOLO26-nano neck and `Detect` head. **Bump `v1` whenever the weights
-change**, in `export_mobile.py`'s `DEFAULT_VERSION_PREFIX`, in `server.py` and the notebook, and in
-`OnDeviceModels`, so the same `v1` always means the same weights.
+change**, in `export_mobile.py`'s `DEFAULT_VERSION_PREFIX` and in `OnDeviceModels` (and, for the
+cloud model's own prefix, in `server.py` and the notebook), so the same `v1` always means the
+same weights.
 
 A different backbone is a different architecture, so it gets its own prefix and its own `v1`.
 A MobileNetV4-Conv-Small checkpoint, for example, would be `yolo26n-mnv4cs-v1-…`: export it with

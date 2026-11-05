@@ -34,7 +34,7 @@ to this repository.
 | Changing validation, verdicts, or the questionnaire | `docs/map/processes/validate.md` |
 | Changing sample deletion or the tombstone | `docs/map/processes/delete-sample.md` |
 | Changing sync to Supabase (Storage or Postgres) | `docs/map/processes/sync.md` |
-| Changing reports (PDF or CSV) or LPF ranges | `docs/map/processes/report.md` |
+| Changing reports (session or patient PDF) or LPF ranges | `docs/map/processes/report.md` |
 | Changing UI, theme, or design tokens | `docs/constraints.md` C11, then `docs/file-tree.md` |
 | Setting up the environment or picking a version | `docs/stack.md` |
 | Running a build, test, or lint | `docs/commands.md` |

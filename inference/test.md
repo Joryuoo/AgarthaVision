@@ -19,8 +19,8 @@ docker login ghcr.io
 ```bash
 docker run --device=/dev/kfd --device=/dev/dri --group-add video \
   -p 8000:8000 -d \
-  -e INFERENCE_API_KEY="<your-secret>" \
-  -e MODEL_VERSION="yolo26n-effv2s-v1-cloud-fp32" \
+  -e SUPABASE_URL="https://<project-ref>.supabase.co" \
+  -e MODEL_VERSION="yolo26n-mobv4hybridl-v1-cloud-fp32" \
   ghcr.io/dmkuzu/agartha-inference:v1
 ```
 
@@ -36,9 +36,12 @@ Expected: `{"status":"ok"}`
 
 ## 3. Inference
 
+`<access-token>` is a signed-in user's Supabase access token (`README.md`, "Getting a token to
+test with"). Any other token gets `401`.
+
 ```bash
 curl -X POST \
-  -H "Authorization: Bearer <your-secret>" \
+  -H "Authorization: Bearer <access-token>" \
   -H "Content-Type: image/jpeg" \
   --data-binary "@/home/kuzu/Documents/school/AgarthaVision_Dataset/dataset/test/images/A. lumbricoides (Decorticated egg) (1).jpg" \
   http://<droplet-ip>:8000/infer
@@ -47,7 +50,7 @@ curl -X POST \
 Expected:
 ```json
 {
-  "model_version": "yolo26n-effv2s-v1-cloud-fp32",
+  "model_version": "yolo26n-mobv4hybridl-v1-cloud-fp32",
   "predictions": [
     {"class": "Ascaris lumbricoides", "confidence": 0.96, "x": 2501.32, "y": 1686.82, "width": 800.79, "height": 793.18}
   ],
@@ -55,7 +58,7 @@ Expected:
 }
 ```
 
-Empty when nothing detected: `{"model_version": "yolo26n-effv2s-v1-cloud-fp32", "predictions": [], "image": {"width": ..., "height": ...}}`
+Empty when nothing detected: `{"model_version": "yolo26n-mobv4hybridl-v1-cloud-fp32", "predictions": [], "image": {"width": ..., "height": ...}}`
 
 ## 4. Destroy the droplet when done
 

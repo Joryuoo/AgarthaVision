@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-10-01
-commit: 6590f32f
+verified: 2026-11-05
+commit: 2cc16989
 entity: app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt
 ---
 
@@ -106,7 +106,10 @@ Documented shape: `schema.ts` (`Patient`).
 **Hits**
 
 - `PatientDao` and `PatientRepositoryImpl` — CRUD and reactive queries.
-- `SyncPatientUseCase` and `PatientRemoteDataSource` — remote upserts.
+- `SyncPatientUseCase` and `PatientRemoteDataSource` — remote upserts. The upsert is an insert
+  that falls back to an update on HTTP 409 (`PatientRemoteDataSource.kt::upsertPatient`,
+  14zcqntr43e). Not a single `upsert`: Postgres would apply `patients_update_linked` to a
+  brand-new patient, whose `patient_users` link the trigger has not written yet.
 - The New Patient form (`ui/patients/PatientFormScreen.kt`, `PatientFormViewModel.kt`).
 - The Patients list (`ui/patients/PatientsScreen.kt`, `PatientsViewModel.kt`). Note that
   the Recent sort (`PatientDao.observePatients`) reads `sessions.started_at` and

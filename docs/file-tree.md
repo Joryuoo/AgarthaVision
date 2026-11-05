@@ -11,6 +11,11 @@ AgarthaVision/
 ├── CONTRIBUTING.md            Human-facing contribution guide; points here for the rules
 ├── local.properties.example   Placeholder template for the gitignored local.properties (C10)
 ├── schema.ts                  Ground-truth data model, documentation only — never compiled
+├── .mcp.example.json          Template for the gitignored .mcp.json (agent tool servers)
+├── package.json · bun.lock    Bun script wrappers around Gradle, and the Husky hook installer
+├── detekt.yml                 detekt rules for both Gradle projects, incl. the logging ban (C10)
+├── commitlint.config.js · lint-staged.config.js   Committed, wired to no hook (commands.md)
+├── build.gradle.kts · settings.gradle.kts · gradle.properties · gradlew   Gradle root
 ├── docs/                      This shelf. See docs/CONTEXT.md
 │
 ├── app/                       The one Gradle module. Everything Android lives here
@@ -54,13 +59,14 @@ app/
 
 | Folder | For |
 |---|---|
+| `auth/` | `BiometricPromptManager` — the device's biometric status and the system prompt behind the app lock |
 | `camera/` | `CameraManager` binds Preview + ImageAnalysis; `FrameSampler` caches every analyzed frame as time-stamped JPEG bytes — no timer, no dispatch to inference (the shutter does that) |
 | `connectivity/` | `NetworkMonitor` polls inference `/health`; `ConnectivityObserver` reports device network state |
-| `database/` | `AgarthaDatabase` — the Room database declaration and its version number (v24); `Migrations.kt` — the hand-written migrations, from 22 → 23 on |
+| `database/` | `AgarthaDatabase` — the Room database declaration and its version number (v25); `Migrations.kt` — the hand-written migrations, from 22 → 23 on |
 | `di/` | Hilt modules. `DatabaseModule` also carries every repository `@Binds` |
 | `session/` | `SessionManager` + `SessionState` + `ActiveSessionIdStore`. The app-scoped record of which smear is open, and the pointer that survives process death |
 | `sync/` | DataStore-backed sync bookkeeping: `DataStoreLastSyncStore`, `FetchOutcomeStore`, `InitialFetchStateStore` |
-| `util/` | `ElapsedClock`, `DeviceIdProvider`, `ImageExtensions` (frame → square 640 JPEG), date bucketing and range sanitising, `NameMasking`, `SqlLike` |
+| `util/` | `Logger` — the only allowed route to logcat, debug builds only (C10); `ElapsedClock`, `DeviceIdProvider`, `ImageExtensions` (frame → square 640 JPEG), date bucketing and range sanitising, `NameMasking`, `SqlLike` |
 
 ### `domain/` — pure Kotlin
 
@@ -73,7 +79,7 @@ app/
 | `geo/` | Offline boundary geometry primitives: `IslandGroup`, `GeoBounds`, `GeoProjection`, `AreaShape`/`BoundarySet`/`AreaDirectory`, `ViewFit`, `HitTest`, `PositiveRateBin` |
 | `repository/` | Interfaces only. Implementations live in `data/` |
 | `inference/` | `InferenceEngine` and its result types, `Prediction`, `ImageBox`, `InferenceState`, and the background queue: `InferenceQueue`, `InferenceQueueProcessor` (the one consumer) and `CloudCircuitBreaker` |
-| `usecase/auth` | Sign in, sign out, the login gate (`ResolveAuthGateUseCase`), observe identity, discard unsynced data |
+| `usecase/auth` | Sign in (and `CompleteSignInUseCase`), sign out, the login gate (`ResolveAuthGateUseCase`), observe identity and the signed-out notice, discard unsynced data, change password, and the server-refused-account check and wipe (`EnforceAccountAccessUseCase`, `WipeLocalAccountDataUseCase`) |
 | `usecase/home` | Home dashboard feeds: KPIs, findings, needs-attention, recent activity, session list |
 | `usecase/patients` | Observe the patients list. Create and edit go through `PatientRepository` from the form's ViewModel (C1) |
 | `usecase/sessions` | Generate a session label, search barangays. Starting a session is `SessionManager` |
@@ -81,7 +87,7 @@ app/
 | `usecase/inference` | Cancel a sample's inference; connection and pending-inference exception types; network error mapping |
 | `usecase/verify` | Submit verification, open target, the answer model (`VerificationAnswers`, `Finding` and its count helpers), queue observation and delete, species suggestions |
 | `usecase/sync` | The trigger-based catch-up pass in FK-safe order |
-| `usecase/records` | Records list, session samples, sample detail, image source resolution, report generation, PDF and CSV building |
+| `usecase/records` | Records list, session samples, sample detail, image source resolution, session and patient report generation, PDF building |
 | `usecase/reports` | Per-species LPF range aggregation (`LpfAggregation.kt`) and session egg counts |
 | `usecase/settings` | Theme mode; pending sync counts |
 | `usecase/coverage` | My coverage: aggregation, framing, and loading province/town boundary geometry |
@@ -92,7 +98,7 @@ Contains no Android imports. Does import `data/` in a few boundary files — see
 
 | Folder | For |
 |---|---|
-| `local/entity/` | Room entities (`PatientEntity`, `PatientUserEntity`, `SessionEntity`, `SampleEntity`, `DetectionEntity`, `ReportEntity`, `SampleSpeciesFindingEntity`, `PsgcBarangayEntity`, `SpeciesSuggestionEntity`) |
+| `local/entity/` | Room entities (`PatientEntity`, `PatientUserEntity`, `SessionEntity`, `SampleEntity`, `DetectionEntity`, `ReportEntity`, `SampleSpeciesFindingEntity`, `PsgcBarangayEntity`, `SpeciesSuggestionEntity`, `ColleagueEntity`) |
 | `local/dao/` | Room queries for each entity. The LPF query lives in `DetectionDao` |
 | `local/mapper/` | Entity ↔ domain conversion, plus `VerificationMapper` which computes verdicts and derived IDs |
 | `local/psgc/` | `PsgcSeeder` for bundled barangay dataset |
@@ -114,15 +120,16 @@ Contains no Android imports. Does import `data/` in a few boundary files — see
 | `navigation/` | `AgarthaNavGraph` — routes, start destination, bottom-bar visibility |
 | `theme/` | The design system. Raw hex exists here and nowhere else |
 | `icons/` | Material Symbols exports (`AgarthaIcons.kt`) |
-| `components/` | Shared composables: buttons, badges, bottom bar, toast, capture frame boundary, microscopy viewport, glass modifiers, `EmptyState.kt` |
+| `components/` | Shared composables: buttons, badges, bottom bar, toast, capture frame boundary, microscopy viewport, glass modifiers, `EmptyState.kt`, the Turnstile `HumanCheckWidget` and the `BiometricLockOverlay` |
 | `capture/` | The dark immersive capture screen and its connection-loss banner |
 | `patients/` | Patients list, patient creation/edit form, and their ViewModels |
 | `verify/` | Verification queue with inference badges, the verification sheet (checkbox questions, Add species, pending-inference state), box overlay and draw mode, species and stage dropdowns |
-| `records/` | Records list, session detail with LPF range cards, sample detail, report export (PDF/CSV) and sharing |
+| `records/` | Records list, session detail with LPF range cards, sample detail, PDF report export and sharing |
 | `dashboard/` | Home: KPI pager, needs-attention strip, recent session and activity; `coverage/` holds the My coverage card |
 | `coverage/` | Full-screen My coverage map and province sheet |
 | `sessions/` · `sessionlist/` · `activity/` | Patient's sessions and the New Session sheet · all sessions list · activity feed |
 | `image/` | Coil fetcher and keyer that load a sample's JPEG from disk or Storage |
+| `onboarding/` | The first-run intro pager and its ViewModel |
 | `login/` · `settings/` | The remaining screens |
 
 ## `supabase/migrations/`
@@ -149,6 +156,8 @@ This is the one home for which file describes which project.
 | `0014_super_admins.sql` | Super admins become rows in `super_admins`, one per grant, revoked by tombstone; `is_admin()` reads it, and `profiles.role` is retired in place |
 | `0015_patient_reports.sql` | Patient-scoped reports: `reports.session_id` nullable, `patient_id` and `session_ids` added, `reports_scope_check`, and the own-session insert rule re-expressed over `session_ids`. Applied to `agarthavision`, checked on 2026-10-06 |
 | `0016_patient_report_own_patient_sessions.sql` | A patient report's `session_ids` must be non-empty and name only the writer's own sessions of that patient; `sessions.patient_id` can no longer change. Applied to `agarthavision`, checked on 2026-10-06 |
+| `0017_advisor_hardening.sql` | Clears the security advisor's findings of 2026-10-15: `anon` loses every right on the app's tables and EXECUTE on its functions, trigger functions are owner-only, and `sessions_patient_is_fixed()` gets a fixed search_path |
+| `0018_writes_need_active_lab_member.sql` | Restrictive write policies on every field-data table and both buckets: the writer must be an active member of an active laboratory (`app_private.require_active_lab_member()`), refused with `not_active_lab_member`. Requires the console's `admin/0001` |
 | `legacy-dev/` | Pre-patient migrations `0001`–`0013`, unedited, still the description of `agarthavision-dev` and `agarthavision-prod`, which `staging` and `main` point at. Never applied to `agarthavision`. Its `README.md` says why. Pre-consolidation numbers 0003, 0004 and 0006 name different files here, so cite them with the `legacy-dev/` prefix |
 
 ### The Admin Console's migrations — same database, other repository
@@ -263,8 +272,9 @@ carries on. Tell the console team before merging such a change.
 
 `server.py` (the two endpoints, a bounded queue and per-GPU micro-batching), `tests/` (pytest
 against a fake model), `Dockerfile` (ROCm PyTorch base), `requirements.txt`,
-`weights/` (the trained checkpoints, Git LFS: `yolo26n-efficientnetv2s.pt`, which the server
-and the on-device export both use), plus Kaggle notebook and notes.
+`weights/` (the trained checkpoints, Git LFS: `yolo26n-efficientnetv2s.pt`, the on-device
+model's source. The cloud model, `yolo26n-mobilenetv4hybridlarge.pt`, is kept only in the Kaggle
+dataset), plus Kaggle notebook and notes.
 `export/` turns a checkpoint into the on-device TFLite models and checks them against it (`export/README.md`). Not part of the Gradle build.
 
 The exported models themselves ship in `app/src/main/assets/models/`, one `<model_version>.tflite`

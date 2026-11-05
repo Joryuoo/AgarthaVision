@@ -97,10 +97,8 @@ are both committed and remain unreferenced by any hook.
 
 ## Node tooling
 
-`bun install` installs the hook tooling and runs `prepare`. Note the lockfile drift recorded
-in `stack.md`: `bun.lock` still lists `husky`, `lint-staged`, and the commitlint packages,
-but `package.json` declares no dependencies, so a fresh `bun install` resolves nothing and
-`husky` may not be on `PATH`.
+`bun install` installs the hook tooling (`package.json` `devDependencies`) and runs `prepare`,
+which installs the Husky hooks.
 
 ## Inference container
 
@@ -108,13 +106,33 @@ Not wired into the Gradle build; run it separately.
 
 ```
 docker build -t agartha-inference inference/
-docker run -p 8000:8000 -e INFERENCE_API_KEY=<secret> agartha-inference
+docker run -p 8000:8000 -e SUPABASE_URL=https://<project-ref>.supabase.co agartha-inference
 ```
 
-`INFERENCE_API_KEY` is required; everything else it reads (weights path, model version, queue
+`SUPABASE_URL` is required: `/infer` accepts only that project's signed-in users' access tokens
+(`inference/server.py::verify_user`). Everything else it reads (weights path, model version, queue
 and batching limits, GPUs) is in the environment table of `inference/README.md`. Check it with
 `GET /health`, which answers once the model has loaded and stays prompt during inference
-(`inference/server.py::health`). Server tests: `inference/README.md`, "Tests".
+(`inference/server.py::health`).
+
+Server tests run against a fake model, so they need no GPU and no Ultralytics fork
+(`inference/README.md`, "Tests"):
+
+```
+cd inference
+pip install -r requirements-test.txt
+pytest tests
+```
+
+## Model export and offline assets
+
+Run by hand; their output is committed. Each folder's `README.md` owns the details.
+
+| What | Entry point |
+|---|---|
+| Export a checkpoint to the on-device TFLite models, then check parity and accuracy | `inference/export/export_mobile.py`, `parity_check.py`, `accuracy_report.py`, `make_parity_fixture.py` (`inference/export/README.md`) |
+| Rebuild the bundled PSGC barangay asset | `tools/psgc/build-psgc-asset.py`, then `build-psgc-db.py` (`tools/psgc/README.md`) |
+| Rebuild the offline boundary assets for My coverage | `tools/geo/build-town-keys.py`, `build-geo-shapes.sh`, `build-geo-asset.py` (`tools/geo/README.md`) |
 
 GPU droplets bill by the second. **Destroy the droplet after every test or demo.**
 

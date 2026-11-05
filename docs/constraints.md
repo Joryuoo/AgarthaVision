@@ -15,7 +15,9 @@ A ViewModel must not reach Room, Retrofit, or Supabase directly. It calls a use 
 a single `StateFlow<ScreenState>`, and emits one-shot events on a `SharedFlow`.
 
 **Enforcement:** review only. No lint rule, no detekt rule, no CI check. `detekt.yml` covers
-complexity, naming, and magic numbers — there is no import-boundary rule in it.
+complexity, naming, and magic numbers. Its one `ForbiddenImport` / `ForbiddenMethodCall` pair
+bans `android.util.Log` and `println` (see C10), not a layer — there is no import-boundary
+rule in it.
 
 **As-built:** the literal rule holds — no file under `ui/` imports `androidx.room`,
 `retrofit2`, or `io.github.jan.*`. The spirit is bent in two ViewModels that inject the
@@ -281,7 +283,7 @@ configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
-Supabase URLs, publishable keys, and the inference bearer token live in `local.properties`, which is
+Supabase URLs, publishable keys and the inference URL live in `local.properties`, which is
 gitignored (`/local.properties` and `local.properties` in `.gitignore`). They reach the app as
 `BuildConfig` fields read at build time (`localProperties` and `buildTypes` in
 `app/build.gradle.kts`). A missing property
@@ -294,8 +296,13 @@ in Supabase's CAPTCHA setting.
 **Enforcement:** `.gitignore` plus review. CI runs in `.github/workflows/build-and-test.yml`
 (verifying compile and Roborazzi screenshot tests without requiring secrets).
 
-**Drift, fixed in PB-01:** the debug and release `buildTypes` read `INFERENCE_API_KEY_DEV` /
-`INFERENCE_API_KEY_PROD`. `local.properties.example` now documents both suffixed names.
+**The inference container holds no secret either (14zcqnttfeq).** There is no inference API key
+any more. The app sends the signed-in user's Supabase access token as the bearer token
+(`core/di/InferenceModule.kt::provideOkHttpClient`). The container verifies it against the
+project's public signing keys (JWKS), checking expiry, issuer, audience and `role = authenticated`
+(`inference/server.py::verify_user`). Its only auth setting is the public `SUPABASE_URL`.
+`INFERENCE_API_KEY_DEV` / `_PROD` (PB-01) are gone from `app/build.gradle.kts` and
+`local.properties.example`. A leftover copy of either in a `local.properties` is read by nothing.
 
 **Patient data privacy and at-rest security:** Like application secrets, patient Personally
 Identifiable Information (PII) and Sensitive Personal Information (SPI) must never leak into git
@@ -303,6 +310,14 @@ history, test artifacts, or logs. Local on-device SQLite storage (Room) and repo
 storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
 validation mandate requiring synthetic patient profiles are documented in
 [`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
+**Logging goes through `core/util/Logger.kt::Logger`**, which writes only in debug builds.
+detekt's `ForbiddenImport` and `ForbiddenMethodCall` (`detekt.yml`) fail the build on
+`android.util.Log` or `println` anywhere else in `main`. Two limits, code wins:
+`Logger.sanitizeThrowable` returns the throwable unchanged, so it sanitizes nothing yet; and
+OkHttp's `HttpLoggingInterceptor` is not covered by the rule. On debug builds it logs the
+inference call at `HEADERS` with no `redactHeader`, so the user's bearer token reaches logcat
+(`core/di/InferenceModule.kt::provideOkHttpClient`).
 
 **Super admins read patients de-identified (D19, 14zcqntjvjw).** A super admin, an active
 `super_admins` row since `0014` and `profiles.role = 'admin'` before it, is the AgarthaVision

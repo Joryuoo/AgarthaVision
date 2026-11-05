@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-10-02
-commit: a9a68580
+verified: 2026-11-05
+commit: 2cc16989
 entity: supabase/migrations/0001_init.sql
 ---
 

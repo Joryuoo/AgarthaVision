@@ -62,7 +62,11 @@ parameter. Do not add a barangay to the patient-facing report.
 ## Changing RLS, auth, or ownership
 
 **Open:** `../objects/Profile.md` · `../objects/StorageObject.md` · `supabase/migrations/0001_init.sql`
-(policies from line 352) · `supabase/migrations/0007_patient_shared_history.sql` · `../processes/sync.md`.
+(policies from line 352) · `supabase/migrations/0007_patient_shared_history.sql` ·
+`supabase/migrations/0010_writes_need_own_session.sql` ·
+`supabase/migrations/0016_patient_report_own_patient_sessions.sql` ·
+`supabase/migrations/0017_advisor_hardening.sql` ·
+`supabase/migrations/0018_writes_need_active_lab_member.sql` · `../processes/sync.md`.
 
 **Reads are `author OR assigned OR admin`; writes are the author's.** 0007 adds a second
 permissive SELECT policy beside each author-only one — sessions, samples, detections, findings,
@@ -80,6 +84,23 @@ server, so the phone treats a colleague's session and sample as read-only: one r
 `SessionsViewModel::onRenameSession`, with the screens hiding the actions first. **A new write
 path on a session or sample needs the same check**, or its edit is written locally and silently
 refused on push. The push queues filter on `user_id`, so a colleague's row can never be pushed.
+
+**Authorship is only the first write check.** Later migrations add `RESTRICTIVE` policies,
+which Postgres ANDs with the author check, so each one can only narrow what a write may do:
+- **0010:** a sample or report goes only into the writer's own session
+  (`0010_writes_need_own_session.sql:28`, `:35`, `:44`).
+- **0016:** a patient report must name at least one session, every one of them the writer's
+  and the report's patient's, and `sessions.patient_id` can no longer change once written
+  (`0016_patient_report_own_patient_sessions.sql:59`, `:79-92`).
+- **0018:** every field-data write, and both buckets' uploads, need an active member of an
+  active laboratory (`app_private.require_active_lab_member()`,
+  `0018_writes_need_active_lab_member.sql:65`, policies from `:94`). A refusal carries
+  `not_active_lab_member` in its message, which the sync pass turns into
+  `INACTIVE_MEMBER_REFUSAL` (`../processes/sync.md`, step 3). **Changing that text breaks the
+  phone's message.**
+- **0017:** `anon` holds no right on any app table and cannot execute the policy helpers, so
+  nothing signed out reads or writes app data. A new table or function needs the same grants,
+  or the security advisor flags it again.
 
 In the consolidated schema every table's admin path, the `reports` rows included, resolves
 through `public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`), which
@@ -100,10 +121,13 @@ set adds permissive org-admin `SELECT` policies on `patients`, `patient_users`, 
 `samples` bucket. It also adds a trigger on `patients`. Read them before reasoning about who can
 read what. They are listed in
 [`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
-Because they are combined with `OR`, a policy here can never take away what they grant. And
-since the phone's pull leaves scoping to RLS (`0007`), a phone signed in as an org admin
-downloads the rows of the laboratory's whole clinical record: patients, sessions, samples,
-reports and members' names.
+Because they are combined with `OR`, a policy here can never take away what they grant. So the
+phone does not lean on RLS for its scope: every fetch in the pull asks for "own" plus "under
+these parents", starting from the user's own `patient_users` links
+(`domain/usecase/sync/FetchRemoteDataUseCase.kt::pullPatients`,
+`PatientRemoteDataSource.kt::fetchPatientLinks`, 14zcqntjt3p). A phone signed in as an org
+admin holds only that admin's own patients. **A new pulled table needs the same explicit
+scope**, or an org admin's phone downloads the whole laboratory's rows of it.
 
 **The non-obvious break:** the Storage object key *is* the permission check. The INSERT policy
 compares `(storage.foldername(name))[1]` against `auth.uid()`
@@ -140,6 +164,17 @@ change, `SupabaseAuthRepository.kt::changePassword` and `checkAccountAccess` sha
 `AuthSessionLock`. Drop it and a renewal of the old session, in flight while the password
 changes, is refused and wipes the phone that changed it.
 
+**Supabase's CAPTCHA setting applies to every client at once.** Sign-in and the password
+change send a Turnstile token (`ui/components/HumanCheckWidget.kt`,
+`SupabaseAuthRepository.kt::signIn`, 14zcqntnqxf). Turning the setting on before every phone
+carries this build, and before the console's part is live, locks those clients out. A token is
+single-use, so any new auth call that sends one has to fetch a fresh token for each attempt.
+
+**The biometric lock sits above the nav graph, not inside it** (`MainActivity`,
+`MainViewModel::isLocked`). It locks on every `onStop` and shows only to a signed-in user, so a
+hand-off to another app (opening a report PDF, `ui/records/ReportSharing.kt`) relocks it on
+return.
+
 ## Changing patients or the patient form
 
 **Open:** `../processes/register-patient.md` · `../objects/Patient.md`.
@@ -152,6 +187,11 @@ from its own creator's list.
 **Also easy to miss:** a codenamed patient keeps the codename in `lastname` and `''` in
 `firstname`, and every screen tells the two apart with `CodenameGenerator.isCodename`. A new
 codename shape must still match that regex, and so must every codename already stored.
+
+**The push reads a conflict from the HTTP status.** `PatientRemoteDataSource.kt::upsertPatient`
+inserts, and on a 409 updates and requires the row back (14zcqntr43e). Matching on the
+SQLSTATE instead (`23505`) silently never fires on supabase-kt 3.0.3, and every patient the
+server already holds sticks at `sync_failed`, with its sessions and samples behind it.
 
 ## Changing sessions or the active session
 
@@ -199,6 +239,11 @@ the read end on purpose (86d4au2n1).
 
 Client and server must move together, and they are versioned independently — the server is a
 container image, the client is an APK.
+
+**Auth is part of the contract.** The app sends the user's Supabase access token, and the container
+verifies it against its `SUPABASE_URL` project's JWKS (`inference/server.py::verify_user`). If
+the two disagree, every call is a `401` that looks like nothing at all, because the on-device
+model answers instead (14zcqnttfeq).
 
 **The non-obvious break:** coordinates are **centre-x, centre-y, width, height in pixels**
 (`box.xywh` in `inference/server.py::infer`), copied verbatim into `bbox_*`
@@ -263,7 +308,8 @@ closest thing, and it gates a pass that was already requested rather than starti
 ## Changing report generation or LPF density
 
 **Open:** `../processes/report.md` · `Report.md` ·
-`domain/usecase/records/GenerateSessionReportUseCase.kt` · `domain/usecase/reports/LpfAggregation.kt`.
+`domain/usecase/records/GenerateSessionReportUseCase.kt` ·
+`domain/usecase/records/GeneratePatientReportUseCase.kt` · `domain/usecase/reports/LpfAggregation.kt`.
 
 **The non-obvious break:** egg count's real definition is the WHERE clause of
 `data/local/dao/DetectionDao.kt::getConfirmedEggCountsForSession`, which counts every detection that is **not** a false
@@ -275,6 +321,15 @@ aggregation or qualitative descriptor rule changes future numbers only.
 Report generation also **requires a signed-in identity** (`requireNotNull(currentLocalUserId())`
 in `GenerateSessionReportUseCase::invoke`). The id is the cached one, so it works offline, but a
 device that has never signed in cannot generate a report.
+
+**Patient reports are a second shape of the same row** (14zcqntj2uz). `report_type = 'patient'`,
+`patient_id` set, `session_id` null, and the pooled sessions in `session_ids`
+(`0015_patient_reports.sql:26-37`; Room v25, `session_ids_json`). They are built by
+`GeneratePatientReportUseCase` from the sessions a `domain/model/PatientReportScope.kt` resolves
+to, chosen in `ui/sessions/PatientReportSheet.kt`. The server accepts one only if every pooled
+session is the writer's and the patient's own (0016), so **a scope that can reach another
+patient's session produces a report that never syncs.** A change to report columns touches both
+shapes, and `reports_scope_check` refuses a row that is both or neither.
 
 ## Changing UI, theme, or design tokens
 
