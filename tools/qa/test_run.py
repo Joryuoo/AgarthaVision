@@ -76,13 +76,56 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(command[-2:], ["--tests", "com.agarthavision.domain.*"])
 
     def test_staged_test_only_selects_exact_class(self):
-        with patch.object(qa.subprocess, "check_output", return_value=b"app/src/test/java/com/agarthavision/FooTest.kt\0"):
+        test = b"app/src/test/java/com/agarthavision/FooTest.kt\0"
+        with patch.object(qa.subprocess, "check_output", side_effect=[test, test, b""]):
             command = qa.commands("pre-commit", Path("output"))[-1]
         self.assertEqual(command[-2:], ["--tests", "com.agarthavision.FooTest"])
+
+    def test_deleted_or_renamed_staged_tests_use_safe_fallback(self):
+        old = b"app/src/test/java/com/agarthavision/OldTest.kt\0"
+        new = b"app/src/test/java/com/agarthavision/NewTest.kt\0"
+        cases = [
+            (old, b"", old),  # deleted test only
+            (old + new, new, old),  # deleted test plus a live added/modified test
+            (new, new, new),  # Git reports only destination for detected rename
+            (old + new, new, old + new),  # rename represented as delete + add
+        ]
+        for all_files, changed_files, removed_or_renamed in cases:
+            with self.subTest(all_files=all_files), patch.object(qa.subprocess, "check_output", side_effect=[all_files, changed_files, removed_or_renamed]) as git:
+                commands = qa.commands("pre-commit", Path("output"))
+            self.assertEqual(commands[-1], qa.gradle(":app:testDebugUnitTest", "--tests", "com.agarthavision.domain.*"))
+            self.assertIn("--diff-filter=DR", git.call_args_list[2].args[0])
+            self.assertIn("--find-renames", git.call_args_list[2].args[0])
 
     def test_redacts_jwt_and_configured_secrets(self):
         with patch.dict(qa.os.environ, {"QA_SMOKE_TOKEN": "very-secret-value"}):
             self.assertEqual(qa.redact("Bearer eyJabc.def.ghi very-secret-value"), "Bearer [REDACTED_JWT] [REDACTED]")
+
+    def test_staging_limitations_follow_actual_smoke_mode_and_result(self):
+        cases = [
+            ({"mode": "designated-staging", "status": "pass", "revision": "deployed-123"}, [], 0, "Staging API smoke passed"),
+            ({"mode": "designated-staging", "status": "fail", "revision": None, "records": [{"case_id": "SMOKE-SETUP", "status": "fail"}]}, [], 1, "Staging smoke did not pass"),
+            ({"mode": "designated-staging", "status": "pass", "revision": "deployed-123"}, [], 1, "Staging smoke did not pass"),
+            ({"mode": "localhost-fake-model", "status": "pass"}, ["--local"], 0, "SKIP deployed backend/staging"),
+            (None, [], 1, "Staging smoke has no usable structured outcome"),
+        ]
+        for report, arguments, code, expected_note in cases:
+            with self.subTest(report=report), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+
+                def smoke_command(name, output):
+                    if report is not None:
+                        (output / "smoke.json").write_text(json.dumps(report), encoding="utf-8")
+                    return [[sys.executable, "-c", f"raise SystemExit({code})"]]
+
+                with patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "smoke", *arguments]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", side_effect=smoke_command):
+                    self.assertEqual(qa.main(), code)
+                summary = json.loads(next(root.rglob("summary.json")).read_text())
+                self.assertTrue(any(expected_note in note for note in summary["limitations"]))
+                if report and report["mode"] == "designated-staging":
+                    self.assertFalse(any("SKIP deployed backend/staging" in note for note in summary["limitations"]))
+                    self.assertEqual(summary["smoke"]["status"], "pass" if report["status"] == "pass" and code == 0 else "fail")
+                    self.assertEqual(summary["smoke"]["deployed_revision"], report["revision"])
 
     def test_failure_is_reported_and_later_checks_still_execute(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -187,4 +230,3 @@ class CommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

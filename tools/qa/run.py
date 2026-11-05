@@ -58,9 +58,12 @@ def commands(name, output):
         # A changed production symbol can affect tests anywhere. No guessed dependency mapping.
         files = subprocess.check_output(["git", "diff", "--cached", "--name-only", "-z"], cwd=ROOT).decode().split("\0")
         changed_files = subprocess.check_output(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], cwd=ROOT).decode().split("\0")
+        removed_or_renamed = subprocess.check_output(["git", "diff", "--cached", "--name-only", "--diff-filter=DR", "--find-renames", "-z"], cwd=ROOT).decode().split("\0")
         warn_missing_staged_unit_tests(files, changed_files)
-        tests = [f for f in files if f.endswith("Test.kt") and f.startswith("app/src/test/java/")]
-        safe = tests and all(not f or f in tests or f.endswith(".md") for f in files)
+        tests = [f for f in changed_files if f.endswith("Test.kt") and f.startswith("app/src/test/java/")]
+        # Deleted classes cannot be selected; a renamed file may still declare its old class.
+        # Use the domain fallback for either status rather than guessing runnable class names.
+        safe = tests and not any(removed_or_renamed) and all(not f or f in tests or f.endswith(".md") for f in files)
         selection = sum((["--tests", f.removeprefix("app/src/test/java/").removesuffix(".kt").replace("/", ".")] for f in tests), []) if safe else ["--tests", "com.agarthavision.domain.*"]
         print("Focused selection: staged test classes" if safe else "Broader fast fallback: all domain JVM tests; full regression remains pre-push")
         return [gradle(":app:compileDebugKotlin", ":app:ktlintCheck", ":app:detekt"), gradle(":app:testDebugUnitTest", *selection)]
@@ -110,7 +113,6 @@ def main():
                "records": [], "artifacts": [], "excluded_artifacts": [], "limitations": [
                    "Local fake-model API and Room/fake-HTTP integration do not verify deployed model accuracy, Supabase RLS or migrations.",
                    "System capture/offline workflow requires separate synthetic end-to-end evidence; instrumentation alone does not establish it.",
-                   "SKIP deployed backend/staging: deployment revision, URL and test-user token required.",
                    "SKIP usability: participant observations and follow-up not supplied.",
                    "SKIP acceptance: requirement owner/evaluator sign-off not supplied.",
                    "SKIP real-model/device performance: controlled workload and server/device telemetry required."],
@@ -180,6 +182,21 @@ def main():
                 path.unlink(missing_ok=True)
                 failed = failed or 1
                 summary["excluded_artifacts"].append({"path": str(path.relative_to(output)), "reason": "sanitization failed; report removed"})
+    smoke_path = output / "smoke.json"
+    try:
+        smoke = json.loads(smoke_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        smoke = {}
+    if smoke.get("mode") == "designated-staging":
+        summary["smoke"] = {"mode": smoke["mode"], "status": "pass" if smoke.get("status") == "pass" and not failed else "fail", "deployed_revision": smoke.get("revision"), "artifact": "smoke.json"}
+        if smoke.get("status") != "pass" or failed:
+            summary["limitations"].append("Staging smoke did not pass; smoke.json and command logs distinguish missing prerequisites/setup failures from failed assertions.")
+        else:
+            summary["limitations"].append("Staging API smoke passed for the recorded deployed revision; it does not establish Supabase RLS/migration or full system acceptance evidence.")
+    elif name == "smoke" and "--local" not in sys.argv[2:]:
+        summary["limitations"].append("Staging smoke has no usable structured outcome; inspect command failure/logs before claiming any deployed scenario executed.")
+    else:
+        summary["limitations"].append("SKIP deployed backend/staging: this invocation did not run designated staging smoke; a deployment revision, URL and test-user token are required.")
     summary["junit"] = []
     for path in output.rglob("*.xml"):
         try:

@@ -62,7 +62,9 @@ inference reminder (or vice versa). Docs, resources, config and test-only change
 This is a file-based reminder, not proof of coverage or a dependency analysis; it does not change
 test selection, add API tests to pre-commit, or block the commit by itself.
 If the staged changes contain only `app/src/test/java/**/*Test.kt` and Markdown, it selects
-those exact test classes. Any other change uses the documented broader fast fallback:
+those exact test classes, provided no staged file is deleted or renamed. Deletions and renames
+use the broader fallback: a deleted test is no longer runnable, and a renamed file may still
+declare its previous class name. Any other change also uses the documented broader fast fallback:
 `./gradlew :app:testDebugUnitTest --tests 'com.agarthavision.domain.*'`. This deliberately does
 not guess production dependency relationships; the full regression/screenshot gate is pre-push.
 The fallback excludes UI/data packages to keep commit feedback bounded.
@@ -128,7 +130,11 @@ with reasons; screenshot PNGs are preserved unchanged. Review artifacts before s
 
 The summary explicitly lists unavailable system, deployed integration, real performance,
 usability and evaluator-acceptance evidence. Completing those requires an actual designated
-fixture/device/deployment, participant observations and evaluator sign-off. Link any genuine
+fixture/device/deployment. Staging smoke summaries follow the structured smoke result: a passing
+staging run records its deployed revision without claiming it was skipped; failed or missing
+outcomes stay explicit. Local fake-model runs continue to mark deployed staging smoke as skipped.
+Completing human acceptance or usability evidence requires participant observations and evaluator
+sign-off. Link any genuine
 product defect to its failed case in ClickUp, including expected/actual result, status, fix revision
 and retest artifact; setup failures are not invented product defects. The `defects` array starts
 empty until real linked defects exist. Do not describe planned cases as executed.
