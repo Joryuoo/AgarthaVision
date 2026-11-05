@@ -528,6 +528,10 @@
     <string name="report_option_name_selected_prefix">Selected: %1$s</string>
     <string name="report_option_name_excluded">Excluded</string>
     <string name="report_warning_fewer_samples_title">Only %1$d of %2$d recommended samples selected</string>
+    <plurals name="report_warning_fewer_samples_title">
+        <item quantity="one">Only %1$d of %2$d recommended sample selected</item>
+        <item quantity="other">Only %1$d of %2$d recommended samples selected</item>
+    </plurals>
     <string name="report_warning_fewer_samples_config_subtitle">You can still preview and continue.</string>
     <string name="report_warning_fewer_samples_preview_subtitle_single">You can continue with this sample.</string>
     <string name="report_warning_fewer_samples_preview_subtitle_multiple">You can continue with these samples.</string>
@@ -547,6 +551,7 @@
     <string name="report_action_preview_report">Preview report</string>
     <string name="report_action_generate_pdf">Generate PDF</string>
     <string name="report_action_edit_options">Edit options</string>
+    <string name="report_action_cancel">Cancel</string>
 
     <!-- Redesigned PDF strings -->
     <string name="report_pdf_brand_title">AGARTHA VISION</string>
