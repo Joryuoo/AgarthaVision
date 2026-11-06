@@ -147,8 +147,9 @@ as working.
 - **Bounding box overlay and redraw.** `ui/verify/FrameWithBoxes.kt` renders the boxes;
   `ui/verify/DrawMode.kt` draws a replacement box, or a box for an added egg.
 - **Verification layout and actions.** The sample image frame scrolls with the content column; the
-  bottom action bar is pinned (`ui/verify/VerificationSheet.kt::SheetActionRow`), with labels
-  "Discard" / "Save changes" in edit mode and "Discard" / "Submit" in initial verification mode.
+  pinned footer shows any save error above the action row
+  (`ui/verify/VerificationSheet.kt::VerificationSheetFooter`). The actions are "Discard" / "Save changes"
+  in edit mode and "Discard" / "Submit" in initial verification mode.
 - **Tombstoning duplicates.** A duplicate verified sample is tombstoned via `samples.deleted_at`
   (`supabase/migrations/0001_init.sql:202`), hiding it from queries, counts, and reports
   while preserving its detections in the retraining corpus (C8). The legacy `is_repeat` flag is
