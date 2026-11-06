@@ -70,13 +70,10 @@ class SessionRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("started_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<SessionRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<SessionRow, SessionEntity>(
+                jsonDecoder, "SessionRemoteDataSource", "session"
+            ) { it.toEntity() }
 
     /**
      * Fetches a page of the sessions of the given [patientIds], whoever authored them, ordered by
@@ -92,14 +89,10 @@ class SessionRemoteDataSource @Inject constructor(
             filter { isIn("patient_id", patientIds) }
             order("started_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<SessionRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
-            }.getOrNull()
-        }
-
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<SessionRow, SessionEntity>(
+                jsonDecoder, "SessionRemoteDataSource", "session"
+            ) { it.toEntity() }
     /**
      * `patient_id` is not optional on either side. `0001_init.sql:152-176` declares it
      * `not null references patients(id)`, matching the local Room foreign key, so a session
