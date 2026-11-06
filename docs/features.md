@@ -197,6 +197,10 @@ as working.
   `domain/usecase/records/GetPatientReportCandidatesUseCase.kt`).
 
 ### Home dashboard
+- **Relative timestamps.** Recent session cards use compact labels such as `5 m ago`. The dashboard's
+  activity feed and session rows, including the session list, use full labels such as `5 minutes ago`.
+  Both styles show `Just now` for ages under a minute and switch to a localized `MMM d` date in
+  `Asia/Manila` at seven days (`ui/dashboard/RelativeTime.kt::relativeTimeText`).
 - **First-download status banner.** Under the header, a signed-in user whose first full download
   has not finished sees either "Downloading your records…" (a sync pass is running, from the
   manual button or the background worker) or a warning to connect to the internet before working

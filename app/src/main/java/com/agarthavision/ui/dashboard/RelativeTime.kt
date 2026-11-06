@@ -1,6 +1,7 @@
 package com.agarthavision.ui.dashboard
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
@@ -15,64 +16,56 @@ private const val MILLIS_PER_HOUR = 60 * MILLIS_PER_MINUTE
 private const val MILLIS_PER_DAY = 24 * MILLIS_PER_HOUR
 private const val SEVEN_DAYS_MILLIS = 7 * MILLIS_PER_DAY
 
-/**
- * Formats [epochMillis] relative to [nowMillis]:
- * - Under 1 minute: "Just now".
- * - Minutes, hours, and days ago using plurals.
- * - Older than 7 days: a short date (e.g. "MMM d").
- */
-@Composable
-fun relativeTimeText(epochMillis: Long, nowMillis: Long): String {
+enum class RelativeTimeStyle { Long, Short }
+
+internal sealed interface RelativeAge {
+    data object JustNow : RelativeAge
+    data class Minutes(val count: Int) : RelativeAge
+    data class Hours(val count: Int) : RelativeAge
+    data class Days(val count: Int) : RelativeAge
+    data class Date(val instant: Instant) : RelativeAge
+}
+
+internal fun relativeAge(epochMillis: Long, nowMillis: Long): RelativeAge {
     val diff = (nowMillis - epochMillis).coerceAtLeast(0L)
     return when {
-        diff < MILLIS_PER_MINUTE -> stringResource(R.string.time_just_now)
-        diff < MILLIS_PER_HOUR -> {
-            val minutes = (diff / MILLIS_PER_MINUTE).toInt().coerceAtLeast(1)
-            pluralStringResource(R.plurals.time_minutes_ago, minutes, minutes)
-        }
-        diff < MILLIS_PER_DAY -> {
-            val hours = (diff / MILLIS_PER_HOUR).toInt().coerceAtLeast(1)
-            pluralStringResource(R.plurals.time_hours_ago, hours, hours)
-        }
-        diff < SEVEN_DAYS_MILLIS -> {
-            val days = (diff / MILLIS_PER_DAY).toInt().coerceAtLeast(1)
-            pluralStringResource(R.plurals.time_days_ago, days, days)
-        }
-        else -> {
-            val instant = Instant.ofEpochMilli(epochMillis)
-            val formatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
-                .withZone(CLINICAL_ZONE)
-            formatter.format(instant)
-        }
+        diff < MILLIS_PER_MINUTE -> RelativeAge.JustNow
+        diff < MILLIS_PER_HOUR -> RelativeAge.Minutes((diff / MILLIS_PER_MINUTE).toInt())
+        diff < MILLIS_PER_DAY -> RelativeAge.Hours((diff / MILLIS_PER_HOUR).toInt())
+        diff < SEVEN_DAYS_MILLIS -> RelativeAge.Days((diff / MILLIS_PER_DAY).toInt())
+        else -> RelativeAge.Date(Instant.ofEpochMilli(epochMillis))
     }
 }
 
 /**
- * Formats [epochMillis] relative to [nowMillis] in compact notation (e.g. "2 h ago", "15 m ago", "1 d ago").
+ * Formats [epochMillis] relative to [nowMillis] in long or compact form.
+ * Ages of at least seven days use a short date in the clinical time zone.
  */
 @Composable
-fun shortRelativeTimeText(epochMillis: Long, nowMillis: Long): String {
-    val diff = (nowMillis - epochMillis).coerceAtLeast(0L)
-    return when {
-        diff < MILLIS_PER_MINUTE -> stringResource(R.string.time_just_now)
-        diff < MILLIS_PER_HOUR -> {
-            val minutes = (diff / MILLIS_PER_MINUTE).toInt().coerceAtLeast(1)
-            stringResource(R.string.time_short_minutes_ago, minutes)
+fun relativeTimeText(
+    epochMillis: Long,
+    nowMillis: Long,
+    style: RelativeTimeStyle = RelativeTimeStyle.Long,
+): String = when (val age = relativeAge(epochMillis, nowMillis)) {
+    RelativeAge.JustNow -> stringResource(R.string.time_just_now)
+    is RelativeAge.Minutes -> when (style) {
+        RelativeTimeStyle.Long -> pluralStringResource(R.plurals.time_minutes_ago, age.count, age.count)
+        RelativeTimeStyle.Short -> stringResource(R.string.time_short_minutes_ago, age.count)
+    }
+    is RelativeAge.Hours -> when (style) {
+        RelativeTimeStyle.Long -> pluralStringResource(R.plurals.time_hours_ago, age.count, age.count)
+        RelativeTimeStyle.Short -> stringResource(R.string.time_short_hours_ago, age.count)
+    }
+    is RelativeAge.Days -> when (style) {
+        RelativeTimeStyle.Long -> pluralStringResource(R.plurals.time_days_ago, age.count, age.count)
+        RelativeTimeStyle.Short -> stringResource(R.string.time_short_days_ago, age.count)
+    }
+    is RelativeAge.Date -> {
+        val locale = Locale.getDefault()
+        val formatter = remember(locale) {
+            DateTimeFormatter.ofPattern("MMM d", locale).withZone(CLINICAL_ZONE)
         }
-        diff < MILLIS_PER_DAY -> {
-            val hours = (diff / MILLIS_PER_HOUR).toInt().coerceAtLeast(1)
-            stringResource(R.string.time_short_hours_ago, hours)
-        }
-        diff < SEVEN_DAYS_MILLIS -> {
-            val days = (diff / MILLIS_PER_DAY).toInt().coerceAtLeast(1)
-            stringResource(R.string.time_short_days_ago, days)
-        }
-        else -> {
-            val instant = Instant.ofEpochMilli(epochMillis)
-            val formatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
-                .withZone(CLINICAL_ZONE)
-            formatter.format(instant)
-        }
+        formatter.format(age.instant)
     }
 }
 
