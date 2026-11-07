@@ -105,13 +105,10 @@ class PatientRemoteDataSource @Inject constructor(
     suspend fun fetchPatients(patientIds: List<String>): List<PatientEntity> =
         supabase.postgrest[PATIENTS_TABLE].select {
             filter { isIn("id", patientIds) }
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<PatientRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("PatientRemoteDataSource", "Skipping malformed patient row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<PatientRow, PatientEntity>(
+                jsonDecoder, "PatientRemoteDataSource", "patient",
+            ) { it.toEntity() }
 
     /**
      * The `patient_users` rows of [userId], the signed-in user.
@@ -137,13 +134,10 @@ class PatientRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("patient_id", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<PatientUserRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("PatientRemoteDataSource", "Skipping malformed patient link row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<PatientUserRow, PatientUserEntity>(
+                jsonDecoder, "PatientRemoteDataSource", "patient link",
+            ) { it.toEntity() }
 
     // ── Row shapes ────────────────────────────────────────────────────────────
 

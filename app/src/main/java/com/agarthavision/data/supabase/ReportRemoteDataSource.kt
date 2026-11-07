@@ -138,13 +138,10 @@ open class ReportRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<ReportRow, ReportEntity>(
+                jsonDecoder, "ReportRemoteDataSource", "report",
+            ) { it.toEntity() }
 
     /**
      * Fetches a page of the reports on the given [sessionIds], whoever generated them, ordered by
@@ -160,13 +157,10 @@ open class ReportRemoteDataSource @Inject constructor(
             filter { isIn("session_id", sessionIds) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<ReportRow, ReportEntity>(
+                jsonDecoder, "ReportRemoteDataSource", "report",
+            ) { it.toEntity() }
 
     private fun Map<String, LpfDensity>.toJsonObject(): JsonObject =
         buildJsonObject {
