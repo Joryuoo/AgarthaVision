@@ -140,7 +140,7 @@ open class ReportRemoteDataSource @Inject constructor(
             range(offset, offset + limit - 1)
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<ReportRow, ReportEntity>(
-                jsonDecoder, "ReportRemoteDataSource", "report"
+                jsonDecoder, "ReportRemoteDataSource", "report",
             ) { it.toEntity() }
 
     /**
@@ -159,8 +159,9 @@ open class ReportRemoteDataSource @Inject constructor(
             range(offset, offset + limit - 1)
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<ReportRow, ReportEntity>(
-                jsonDecoder, "ReportRemoteDataSource", "report"
+                jsonDecoder, "ReportRemoteDataSource", "report",
             ) { it.toEntity() }
+
     private fun Map<String, LpfDensity>.toJsonObject(): JsonObject =
         buildJsonObject {
             forEach { (species, density) ->

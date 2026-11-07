@@ -107,7 +107,7 @@ class PatientRemoteDataSource @Inject constructor(
             filter { isIn("id", patientIds) }
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<PatientRow, PatientEntity>(
-                jsonDecoder, "PatientRemoteDataSource", "patient"
+                jsonDecoder, "PatientRemoteDataSource", "patient",
             ) { it.toEntity() }
 
     /**
@@ -136,7 +136,7 @@ class PatientRemoteDataSource @Inject constructor(
             range(offset, offset + limit - 1)
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<PatientUserRow, PatientUserEntity>(
-                jsonDecoder, "PatientRemoteDataSource", "patient"
+                jsonDecoder, "PatientRemoteDataSource", "patient link",
             ) { it.toEntity() }
 
     // ── Row shapes ────────────────────────────────────────────────────────────

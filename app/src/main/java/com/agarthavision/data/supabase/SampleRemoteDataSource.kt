@@ -130,7 +130,7 @@ class SampleRemoteDataSource @Inject constructor(
             range(offset, offset + limit - 1)
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<SampleRow, SampleEntity>(
-                jsonDecoder, "SampleRemoteDataSource", "<kind>"
+                jsonDecoder, "SampleRemoteDataSource", "sample",
             ) { it.toEntity() }
 
     /**
@@ -145,7 +145,7 @@ class SampleRemoteDataSource @Inject constructor(
             range(offset, offset + limit - 1)
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<SampleRow, SampleEntity>(
-                jsonDecoder, "SampleRemoteDataSource", "<kind>"
+                jsonDecoder, "SampleRemoteDataSource", "sample",
             ) { it.toEntity() }
 
     /**
@@ -181,9 +181,9 @@ class SampleRemoteDataSource @Inject constructor(
         supabase.postgrest[FINDINGS_TABLE].select {
             filter { isIn("sample_id", sampleIds) }
         }.decodeList<JsonElement>()
-            .decodeRowsSkippingMalformed(
+            .decodeRowsSkippingMalformed<FindingRow, SampleSpeciesFindingEntity>(
                 jsonDecoder, "SampleRemoteDataSource", "finding",
-            ) { row: FindingRow -> row.toEntity() }
+            ) { it.toEntity() }
 
     /**
      * Downloads a private sample image from Storage, as the signed-in medtech.

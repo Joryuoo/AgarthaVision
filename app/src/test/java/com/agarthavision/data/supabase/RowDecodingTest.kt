@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -9,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class)
 class RowDecodingTest {
@@ -50,6 +52,8 @@ class RowDecodingTest {
 
     @Test
     fun `AC2 - drops malformed row and retains valid rows with warning log`() {
+        ShadowLog.clear()
+
         val input = listOf(
             buildJsonObject {
                 put("id", "valid-1")
@@ -71,9 +75,15 @@ class RowDecodingTest {
             rowKind = "dummy"
         ) { it.toEntity() }
 
+        // Existing assertions: verify valid rows kept and malformed row dropped
         assertEquals(2, result.size)
         assertEquals("valid-1", result[0].id)
         assertEquals("valid-2", result[1].id)
+
+        // Reviewer AC2 requirement: verify the warning log was emitted
+        val warnings = ShadowLog.getLogsForTag("TestTag").filter { it.type == Log.WARN }
+        assertEquals(1, warnings.size)
+        assertTrue(warnings.single().msg.startsWith("Skipping malformed dummy row"))
     }
 
     @Test

@@ -11,6 +11,16 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## refactor/shared-supabase-row-decoding — Supabase remote data sources share a fault-tolerant row decoder · 2026-11-08
+
+### Decode Supabase rows through one shared skip-malformed helper · `14zcqnttqu6`
+
+- **Shared decode helper.** Remote data sources decode Supabase responses using `decodeRowsSkippingMalformed<Row, Entity>`, ensuring bad individual rows are skipped and logged as warnings rather than failing the entire fetch or sync pass.
+- **Traceable logging.** Bad rows emit a `Log.WARN` prefixed with `Skipping malformed <kind> row` tagged by data source class name (`SampleRemoteDataSource`, `PatientRemoteDataSource`, etc.), restoring distinct logging for `patient link` versus `patient`.
+- **Tests.** `RowDecodingTest` covers AC1–AC3: decoding valid rows, dropping malformed entries while retaining valid data, and asserting the expected warning logs via Robolectric's `ShadowLog`.
+
+---
+
 ## docs/readme-release-and-env — the README names the deployment and every build variable · 2026-11-05
 
 ### README deployment and environment variables · `14zcqntnr07`

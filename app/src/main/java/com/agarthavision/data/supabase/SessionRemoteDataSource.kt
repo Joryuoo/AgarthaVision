@@ -1,6 +1,5 @@
 package com.agarthavision.data.supabase
 
-import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.SessionSyncStatus
 import io.github.jan.supabase.SupabaseClient
@@ -11,7 +10,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.Instant
 import javax.inject.Inject
 
@@ -72,7 +70,7 @@ class SessionRemoteDataSource @Inject constructor(
             range(offset, offset + limit - 1)
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<SessionRow, SessionEntity>(
-                jsonDecoder, "SessionRemoteDataSource", "session"
+                jsonDecoder, "SessionRemoteDataSource", "session",
             ) { it.toEntity() }
 
     /**
@@ -91,8 +89,9 @@ class SessionRemoteDataSource @Inject constructor(
             range(offset, offset + limit - 1)
         }.decodeList<JsonElement>()
             .decodeRowsSkippingMalformed<SessionRow, SessionEntity>(
-                jsonDecoder, "SessionRemoteDataSource", "session"
+                jsonDecoder, "SessionRemoteDataSource", "session",
             ) { it.toEntity() }
+
     /**
      * `patient_id` is not optional on either side. `0001_init.sql:152-176` declares it
      * `not null references patients(id)`, matching the local Room foreign key, so a session
