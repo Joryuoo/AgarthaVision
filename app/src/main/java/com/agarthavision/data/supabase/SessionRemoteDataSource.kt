@@ -65,7 +65,11 @@ class SessionRemoteDataSource @Inject constructor(
      * Fetches a page of the sessions [userId] authored, ordered by start time ascending.
      * Inclusive range: rows [offset, offset+limit-1].
      */
-    suspend fun fetchOwnSessions(userId: String, offset: Long = 0L, limit: Long = 500L): List<SessionEntity> =
+    suspend fun fetchOwnSessions(
+        userId: String,
+        offset: Long = 0L,
+        limit: Long = REMOTE_PAGE_SIZE,
+    ): List<SessionEntity> =
         supabase.postgrest[SESSIONS_TABLE].select {
             filter { eq("user_id", userId) }
             order("started_at", Order.ASCENDING)
@@ -86,7 +90,7 @@ class SessionRemoteDataSource @Inject constructor(
     suspend fun fetchSessionsForPatients(
         patientIds: List<String>,
         offset: Long = 0L,
-        limit: Long = 500L,
+        limit: Long = REMOTE_PAGE_SIZE,
     ): List<SessionEntity> =
         supabase.postgrest[SESSIONS_TABLE].select {
             filter { isIn("patient_id", patientIds) }

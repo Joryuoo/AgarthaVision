@@ -22,6 +22,7 @@ import com.agarthavision.data.local.mapper.toFramePredictionsOrNull
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ProfileRemoteDataSource
+import com.agarthavision.data.supabase.REMOTE_PAGE_SIZE
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
@@ -634,10 +635,10 @@ class FetchRemoteDataUseCase @Inject constructor(
     ) {
         var offset = 0L
         while (true) {
-            val page = fetch(offset, PAGE_SIZE.toLong())
+            val page = fetch(offset, REMOTE_PAGE_SIZE)
             onPage(page)
-            if (page.size < PAGE_SIZE) break
-            offset += PAGE_SIZE.toLong()
+            if (page.size < REMOTE_PAGE_SIZE) break
+            offset += REMOTE_PAGE_SIZE
         }
     }
 
@@ -713,7 +714,6 @@ class FetchRemoteDataUseCase @Inject constructor(
 
     private companion object {
         const val TAG = "FetchRemoteDataUseCase"
-        const val PAGE_SIZE = 500
 
         /**
          * Maximum number of UUIDs per `isIn` request: patients, sessions, samples, colleagues.
