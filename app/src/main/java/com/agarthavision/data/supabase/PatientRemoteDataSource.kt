@@ -128,7 +128,7 @@ class PatientRemoteDataSource @Inject constructor(
     suspend fun fetchPatientLinks(
         userId: String,
         offset: Long = 0L,
-        limit: Long = 500L,
+        limit: Long = REMOTE_PAGE_SIZE,
     ): List<PatientUserEntity> =
         supabase.postgrest[PATIENT_USERS_TABLE].select {
             filter { eq("user_id", userId) }
