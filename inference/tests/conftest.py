@@ -3,16 +3,52 @@
 The fork is installed from GitHub and needs CUDA to be useful, and neither is needed to test
 what this suite covers: the queue, the batching, the 503s and the event loop staying free. The
 real model is exercised on Kaggle (KAGGLE.md, "Checking the queue").
+
+Auth is tested the same way: tokens are signed here with a throwaway ES256 key, and the server's
+JWKS client is handed that key's public half instead of fetching Supabase's (the `jwks` fixture
+in test_server.py).
 """
 import os
 import sys
 import threading
 import time
 import types
+import uuid
 from pathlib import Path
 
-os.environ.setdefault("INFERENCE_API_KEY", "test-key")
+import jwt
+from cryptography.hazmat.primitives.asymmetric import ec
+
+os.environ.setdefault("SUPABASE_URL", "https://test-project.supabase.co")
 os.environ.setdefault("INFERENCE_DEVICES", "cuda:0,cuda:1")
+
+ISSUER = os.environ["SUPABASE_URL"].rstrip("/") + "/auth/v1"
+
+# Stands in for the project's signing key; the server only ever sees its public half.
+SIGNING_KEY = ec.generate_private_key(ec.SECP256R1())
+KID = "test-kid"
+
+
+def public_jwks(private_key=SIGNING_KEY, kid: str = KID) -> dict:
+    jwk = jwt.algorithms.ECAlgorithm.to_jwk(private_key.public_key(), as_dict=True)
+    return {"keys": [{**jwk, "kid": kid, "alg": "ES256", "use": "sig"}]}
+
+
+def user_token(key=SIGNING_KEY, kid: str = KID, algorithm: str = "ES256", expires_in: int = 3600, **claims) -> str:
+    """A Supabase-shaped access token for a signed-in user. [claims] override any field, and a
+    claim set to None is left out."""
+    now = int(time.time())
+    payload = {
+        "iss": ISSUER,
+        "sub": str(uuid.uuid4()),
+        "aud": "authenticated",
+        "role": "authenticated",
+        "iat": now,
+        "exp": now + expires_in,
+        **claims,
+    }
+    payload = {name: value for name, value in payload.items() if value is not None}
+    return jwt.encode(payload, key, algorithm=algorithm, headers={"kid": kid})
 
 
 class FakeBox:

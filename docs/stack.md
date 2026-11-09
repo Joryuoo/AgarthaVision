@@ -41,11 +41,13 @@ Single Gradle module: `:app` (`settings.gradle.kts` `include`). Namespace and ap
 | Prefs | DataStore Preferences | 1.1.2 | `datastore` |
 | Background | WorkManager | 2.10.0 | `workmanager` |
 | EXIF | androidx exifinterface | 1.4.2 | `exifinterface` |
+| App lock | androidx biometric (`biometric-ktx`, an alpha) | 1.2.0-alpha05 | `biometric` |
 | On-device ML | LiteRT (`CompiledModel` API, GPU accelerator built in) | 2.2.0 | `litert` |
 
-**Room is at schema version 23** (`core/database/AgarthaDatabase.kt`), reached from 22 by the
-project's first hand-written migration (`core/database/Migrations.kt`). Older installs still fall
-back to a destructive rebuild.
+**Room is at schema version 25** (`core/database/AgarthaDatabase.kt::AgarthaDatabase`). Every
+step from 22 on is a hand-written migration (`core/database/Migrations.kt::ALL_MIGRATIONS`),
+because from 23 the local database holds frames that exist nowhere else. Installs older than
+22 still fall back to a destructive rebuild.
 
 The app-wide Coil `ImageLoader` is configured in `AgarthaVisionApp.newImageLoader()`: disk
 cache fixed at 250MB (matching Coil's own maximum clamp of ~2% of disk space, capped between
@@ -68,6 +70,9 @@ for Phase 1).
 - Version 15 added `reports.lpf_per_species_json` (LPF density metrics).
 - Version 16 declared the samples-to-sessions foreign key with `NO_ACTION` (`SampleEntity.kt` `foreignKeys`).
 - Version 22 dropped `detections.species_touched` and `detections.verified_by_user`. **Version 21 is left free**: `development` briefly carried a `21.json` of a different shape.
+- Version 23 added the inference queue's `samples.inference_state` and `inference_attempts` (`Migrations.kt::MIGRATION_22_23`).
+- Version 24 added the `colleagues` name cache (`Migrations.kt::MIGRATION_23_24`, 14zcqntjph6).
+- Version 25 made `reports.session_id` nullable and added `patient_id` and `session_ids_json` for patient reports, by rebuilding the table (`Migrations.kt::MIGRATION_24_25`, 14zcqntj2uz).
 
 `play-services-location` was removed along with the GPS columns (`gradle/libs.versions.toml`).
 
@@ -113,9 +118,9 @@ on (`gradle.properties`: `org.gradle.configuration-cache`, `org.gradle.caching`,
 `package.json` is a script wrapper around Gradle plus the Husky hook installer
 (`package.json` `scripts`). Runtime is **Bun**.
 
-**Lockfile drift:** `bun.lock`'s `devDependencies` records devDependencies — `@commitlint/cli`,
-`@commitlint/config-conventional`, `@types/bun`, `husky`, `lint-staged` — that `package.json`
-no longer declares. `bun install` from the current `package.json` installs nothing. See
+`package.json` declares five `devDependencies` — `@commitlint/cli`,
+`@commitlint/config-conventional`, `@types/bun`, `husky`, `lint-staged` — and `bun.lock` records
+the same five. Only `husky` is used: no hook calls commitlint or lint-staged. See
 `commands.md`.
 
 ## Backend and inference
@@ -127,10 +132,13 @@ no longer declares. `bun install` from the current `package.json` installs nothi
 - **Inference container** (self-hosted): FastAPI + Uvicorn + Ultralytics YOLO on PyTorch,
   image based on `rocm/pytorch:latest` (`inference/Dockerfile` `FROM`), serving on port 8000
   (`inference/Dockerfile` `EXPOSE`, `CMD`). Endpoints `GET /health` and `POST /infer`
-  (`inference/server.py::health`, `::infer`). Bearer-token auth (`inference/server.py::verify_key`).
-  Weights baked in at `inference/weights/yolo26n-efficientnetv2s.pt` (YOLO26-nano on an
-  EfficientNetV2-S backbone, from the fork's `feat/optimized-inference`); default model version string
-  `yolo26n-effv2s-v1-cloud-fp32` (`inference/server.py` `MODEL_VERSION`).
+  (`inference/server.py::health`, `::infer`). Auth by the signed-in user's Supabase access token, verified against the
+  project's JWKS with PyJWT (`inference/server.py::verify_user`).
+  The cloud model is `yolo26n-mobilenetv4hybridlarge.pt` (YOLO26-nano on a MobileNetV4-Hybrid-Large
+  backbone, from the fork's `feat/optimized-inference`). Its weights live in the Kaggle dataset, not
+  the repo. The default model version string is `yolo26n-mobv4hybridl-v1-cloud-fp32`
+  (`inference/server.py` `WEIGHTS_PATH`, `MODEL_VERSION`). The phone runs a different model,
+  `inference/weights/yolo26n-efficientnetv2s.pt` exported to TFLite.
 
 ## Build-time configuration
 
@@ -141,6 +149,8 @@ Both suffixed keys are documented in `local.properties.example`. `SUPABASE_ANON_
 name but holds the project's publishable key (`sb_publishable_…`), not the legacy anon JWT, which
 is being disabled (14zcqntnqxg). supabase-kt sends it as `apikey`, and as the bearer token only
 before sign-in; every signed-in call carries the user's own token. `INFERENCE_API_KEY` was removed
-from `BuildConfig` and the client APK; cloud inference calls authenticate using the user's
-Supabase session access token (`InferenceModule.kt`).
+from `BuildConfig` and the client APK, and from the container (14zcqnttfeq). Cloud inference calls
+authenticate with the user's Supabase session access token
+(`core/di/InferenceModule.kt::provideOkHttpClient`), which the container verifies itself
+(`inference/server.py::verify_user`).
 A missing key becomes an empty string.

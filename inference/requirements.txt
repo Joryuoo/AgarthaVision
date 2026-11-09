@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 pillow
+PyJWT[crypto]
 numpy
 timm
-git+https://github.com/DMKuZu/ultralytics@1fd204363ca9b9ae65047916afa564d8ed3be019
+git+https://github.com/kazuretsu/ultralytics@06fae7a9c4ab73f90a7d5305cdb1461f0cb16489

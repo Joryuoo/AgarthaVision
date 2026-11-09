@@ -16,6 +16,7 @@ data class PatientReportPdfDocument(
     val header: PatientReportPdfHeader,
     val speciesRows: List<ReportPdfSpeciesRow>,
     val sessionRows: List<PatientReportSessionRow>,
+    val appendixSamples: List<ReportPdfSampleItem> = emptyList(),
 )
 
 /**
@@ -33,12 +34,16 @@ data class PatientReportPdfHeader(
     val scopeEnd: LocalDate?,
     /** The medtech's display name (or email, or user id) who generated the report. */
     val generatedBy: String,
+    val generatedByEmail: String? = null,
+    val organizationName: String? = null,
     val generatedAt: Instant,
     val totalSessions: Int,
     val totalSamples: Int,
     val totalEggsConfirmed: Int,
     /** Canonical species names (per [EggSpecies.canonicalClass]) with at least one confirmed egg. */
     val positiveSpecies: List<String>,
+    val includeSampleImages: Boolean = false,
+    val totalPages: Int = 1,
 )
 
 /** One row of the per-session breakdown table. */

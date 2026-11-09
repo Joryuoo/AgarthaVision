@@ -834,6 +834,7 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.SHEET_SECONDARY_ACTION).performClick()
         dialogNode(VerifyTestTags.DISCARD_DIALOG_CONFIRM).performClick()
 
+        dialogNode(VerifyTestTags.DISCARD_DIALOG_CONFIRM).assertDoesNotExist()
         assertEquals(1, r.deletes)
     }
 
@@ -844,6 +845,26 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.SHEET_SECONDARY_ACTION).performClick()
         dialogNode(VerifyTestTags.DISCARD_DIALOG_DISMISS).performClick()
 
+        dialogNode(VerifyTestTags.DISCARD_DIALOG_CONFIRM).assertDoesNotExist()
+        assertEquals(0, r.deletes)
+    }
+
+    @Test
+    fun `discard confirmation is disabled if a save starts while the dialog is open`() {
+        val r = Recorder()
+        val current = mutableStateOf(state())
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(state = current.value, actions = actionsFor(r))
+            }
+        }
+
+        sheetNode(VerifyTestTags.SHEET_SECONDARY_ACTION).performClick()
+        dialogNode(VerifyTestTags.DISCARD_DIALOG_CONFIRM).assertIsEnabled()
+
+        composeRule.runOnIdle { current.value = current.value.copy(isSubmitting = true) }
+
+        dialogNode(VerifyTestTags.DISCARD_DIALOG_CONFIRM).assertIsNotEnabled()
         assertEquals(0, r.deletes)
     }
 
@@ -1192,8 +1213,14 @@ class VerificationSheetContentTest {
         composeRule.waitForIdle()
 
         composeRule.onNodeWithTag(VerifyTestTags.SAVING_INPUT_BLOCKER).assertDoesNotExist()
+        val error = composeRule.onNodeWithText("Save failed").assertIsDisplayed()
+        val submit = composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
+        assertTrue(error.getBoundsInRoot().bottom <= submit.getBoundsInRoot().top)
         question(VerifyTestTags.QUESTION_Q1).performClick()
         assertEquals(listOf(true), r.q1)
+
+        composeRule.runOnIdle { current.value = current.value.copy(errorMessage = null) }
+        error.assertDoesNotExist()
     }
 
     private fun noModelOutputState(findings: List<Finding> = emptyList()) = VerificationUiState(
@@ -1837,6 +1864,17 @@ class VerificationSheetContentTest {
             .assertTextContains("Discard")
         composeRule.onNodeWithText("Editing sample").assertIsDisplayed()
         composeRule.onNodeWithText("Editing").assertDoesNotExist()
+    }
+
+    @Test
+    fun `discard in edit mode cancels without a frame deletion dialog`() {
+        val r = setContentWithEditMode(state(), isEditing = true)
+
+        sheetNode(VerifyTestTags.SHEET_SECONDARY_ACTION).performClick()
+
+        dialogNode(VerifyTestTags.DISCARD_DIALOG_CONFIRM).assertDoesNotExist()
+        assertEquals(1, r.cancels)
+        assertEquals(0, r.deletes)
     }
 
     @Test

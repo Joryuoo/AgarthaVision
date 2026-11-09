@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-30
-commit: b64271d2
+verified: 2026-11-05
+commit: 2cc16989
 entity: app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt
 ---
 
@@ -56,8 +56,8 @@ bytes must not cost the metadata too.
 |---|---|
 | `id` | PK, default `uuid_generate_v4()` |
 | `session_id` | FK → `sessions(id)`, CASCADE. NOT NULL only when `report_type = 'session'` |
-| `patient_id` | FK → `patients(id)`. NOT NULL only when `report_type = 'patient'` (0007) |
-| `session_ids` | `uuid[]`, patient reports only (0007) — the sessions pooled into this snapshot |
+| `patient_id` | FK → `patients(id)`. NOT NULL only when `report_type = 'patient'` (`0015_patient_reports.sql:27`) |
+| `session_ids` | `uuid[]`, patient reports only (`0015_patient_reports.sql:28`) — the sessions pooled into this snapshot |
 | `user_id` | NOT NULL, FK → `profiles(id)` |
 | `report_type` | NOT NULL default `'session'`, **CHECK allows `'session'` or `'patient'`** |
 | `generated_at` | NOT NULL, default `now()` |
@@ -69,7 +69,7 @@ bytes must not cost the metadata too.
 | `pdf_file_path` | nullable text — a **device-local** path or URI; other devices restore from Storage |
 | `created_at` | NOT NULL, default `now()` |
 
-`reports_scope_check` (0007) enforces that a row is exactly one of session-scoped
+`reports_scope_check` (`0015_patient_reports.sql:34-37`) enforces that a row is exactly one of session-scoped
 (`session_id` set, `patient_id` null) or patient-scoped (`patient_id` set, `session_id` null).
 Indexes on `(session_id, generated_at desc)`, `(user_id, generated_at desc)`, and
 `(patient_id, generated_at desc) where patient_id is not null`.
@@ -110,7 +110,7 @@ PK column is `report_id`. Differences:
   in and back out. Console org admins read patient reports by `patient_id` (admin/0004), which
   is why that key has to be trustworthy.
 - **Owned by** [`Session`](Session.md) (session reports) or [`Patient`](Patient.md) (patient
-  reports, 0007) and [`Profile`](Profile.md).
+  reports, 0015) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.
 - **Aggregates** findings from `sample_species_findings` table into LPF density.

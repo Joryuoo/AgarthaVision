@@ -1,0 +1,232 @@
+"""Focused stdlib verification of command routing, report provenance and failure handling."""
+import importlib.util
+import html
+import io
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location("qa_run", Path(__file__).with_name("run.py"))
+qa = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(qa)
+
+
+class CommandTests(unittest.TestCase):
+    def test_production_without_staged_unit_tests_warns_and_keeps_existing_commands(self):
+        for path, subsystem in (("app/src/main/java/com/agarthavision/Feature.kt", "Android"), ("app/src/release/kotlin/com/agarthavision/Feature.kt", "Android"), ("inference/server.py", "inference")):
+            with self.subTest(path=path), patch.object(qa.subprocess, "check_output", return_value=(path + "\0").encode()), patch("sys.stdout", new_callable=io.StringIO) as output:
+                commands = qa.commands("pre-commit", Path("output"))
+                self.assertIn(f"Staged {subsystem} production code", output.getvalue())
+                self.assertIn("Commit checks will continue", output.getvalue())
+                self.assertIn("does not measure coverage", output.getvalue())
+                self.assertEqual(commands, [qa.gradle(":app:compileDebugKotlin", ":app:ktlintCheck", ":app:detekt"), qa.gradle(":app:testDebugUnitTest", "--tests", "com.agarthavision.domain.*")])
+
+    def test_matching_staged_unit_tests_suppress_only_their_subsystem_warning(self):
+        android = "app/src/main/java/com/agarthavision/Feature.kt"
+        inference = "inference/server.py"
+        cases = [
+            ([android, "app/src/test/java/com/agarthavision/FeatureTest.kt"], []),
+            ([android, "app/src/testDebug/kotlin/com/agarthavision/FeatureTests.kt"], []),
+            ([inference, "inference/tests/test_server.py"], []),
+            ([inference, "inference/tests/server_test.py"], []),
+            ([android, inference, "app/src/test/java/com/agarthavision/FeatureTest.kt"], ["inference"]),
+            ([android, inference, "inference/tests/test_server.py"], ["Android"]),
+        ]
+        for paths, warnings in cases:
+            with self.subTest(paths=paths), patch("sys.stdout", new_callable=io.StringIO) as output:
+                qa.warn_missing_staged_unit_tests(paths, paths)
+                self.assertEqual(output.getvalue().count("WARNING:"), len(warnings))
+                for subsystem in warnings:
+                    self.assertIn(f"Staged {subsystem} production code", output.getvalue())
+
+    def test_docs_config_resources_and_test_only_changes_do_not_warn(self):
+        paths = ["README.md", "docs/commands.md", "app/build.gradle.kts", "app/src/main/AndroidManifest.xml",
+                 "app/src/main/res/values/strings.xml", "inference/requirements.txt", "inference/export/export_mobile.py",
+                 "inference/tests/test_server.py", "inference/tests/conftest.py", "app/src/test/java/FeatureTest.kt",
+                 "app/src/androidTest/java/FeatureTest.kt", "tools/qa/run.py"]
+        with patch("sys.stdout", new_callable=io.StringIO) as output:
+            qa.warn_missing_staged_unit_tests(paths, paths)
+            self.assertEqual(output.getvalue(), "")
+
+    def test_deleted_unstaged_helper_or_device_tests_do_not_suppress_reminder(self):
+        android = "app/src/main/java/com/agarthavision/Feature.kt"
+        cases = [([], []),  # An unstaged test never appears in staged paths.
+                 (["app/src/test/java/com/agarthavision/FeatureTest.kt"], []),  # deleted
+                 (["app/src/test/java/com/agarthavision/Fixture.kt"], ["app/src/test/java/com/agarthavision/Fixture.kt"]),
+                 (["app/src/androidTest/java/FeatureTest.kt"], ["app/src/androidTest/java/FeatureTest.kt"])]
+        for tests, modified_tests in cases:
+            with self.subTest(tests=tests), patch("sys.stdout", new_callable=io.StringIO) as output:
+                qa.warn_missing_staged_unit_tests([android, *tests], [android, *modified_tests])
+                self.assertIn("WARNING: Staged Android", output.getvalue())
+
+    def test_pre_push_runs_roborazzi_once_then_api(self):
+        commands = qa.commands("pre-push", Path("output"))
+        self.assertEqual(len(commands), 2)
+        self.assertIn(":app:verifyRoborazziDebug", commands[0])
+        self.assertNotIn(":app:testDebugUnitTest", commands[0])
+        self.assertIn("inference/tests", commands[1])
+
+    def test_production_change_uses_documented_domain_fallback(self):
+        with patch.object(qa.subprocess, "check_output", return_value=b"app/src/main/java/Changed.kt\0"):
+            command = qa.commands("pre-commit", Path("output"))[-1]
+        self.assertEqual(command[-2:], ["--tests", "com.agarthavision.domain.*"])
+
+    def test_staged_test_only_selects_exact_class(self):
+        test = b"app/src/test/java/com/agarthavision/FooTest.kt\0"
+        with patch.object(qa.subprocess, "check_output", side_effect=[test, test, b""]):
+            command = qa.commands("pre-commit", Path("output"))[-1]
+        self.assertEqual(command[-2:], ["--tests", "com.agarthavision.FooTest"])
+
+    def test_deleted_or_renamed_staged_tests_use_safe_fallback(self):
+        old = b"app/src/test/java/com/agarthavision/OldTest.kt\0"
+        new = b"app/src/test/java/com/agarthavision/NewTest.kt\0"
+        cases = [
+            (old, b"", old),  # deleted test only
+            (old + new, new, old),  # deleted test plus a live added/modified test
+            (new, new, new),  # Git reports only destination for detected rename
+            (old + new, new, old + new),  # rename represented as delete + add
+        ]
+        for all_files, changed_files, removed_or_renamed in cases:
+            with self.subTest(all_files=all_files), patch.object(qa.subprocess, "check_output", side_effect=[all_files, changed_files, removed_or_renamed]) as git:
+                commands = qa.commands("pre-commit", Path("output"))
+            self.assertEqual(commands[-1], qa.gradle(":app:testDebugUnitTest", "--tests", "com.agarthavision.domain.*"))
+            self.assertIn("--diff-filter=DR", git.call_args_list[2].args[0])
+            self.assertIn("--find-renames", git.call_args_list[2].args[0])
+
+    def test_redacts_jwt_and_configured_secrets(self):
+        with patch.dict(qa.os.environ, {"QA_SMOKE_TOKEN": "very-secret-value"}):
+            self.assertEqual(qa.redact("Bearer eyJabc.def.ghi very-secret-value"), "Bearer [REDACTED_JWT] [REDACTED]")
+
+    def test_staging_limitations_follow_actual_smoke_mode_and_result(self):
+        cases = [
+            ({"mode": "designated-staging", "status": "pass", "revision": "deployed-123"}, [], 0, "Staging API smoke passed"),
+            ({"mode": "designated-staging", "status": "fail", "revision": None, "records": [{"case_id": "SMOKE-SETUP", "status": "fail"}]}, [], 1, "Staging smoke did not pass"),
+            ({"mode": "designated-staging", "status": "pass", "revision": "deployed-123"}, [], 1, "Staging smoke did not pass"),
+            ({"mode": "localhost-fake-model", "status": "pass"}, ["--local"], 0, "SKIP deployed backend/staging"),
+            (None, [], 1, "Staging smoke has no usable structured outcome"),
+        ]
+        for report, arguments, code, expected_note in cases:
+            with self.subTest(report=report), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+
+                def smoke_command(name, output):
+                    if report is not None:
+                        (output / "smoke.json").write_text(json.dumps(report), encoding="utf-8")
+                    return [[sys.executable, "-c", f"raise SystemExit({code})"]]
+
+                with patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "smoke", *arguments]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", side_effect=smoke_command):
+                    self.assertEqual(qa.main(), code)
+                summary = json.loads(next(root.rglob("summary.json")).read_text())
+                self.assertTrue(any(expected_note in note for note in summary["limitations"]))
+                if report and report["mode"] == "designated-staging":
+                    self.assertFalse(any("SKIP deployed backend/staging" in note for note in summary["limitations"]))
+                    self.assertEqual(summary["smoke"]["status"], "pass" if report["status"] == "pass" and code == 0 else "fail")
+                    self.assertEqual(summary["smoke"]["deployed_revision"], report["revision"])
+
+    def test_failure_is_reported_and_later_checks_still_execute(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "check"]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", return_value=[[sys.executable, "-c", "raise SystemExit(7)"], [sys.executable, "-c", "print('next check')"]]):
+                self.assertEqual(qa.main(), 7)
+            summary = json.loads(next(root.rglob("summary.json")).read_text())
+            self.assertEqual([r["status"] for r in summary["records"]], ["fail", "pass"])
+
+    def test_published_evidence_redacts_gradle_and_direct_api_reports_but_preserves_png(self):
+        secret = "synthetic-token<&-12345"
+        jwt = "eyJsynthetic.payload.signature"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reports = root / "app/build/reports/tests"
+            reports.mkdir(parents=True)
+            xml = f'<testsuite><testcase name="case"><failure>{html.escape(secret)} {jwt}</failure></testcase></testsuite>'
+            (reports / "result.xml").write_text(xml, encoding="utf-8")
+            (reports / "index.html").write_text(html.escape(secret), encoding="utf-8")
+            # Gradle binary output can include arbitrary logs, so exclude it entirely.
+            (reports / "output.bin").write_bytes(secret.encode())
+            png = b"\x89PNG\r\n\x1a\nsynthetic-screenshot"
+            (reports / "difference.png").write_bytes(png)
+
+            def command_with_api_report(name, output):
+                (output / "api.xml").write_text(xml, encoding="utf-8")
+                return [[sys.executable, "-c", "pass"]]
+
+            with patch.dict(qa.os.environ, {"QA_SMOKE_TOKEN": secret}), patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "check"]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", side_effect=command_with_api_report):
+                self.assertEqual(qa.main(), 0)
+            output = next((root / "build/qa").iterdir())
+            for path in output.rglob("*"):
+                if path.is_file() and path.suffix != ".png":
+                    text = path.read_text(encoding="utf-8")
+                    self.assertNotIn(secret, text)
+                    self.assertNotIn(html.escape(secret), text)
+                    self.assertNotIn(jwt, text)
+            self.assertIn("[REDACTED]", (output / "api.xml").read_text())
+            self.assertEqual(next(output.rglob("difference.png")).read_bytes(), png)
+            self.assertFalse(list(output.rglob("*.bin")))
+            self.assertEqual((reports / "result.xml").read_text(), xml)  # originals stay local
+            summary = json.loads((output / "summary.json").read_text())
+            self.assertEqual(len(summary["junit"]), 2)
+            self.assertEqual(summary["junit"][0]["status"], "fail")
+            self.assertEqual(summary["excluded_artifacts"][0]["reason"], "unsupported binary or unreadable report; raw content not published")
+
+    def test_ci_uploads_only_collected_evidence(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-and-test.yml"
+        text = workflow.read_text(encoding="utf-8")
+        self.assertEqual(text.count("path: build/qa/"), 2)
+        self.assertNotIn("            app/build/", text)
+
+    def test_device_reports_preserve_case_status_artifacts_and_redaction(self):
+        secret = "synthetic-device-token"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def device_results(name, output):
+                results = root / "app/build/outputs/androidTest-results/connected/debug"
+                results.mkdir(parents=True)
+                (results / "TEST-Pixel_6a.xml").write_text(
+                    '<testsuite><testcase classname="Device" name="passes"/>'
+                    f'<testcase classname="Device" name="fails"><failure>{secret}</failure></testcase>'
+                    '<testcase classname="Device" name="skips"><skipped message="fixture unavailable"/></testcase></testsuite>', encoding="utf-8")
+                report = root / "app/build/reports/androidTests/connected/debug"
+                report.mkdir(parents=True)
+                (report / "index.html").write_text(f"<html>{secret}</html>", encoding="utf-8")
+                return [[sys.executable, "-c", "raise SystemExit(1)"]]
+
+            with patch.dict(qa.os.environ, {"QA_SMOKE_TOKEN": secret}), patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "device"]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", side_effect=device_results):
+                self.assertEqual(qa.main(), 1)
+            output = next((root / "build/qa").iterdir())
+            summary = json.loads((output / "summary.json").read_text())
+            cases = {case["case_id"]: case for case in summary["junit"]}
+            self.assertEqual({name: case["status"] for name, case in cases.items()}, {"Device.passes": "pass", "Device.fails": "fail", "Device.skips": "skip"})
+            for case in cases.values():
+                self.assertEqual(case["requirement_id"], "QA-device-instrumentation")
+                self.assertTrue((output / case["artifact"]).is_file())
+                self.assertTrue(case["updated_during_run"])
+            self.assertIn("[REDACTED]", next(output.rglob("index.html")).read_text())
+            self.assertNotIn(secret, next(output.rglob("TEST-Pixel_6a.xml")).read_text())
+            self.assertFalse(any("not executed" in note for note in summary["limitations"]))
+            self.assertTrue(any("System capture/offline" in note for note in summary["limitations"]))
+
+    def test_device_without_case_reports_does_not_claim_case_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(qa.platform, "platform", return_value="test-environment"), patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", "device"]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), patch.object(qa, "commands", return_value=[[sys.executable, "-c", "pass"]]):
+                self.assertEqual(qa.main(), 0)
+            summary = json.loads(next(root.rglob("summary.json")).read_text())
+            self.assertEqual(summary["junit"], [])
+            self.assertTrue(any("No individual instrumentation results" in note for note in summary["limitations"]))
+
+    def test_staging_missing_credentials_fails_and_writes_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "smoke.json"
+            env = {k: v for k, v in qa.os.environ.items() if not k.startswith("QA_SMOKE") and k != "QA_DEPLOYED_REVISION"}
+            process = subprocess.run([sys.executable, str(Path(__file__).with_name("smoke.py")), "--output", str(output)], env=env, capture_output=True)
+            self.assertEqual(process.returncode, 1)
+            self.assertEqual(json.loads(output.read_text())["status"], "fail")
+
+
+if __name__ == "__main__":
+    unittest.main()

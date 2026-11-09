@@ -5,6 +5,8 @@ import com.agarthavision.domain.model.PatientReportPdfDocument
 import com.agarthavision.domain.model.PatientReportPdfHeader
 import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.PatientReportSessionRow
+import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.domain.model.ReportPdfSampleItem
 import com.agarthavision.domain.model.Sex
 import java.time.Instant
 import javax.inject.Inject
@@ -33,7 +35,12 @@ class PatientReportPdfBuilder @Inject constructor() {
         totalEggsConfirmed: Int,
         positiveSpecies: List<String>,
         sessionRows: List<PatientReportSessionRow>,
+        config: ReportConfig = ReportConfig(),
+        generatedByEmail: String? = null,
+        organizationName: String? = deriveOrganizationFromEmail(generatedByEmail),
+        appendixSamples: List<ReportPdfSampleItem> = emptyList(),
     ): PatientReportPdfDocument {
+        val appendixPageCount = if (config.includeSampleImages) appendixPageCount(appendixSamples.size) else 0
         val header = PatientReportPdfHeader(
             reportId = reportId,
             patientDisplayName = patientDisplayName,
@@ -43,16 +50,21 @@ class PatientReportPdfBuilder @Inject constructor() {
             scopeStart = scope.startDate,
             scopeEnd = scope.endDate,
             generatedBy = generatedByName,
+            generatedByEmail = generatedByEmail,
+            organizationName = organizationName,
             generatedAt = generatedAt,
             totalSessions = sessionRows.size,
             totalSamples = totalSamples,
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpecies = positiveSpecies,
+            includeSampleImages = config.includeSampleImages,
+            totalPages = 1 + appendixPageCount,
         )
         return PatientReportPdfDocument(
             header = header,
             speciesRows = buildReportSpeciesRows(pooledLpfPerSpecies),
             sessionRows = sessionRows,
+            appendixSamples = if (config.includeSampleImages) appendixSamples else emptyList(),
         )
     }
 }

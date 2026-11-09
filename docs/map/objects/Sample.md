@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-30
-commit: b64271d2
+verified: 2026-11-05
+commit: 2cc16989
 entity: app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt
 ---
 
@@ -45,7 +45,7 @@ columns; Postgres stores only what a verified, uploaded sample looks like.
 The fix recorded where the smear was read (the lab), not where the patient lives. Geospatial mapping
 keys on `patients.psgc_barangay_code`.
 
-**Room** (`SampleEntity`, schema v23). PK column is `sample_id`. Foreign key to `SessionEntity`
+**Room** (`SampleEntity`; the queue columns arrived in schema v23). PK column is `sample_id`. Foreign key to `SessionEntity`
 with `onDelete = ForeignKey.NO_ACTION` per C8. Room-only or Room-different fields, each a
 property of `SampleEntity`:
 
@@ -87,8 +87,8 @@ deferred because it changes DAO return types and ripples into `SampleMapper` and
 
 The insert row is the definitive list of what actually crosses the wire —
 `data/supabase/SampleRemoteDataSource.kt::SampleInsertRow`. `image_path`, `status`, `device_id`,
-`is_edited`, the inference queue columns, the prediction cache and `deleted_at` are all absent
-from it.
+`is_edited`, the inference queue columns and the prediction cache are all absent from it.
+`deleted_at` crosses it (see *the tombstone* above).
 
 `schema.ts` documents both the Postgres schema and the Room-only extensions.
 

@@ -133,18 +133,19 @@ open class ReportRemoteDataSource @Inject constructor(
      * Fetches a page of the reports [userId] generated, ordered by generated_at ascending.
      * Inclusive range: rows [offset, offset+limit-1].
      */
-    open suspend fun fetchOwnReports(userId: String, offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
+    open suspend fun fetchOwnReports(
+        userId: String,
+        offset: Long = 0L,
+        limit: Long = REMOTE_PAGE_SIZE,
+    ): List<ReportEntity> =
         supabase.postgrest[REPORTS_TABLE].select {
             filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<ReportRow, ReportEntity>(
+                jsonDecoder, "ReportRemoteDataSource", "report",
+            ) { it.toEntity() }
 
     /**
      * Fetches a page of the reports on the given [sessionIds], whoever generated them, ordered by
@@ -154,19 +155,16 @@ open class ReportRemoteDataSource @Inject constructor(
     open suspend fun fetchReportsForSessions(
         sessionIds: List<String>,
         offset: Long = 0L,
-        limit: Long = 500L,
+        limit: Long = REMOTE_PAGE_SIZE,
     ): List<ReportEntity> =
         supabase.postgrest[REPORTS_TABLE].select {
             filter { isIn("session_id", sessionIds) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<ReportRow, ReportEntity>(
+                jsonDecoder, "ReportRemoteDataSource", "report",
+            ) { it.toEntity() }
 
     private fun Map<String, LpfDensity>.toJsonObject(): JsonObject =
         buildJsonObject {

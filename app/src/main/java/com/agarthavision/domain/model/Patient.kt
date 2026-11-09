@@ -52,7 +52,7 @@ data class Patient(
     val updatedAt: Instant,
 ) {
     val isCodename: Boolean
-        get() = com.agarthavision.domain.patient.CodenameGenerator.isCodename(lastname)
+        get() = firstname.isBlank() || com.agarthavision.domain.patient.CodenameGenerator.isCodename(lastname)
 
     /**
      * `"Cruz, Gerald M."` — surname first, then the given name and a middle initial.
