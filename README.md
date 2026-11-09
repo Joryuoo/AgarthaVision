@@ -24,6 +24,14 @@ AgarthaVision is a mobile diagnostic-support and surveillance platform for fecal
 
 The project is a decision-support and preprocessing tool. It does not replace qualified medical judgment, final diagnosis, or laboratory validation.
 
+## Deployment & Downloads
+
+The production release APK for Android devices (Android 8.0 / API 26+) is deployed and available via GitHub Releases:
+
+- **Latest Release:** [v0.1.0-mvp](https://github.com/Joryuoo/AgarthaVision/releases/tag/v0.1.0-mvp)
+- **Direct Download:** [`AgarthaVision-v0.1.0-mvp.apk`](https://github.com/Joryuoo/AgarthaVision/releases/download/v0.1.0-mvp/AgarthaVision-v0.1.0-mvp.apk)
+- **Web Administration Console:** [https://agarthan-admin.vercel.app](https://agarthan-admin.vercel.app)
+
 ## Features
 
 - **Patient-based records** — sessions and samples are organized under a patient, with PSGC barangay residence for surveillance aggregation.
@@ -129,6 +137,25 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
    ```
 
 On Windows PowerShell, use `.\gradlew.bat assembleDebug` if the shell does not resolve `./gradlew`.
+
+### Environment Variables & Configuration
+
+The Android application reads build-time endpoints and authentication credentials from `local.properties` (copied from `local.properties.example`). Ensure the following 10 configuration keys are defined before compiling:
+
+| Variable Name | Environment | Description |
+| :--- | :--- | :--- |
+| `SUPABASE_URL_DEV` | Development | Local / staging Supabase project HTTPS URL |
+| `SUPABASE_URL_PROD` | Production | Production Supabase project HTTPS URL |
+| `SUPABASE_ANON_KEY_DEV` | Development | Development Supabase publishable API key (`sb_publishable_...`) |
+| `SUPABASE_ANON_KEY_PROD` | Production | Production Supabase publishable API key (`sb_publishable_...`) |
+| `TURNSTILE_SITE_KEY_DEV` | Development | Cloudflare Turnstile CAPTCHA site key (testing / dev) |
+| `TURNSTILE_SITE_KEY_PROD` | Production | Cloudflare Turnstile CAPTCHA site key (production) |
+| `TURNSTILE_HOSTNAME_DEV` | Development | Allowed origin hostname for Turnstile validation (dev) |
+| `TURNSTILE_HOSTNAME_PROD` | Production | Allowed origin hostname for Turnstile validation (e.g. `kazuretsu.dev`) |
+| `INFERENCE_URL_DEV` | Development | FastAPI deep-learning inference microservice endpoint (dev / local tunnel) |
+| `INFERENCE_URL_PROD` | Production | Production FastAPI deep-learning inference microservice HTTPS endpoint |
+
+> **Security Note:** In accordance with project security constraint C13, never commit actual values or `.jks` keystores. `local.properties` is strictly ignored by Git.
 
 ### Common Commands
 
