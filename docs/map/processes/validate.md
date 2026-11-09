@@ -1,8 +1,8 @@
 ---
 type: process
-status: verified
-verified: 2026-09-30
-commit: b64271d2
+status: stale
+verified: 2026-11-05
+commit: 2cc16989
 ---
 
 # validate
@@ -65,6 +65,10 @@ sync attempt.
 9. **Input is held while it saves.** `isSubmitting` lays an input blocker over the sheet and clears
    its semantics, and the view model refuses paging, back, discard and `setFrame` until it ends
    (`VerificationSheet.kt::SavingInputBlocker`, `VerificationViewModel.kt::requestLeave`).
+10. **Discard or leave.** Initial verification asks before deleting the frame
+    (`VerificationSheet.kt::DiscardFrameDialog`). The edit-mode footer routes Discard through the
+    leave flow, which offers to keep editing when there are unsaved changes
+    (`VerificationSheet.kt::LeaveUnsavedChangesDialog`, `VerificationViewModel.kt::requestLeave`).
 
 ## A colleague's sample is read-only
 
@@ -109,10 +113,9 @@ the medtech adds species with totals directly. Each egg becomes a detection with
 Every text-entry field reachable from verification and the records screens.
 
 - **Sanctioned free text.** The sample remark (`VerificationSheet.kt::NoteField`), written to
-  `samples.user_note` and exported unchanged in the CSV `user_note` column
-  (`ReportCsvBuilder.kt::CSV_HEADER`). The session label typed in the New Session sheet
+  `samples.user_note`. The session label typed in the New Session sheet
   (`SessionsScreen.kt::NewSessionSheet`) — an administrative specimen identifier, printed in the
-  CSV and PDF headers.
+  PDF header. There is no CSV export any more (86d4be47c).
 - **Dropdown-gated fallbacks** — they name the organism or stage, they do not annotate it. The
   "Other species" field in `SpeciesDropdown`, shown only for `EggSpecies.OTHER`, with offline
   suggestions from earlier entries (`SearchSpeciesSuggestionsUseCase`); its value becomes

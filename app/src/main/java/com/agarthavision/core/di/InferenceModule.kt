@@ -34,8 +34,9 @@ import javax.inject.Singleton
  * Provides the [InferenceApi] backed by Retrofit + OkHttp.
  *
  * Cloud inference calls send the user's Supabase session JWT (`currentAccessTokenOrNull()`)
- * as the Bearer token. `INFERENCE_API_KEY` is held server-side, preventing secret leakage in APKs.
- * When the container/proxy is not live, requests fail and the queue falls back to the on-device model.
+ * as the Bearer token, so no inference secret ships in the APK. The container verifies it against
+ * the Supabase project's signing keys (`inference/server.py::verify_user`). When the container is
+ * not live, or refuses the token, the call fails and the queue falls back to the on-device model.
  */
 @Module
 @InstallIn(SingletonComponent::class)

@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-30
-commit: b64271d2
+verified: 2026-11-05
+commit: 2cc16989
 entity: app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt
 ---
 
@@ -126,7 +126,6 @@ Documented shape: `schema.ts` (`Detection`).
   (`0001_init.sql:238`), the enum (`domain/model/DetectionVerdict.kt`), and every raw query
   string that names a verdict, in four DAOs — the list is in
   [effects](../effects/CONTEXT.md#changing-validation-logic).
-- The report generator, which emits `model_class`, `expert_class`, and `verdict`.
 
 **Does not hit**
 - The overlay geometry. `FrameWithBoxes` renders the frame's predictions and the answers being

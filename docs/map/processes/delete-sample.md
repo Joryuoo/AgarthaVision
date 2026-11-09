@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-30
-commit: b64271d2
+verified: 2026-11-05
+commit: 2cc16989
 ---
 
 # delete-sample
@@ -37,9 +37,9 @@ Taking frames out of the queue: a hard delete for a draft, a tombstone for anyth
    pushing `deleted_at` to Supabase Postgres via `SampleRemoteDataSource::SampleInsertRow`.
 5. **Report honestly.** The result is a `DeleteSummary` of hard-deleted and tombstoned counts.
 
-**Gap, code wins: step 4 does not carry the tombstone.** The push upserts
-`SampleRemoteDataSource.kt::SampleInsertRow`, which has no `deleted_at`, so Postgres and every
-other device keep the sample live. See [`Sample`](../objects/Sample.md).
+**The tombstone reaches every device.** `SampleRemoteDataSource.kt::SampleInsertRow` carries
+`deleted_at` (14zcqntjg97), so the push sets it in Postgres, and the next pull on every other
+device soft-deletes the sample there too (`SampleRow.toEntity`). See [`Sample`](../objects/Sample.md).
 
 ## Why this shape
 

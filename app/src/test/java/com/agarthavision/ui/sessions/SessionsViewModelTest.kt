@@ -6,6 +6,10 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientNameOption
+import com.agarthavision.domain.model.PatientReportScope
+import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.ui.records.ReportSheetStep
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
@@ -16,6 +20,7 @@ import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.records.GeneratePatientReportUseCase
+import com.agarthavision.domain.usecase.records.PreviewPatientReportUseCase
 import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
 import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
@@ -43,7 +48,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
+import kotlinx.coroutines.CompletableDeferred
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doThrow
@@ -1392,6 +1398,7 @@ class SessionsViewModelTest {
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
             getPatientReportCandidatesUseCase = mock(),
             generatePatientReportUseCase = mock(),
+            previewPatientReportUseCase = mock(),
             observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
@@ -1443,6 +1450,7 @@ class SessionsViewModelTest {
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(deps.syncInProgressFlow),
             getPatientReportCandidatesUseCase = mock(),
             generatePatientReportUseCase = mock(),
+            previewPatientReportUseCase = mock(),
             observeColleagueNamesUseCase = stubColleagueNamesUseCase(deps.colleagueNames),
             savedStateHandle = SavedStateHandle(
                 if (deps.patientId != null) mapOf("patientId" to deps.patientId) else emptyMap()
@@ -1457,6 +1465,8 @@ class SessionsViewModelTest {
     private fun viewModelForReportSheet(
         candidatesUseCase: GetPatientReportCandidatesUseCase = mock(),
         generateUseCase: GeneratePatientReportUseCase = mock(),
+        previewUseCase: PreviewPatientReportUseCase = mock(),
+        patient: Patient? = defaultTestPatient,
     ): SessionsViewModel {
         val identityFlow = MutableStateFlow<LocalIdentity?>(LocalIdentity(userId = "u1", email = "user@example.com"))
         val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
@@ -1470,11 +1480,12 @@ class SessionsViewModelTest {
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
             generateSessionLabelUseCase = stubLabelUseCase(),
-            patientRepository = stubPatientRepository(),
+            patientRepository = stubPatientRepository(patient),
             psgcRepository = stubPsgcRepository(),
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
             getPatientReportCandidatesUseCase = candidatesUseCase,
             generatePatientReportUseCase = generateUseCase,
+            previewPatientReportUseCase = previewUseCase,
             observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
@@ -1504,6 +1515,107 @@ class SessionsViewModelTest {
                 // contribute a finding, and a checked box on it would misrepresent the report.
                 assertEquals(setOf("s1"), sheet.selectedSessionIds)
                 assertFalse(sheet.isLoadingCandidates)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `opening patient report sheet for codenamed patient marks isPatientCodename true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val codenamePatient = defaultTestPatient.copy(lastname = "M24-001", firstname = "")
+            assertTrue(codenamePatient.isCodename)
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                patient = codenamePatient,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertTrue(sheet!!.isPatientCodename)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `updating config with CENSOR is ignored when isPatientCodename is true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val codenamePatient = defaultTestPatient.copy(lastname = "M24-001", firstname = "")
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                patient = codenamePatient,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertTrue(sheet!!.isPatientCodename)
+                assertEquals(PatientNameOption.SHOW, sheet.config.patientNameOption)
+
+                vm.onUpdatePatientReportConfig(
+                    ReportConfig(patientNameOption = PatientNameOption.CENSOR, includeSampleImages = true),
+                )
+                advanceUntilIdle()
+
+                val updatedSheet = expectMostRecentItem().reportSheet
+                assertNotNull(updatedSheet)
+                assertEquals(PatientNameOption.SHOW, updatedSheet!!.config.patientNameOption)
+                assertTrue(updatedSheet.config.includeSampleImages)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `updating config with CENSOR is applied when isPatientCodename is false`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                patient = defaultTestPatient,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertFalse(sheet!!.isPatientCodename)
+
+                vm.onUpdatePatientReportConfig(
+                    ReportConfig(patientNameOption = PatientNameOption.CENSOR),
+                )
+                advanceUntilIdle()
+
+                val updatedSheet = expectMostRecentItem().reportSheet
+                assertNotNull(updatedSheet)
+                assertEquals(PatientNameOption.CENSOR, updatedSheet!!.config.patientNameOption)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -1570,7 +1682,7 @@ class SessionsViewModelTest {
                 cancelAndIgnoreRemainingEvents()
             }
             // The use case is never reached — there is nothing left to hand it.
-            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any())
+            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any(), any())
         }
 
     @Test
@@ -1678,7 +1790,9 @@ class SessionsViewModelTest {
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any()) } doReturn Result.success(fakePatientReport())
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
+                    fakePatientReport(),
+                )
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
 
@@ -1709,7 +1823,9 @@ class SessionsViewModelTest {
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any()) } doReturn Result.failure(IllegalStateException("boom"))
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.failure(
+                    IllegalStateException("boom"),
+                )
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
 
@@ -1738,7 +1854,9 @@ class SessionsViewModelTest {
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any()) } doReturn Result.success(fakePatientReport())
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
+                    fakePatientReport(),
+                )
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
             vm.onOpenGenerateReport()
@@ -1751,7 +1869,272 @@ class SessionsViewModelTest {
             vm.onGeneratePatientReport()
             advanceUntilIdle()
 
-            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any())
+            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any(), any())
+        }
+
+    @Test
+    fun `updating patient report config updates sheet config and clears preview bytes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val newConfig = ReportConfig(
+                    includeSampleImages = false,
+                    patientNameOption = PatientNameOption.CENSOR,
+                )
+                vm.onUpdatePatientReportConfig(newConfig)
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals(newConfig, sheet!!.config)
+                assertNull(sheet.previewPdfBytes)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `previewing patient report transitions to PREVIEW step with rendered bytes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val fakePdfBytes = byteArrayOf(0x25, 0x50, 0x44, 0x46)
+            val previewUseCase = mock<PreviewPatientReportUseCase> {
+                onBlocking { invoke(eq("patient-1"), any(), any()) } doReturn Result.success(fakePdfBytes)
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                previewUseCase = previewUseCase,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onPreviewPatientReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals(ReportSheetStep.PREVIEW, sheet!!.step)
+                assertTrue(fakePdfBytes.contentEquals(sheet.previewPdfBytes))
+                assertFalse(sheet.isLoadingPreview)
+                assertNull(sheet.error)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `previewing patient report failure leaves sheet on CONFIGURATION step with error`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val previewUseCase = mock<PreviewPatientReportUseCase> {
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.failure(
+                    RuntimeException("Preview rendering failed"),
+                )
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                previewUseCase = previewUseCase,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onPreviewPatientReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals(ReportSheetStep.CONFIGURATION, sheet!!.step)
+                assertEquals("Preview rendering failed", sheet.error)
+                assertFalse(sheet.isLoadingPreview)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `navigating back to patient report config resets step to CONFIGURATION`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val previewUseCase = mock<PreviewPatientReportUseCase> {
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(byteArrayOf(1, 2, 3))
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                previewUseCase = previewUseCase,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onPreviewPatientReport()
+                advanceUntilIdle()
+                assertEquals(ReportSheetStep.PREVIEW, expectMostRecentItem().reportSheet?.step)
+
+                vm.onBackToPatientReportConfig()
+                advanceUntilIdle()
+                assertEquals(ReportSheetStep.CONFIGURATION, expectMostRecentItem().reportSheet?.step)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `acknowledging patient report warning updates warning acknowledged flag`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                assertFalse(expectMostRecentItem().reportSheet?.isWarningAcknowledged ?: true)
+
+                vm.onAcknowledgePatientReportWarning(true)
+                advanceUntilIdle()
+                assertTrue(expectMostRecentItem().reportSheet?.isWarningAcknowledged ?: false)
+
+                vm.onAcknowledgePatientReportWarning(false)
+                advanceUntilIdle()
+                assertFalse(expectMostRecentItem().reportSheet?.isWarningAcknowledged ?: true)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `stale patient preview is discarded after exclusion scope changes or reopening`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            for (change in listOf("config", "scope", "reopen")) {
+                val pending = CompletableDeferred<Result<ByteArray>>()
+                val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                    onBlocking { invoke(any()) } doReturn Result.success(listOf(
+                        PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                    ))
+                }
+                val previewUseCase = mock<PreviewPatientReportUseCase>()
+                whenever(previewUseCase.invoke(any(), any(), any()))
+                    .doSuspendableAnswer { pending.await() }
+                val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, previewUseCase = previewUseCase)
+                vm.state.test {
+                    advanceUntilIdle()
+                    vm.onOpenGenerateReport()
+                    advanceUntilIdle()
+                    vm.onPreviewPatientReport()
+                    advanceUntilIdle()
+                    when (change) {
+                        "config" -> vm.onUpdatePatientReportConfig(
+                            ReportConfig(patientNameOption = PatientNameOption.EXCLUDE),
+                        )
+                        "scope" -> vm.onToggleReportSession("s1")
+                        else -> {
+                            vm.onDismissReportSheet()
+                            vm.onOpenGenerateReport()
+                            advanceUntilIdle()
+                        }
+                    }
+                    pending.complete(Result.success(byteArrayOf(1, 2, 3)))
+                    advanceUntilIdle()
+                    val sheet = expectMostRecentItem().reportSheet!!
+                    assertEquals(ReportSheetStep.CONFIGURATION, sheet.step)
+                    assertNull(sheet.previewPdfBytes)
+                    assertFalse(sheet.isLoadingPreview)
+                    cancelAndIgnoreRemainingEvents()
+                }
+            }
+        }
+
+    @Test
+    fun `generating patient report passes current config to generate use case`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val fakePdfBytes = byteArrayOf(9, 8, 7)
+            val previewUseCase = mock<PreviewPatientReportUseCase> {
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(fakePdfBytes)
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase> {
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
+                    fakePatientReport(),
+                )
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                previewUseCase = previewUseCase,
+                generateUseCase = generateUseCase,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val customConfig = ReportConfig(
+                    includeSampleImages = false,
+                    patientNameOption = PatientNameOption.EXCLUDE,
+                )
+                vm.onUpdatePatientReportConfig(customConfig)
+                advanceUntilIdle()
+
+                vm.onPreviewPatientReport()
+                advanceUntilIdle()
+
+                vm.onGeneratePatientReport()
+                advanceUntilIdle()
+
+                verify(generateUseCase).invoke(
+                    patientId = eq("patient-1"),
+                    scope = eq(
+                        PatientReportScope(
+                            startDate = null,
+                            endDate = null,
+                            sessionIds = setOf("s1"),
+                        ),
+                    ),
+                    config = eq(customConfig),
+                )
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
         }
 }
 

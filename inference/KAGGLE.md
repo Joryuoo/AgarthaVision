@@ -16,30 +16,34 @@ below are what that notebook automates.
 1. **Verify your phone** — Kaggle → *Settings → Phone Verification*. Internet access in
    notebooks is gated behind this, and you need it for the `pip git+` install and the tunnel.
 2. **Upload the weights as a Dataset:**
-   - Run `git lfs pull` locally first so `weights/yolo26n-efficientnetv2s.pt` is the real ~44 MB file, not the
-     LFS pointer.
-   - Kaggle → *Datasets → New Dataset* → drag in `yolo26n-efficientnetv2s.pt`.
+   - The cloud checkpoint, `yolo26n-mobilenetv4hybridlarge.pt`, is not in the repo (the repo's
+     `weights/yolo26n-efficientnetv2s.pt` is the phone's model). Get it from Tabada.
+   - Kaggle → *Datasets → New Dataset* → drag in `yolo26n-mobilenetv4hybridlarge.pt`.
    - Ignore the **"Switch to Models"** banner — a `.pt` is valid dataset content; that banner
      is just a non-blocking suggestion.
    - Title it exactly **`agartha-weights`** (lowercase, hyphenated) → mounts at
-     `/kaggle/input/agartha-weights/yolo26n-efficientnetv2s.pt`. Keep it **Private**. Click **Create**.
+     `/kaggle/input/` (the notebook searches there for `yolo26n-mobilenetv4hybridlarge.pt`, whatever
+     the mount layout). Keep it **Private**. Click **Create**.
 
 ## Per-session steps
 
 1. Open [`kaggle_inference.ipynb`](kaggle_inference.ipynb) in Kaggle (File → Import Notebook,
    or upload it).
 2. Right sidebar: **Accelerator → GPU T4 x2**, **Internet → On**, **Add Input → agartha-weights**.
-3. In the config cell, set `INFERENCE_API_KEY` to a strong secret (must match the app).
+3. **Add-ons → Secrets**: attach `SUPABASE_URL` (the project the app signs in to, its
+   `SUPABASE_URL_DEV`) and `CLOUDFLARE_TUNNEL_TOKEN`. The config and tunnel cells read them
+   from there, so no value is written in the notebook. There is no shared key: the server
+   accepts that project's signed-in users' access tokens (README.md, "Auth"). Delete an old
+   `INFERENCE_API_KEY` secret if one is left; nothing reads it.
 4. **Run all cells.** The last cell (cloudflared) runs forever and prints a
    `https://<random>.trycloudflare.com` URL — that's your public base URL. Leave it running.
 5. Wire the app — in `local.properties`, then rebuild:
    ```properties
    INFERENCE_URL_DEV=https://<random>.trycloudflare.com
-   INFERENCE_API_KEY=<the-same-secret>
    ```
 
-The API contract is identical to the droplet (`GET /health`, `POST /infer` with a
-`Bearer` token and raw JPEG body), so no app code changes are needed. HTTPS from the tunnel
+The API contract is identical to the droplet (`GET /health`, `POST /infer` with the user's
+access token as `Bearer` and a raw JPEG body), so no app code changes are needed. HTTPS from the tunnel
 also avoids the Android cleartext-traffic restriction.
 
 ---
@@ -51,8 +55,10 @@ also avoids the Android cleartext-traffic restriction.
 - **Idle shutdown.** Kaggle kills idle sessions (~20–40 min of no activity) and caps at
   12 h/session, 30 h/week GPU. The app's 2 s polling may not register as notebook activity —
   keep the notebook tab open and interact occasionally during a demo.
-- **Weights path 404.** If the assert in the config cell fails, check the left **Input** panel
-  for the real folder name and update `WEIGHTS_PATH`.
+- **Weights not found.** The config cell searches `/kaggle/input/` for the weights file, because
+  Kaggle now mounts datasets at `/kaggle/input/datasets/<owner>/<slug>/` rather than
+  `/kaggle/input/<slug>/`. If its assert fails, the dataset isn't attached (**Add Input**), or
+  the file in it has a different name.
 - **Start-up takes longer than one model load.** The server loads and warms up one model per
   GPU before it answers, so the first `/infer` is not slow any more. The launch cell waits 20 s.
 - **Keep `server.py` in sync.** The notebook's `%%writefile` cell is a verbatim copy of
@@ -70,7 +76,8 @@ batching"). These checks need the real model, so they run here, not in `tests/`:
    ```python
    import concurrent.futures, requests, time
    jpg = open("/kaggle/input/<a-sample-dataset>/sample.jpg", "rb").read()
-   H = {"Authorization": f"Bearer {os.environ['INFERENCE_API_KEY']}", "Content-Type": "image/jpeg"}
+   TOKEN = "<access-token>"  # a signed-in user's, see README.md, "Getting a token to test with"
+   H = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "image/jpeg"}
    post = lambda _: requests.post("http://localhost:6767/infer", data=jpg, headers=H)
    with concurrent.futures.ThreadPoolExecutor(24) as pool:
        burst = pool.map(post, range(24))

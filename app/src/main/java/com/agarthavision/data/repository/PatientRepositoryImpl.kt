@@ -147,7 +147,7 @@ class PatientRepositoryImpl @Inject constructor(
     ): Flow<List<ActivityItem.PatientAdded>> =
         patientDao.observeAddedActivity(userId, limit).map { rows ->
             rows.map { row ->
-                val isCodename = CodenameGenerator.isCodename(row.lastname)
+                val isCodename = row.firstname.isBlank() || CodenameGenerator.isCodename(row.lastname)
                 val maskedName = if (isCodename) {
                     row.lastname
                 } else {

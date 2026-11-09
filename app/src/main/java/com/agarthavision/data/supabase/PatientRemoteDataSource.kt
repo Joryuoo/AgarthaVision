@@ -9,6 +9,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.time.LocalDate
 import javax.inject.Inject
@@ -64,29 +65,33 @@ class PatientRemoteDataSource @Inject constructor(
      * The `patient_users` row is **not** written from here. The `on_patient_created`
      * trigger is `security definer` and writes it server-side; a client insert races the
      * trigger and, on conflict, does nothing useful.
+     *
+     * **The conflict is read from the HTTP status, not the SQLSTATE** (14zcqntr43e).
+     * supabase-kt 3.0.3 parses PostgREST's `code` and then drops it: a [RestException] keeps
+     * only the message, details and status. An earlier version looked for `23505` in the
+     * message, never found it, and stranded every patient the server already held in
+     * `sync_failed`, its sessions and samples with it.
+     *
+     * PostgREST answers 409 for a foreign-key violation as well as a duplicate key, so a 409
+     * alone does not prove the row exists. The update asks for the row back and must get one:
+     * an empty result means it matched nothing - the row is absent, or RLS hid it - and the
+     * original error is rethrown rather than the patient marked synced on a write that never
+     * happened. `RETURNING` is safe on the update, unlike on the insert, because the link row
+     * `patients_select_linked` needs exists by then.
      */
     suspend fun upsertPatient(patient: PatientEntity) {
         val row = patient.toRow()
         try {
             supabase.postgrest[PATIENTS_TABLE].insert(row)
         } catch (error: RestException) {
-            if (!error.isDuplicateKey()) throw error
-            supabase.postgrest[PATIENTS_TABLE].update(row) {
+            if (error.statusCode != HttpStatusCode.Conflict.value) throw error
+            val updated = supabase.postgrest[PATIENTS_TABLE].update(row) {
+                select()
                 filter { eq("id", patient.patientId) }
-            }
+            }.decodeList<JsonElement>()
+            if (updated.isEmpty()) throw error
         }
     }
-
-    /**
-     * Whether a failed write was a primary-key collision rather than a real error.
-     *
-     * Matched on the SQLSTATE Postgres reports for a unique violation. supabase-kt surfaces
-     * a conflict as the same `RestException` type as everything else, so there is no class
-     * to catch instead; the code is checked rather than the prose because the prose is
-     * localisable and names the constraint.
-     */
-    private fun RestException.isDuplicateKey(): Boolean =
-        message?.contains(UNIQUE_VIOLATION) == true
 
     private val jsonDecoder = Json { ignoreUnknownKeys = true }
 
@@ -100,13 +105,10 @@ class PatientRemoteDataSource @Inject constructor(
     suspend fun fetchPatients(patientIds: List<String>): List<PatientEntity> =
         supabase.postgrest[PATIENTS_TABLE].select {
             filter { isIn("id", patientIds) }
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<PatientRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("PatientRemoteDataSource", "Skipping malformed patient row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<PatientRow, PatientEntity>(
+                jsonDecoder, "PatientRemoteDataSource", "patient",
+            ) { it.toEntity() }
 
     /**
      * The `patient_users` rows of [userId], the signed-in user.
@@ -126,19 +128,16 @@ class PatientRemoteDataSource @Inject constructor(
     suspend fun fetchPatientLinks(
         userId: String,
         offset: Long = 0L,
-        limit: Long = 500L,
+        limit: Long = REMOTE_PAGE_SIZE,
     ): List<PatientUserEntity> =
         supabase.postgrest[PATIENT_USERS_TABLE].select {
             filter { eq("user_id", userId) }
             order("patient_id", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<JsonElement>().mapNotNull { element ->
-            runCatching {
-                jsonDecoder.decodeFromJsonElement<PatientUserRow>(element).toEntity()
-            }.onFailure { error ->
-                Logger.w("PatientRemoteDataSource", "Skipping malformed patient link row: ${error.message}")
-            }.getOrNull()
-        }
+        }.decodeList<JsonElement>()
+            .decodeRowsSkippingMalformed<PatientUserRow, PatientUserEntity>(
+                jsonDecoder, "PatientRemoteDataSource", "patient link",
+            ) { it.toEntity() }
 
     // ── Row shapes ────────────────────────────────────────────────────────────
 
@@ -164,9 +163,6 @@ class PatientRemoteDataSource @Inject constructor(
     private companion object {
         const val PATIENTS_TABLE = "patients"
         const val PATIENT_USERS_TABLE = "patient_users"
-
-        /** Postgres SQLSTATE for a unique violation - a primary-key collision here. */
-        const val UNIQUE_VIOLATION = "23505"
     }
 }
 

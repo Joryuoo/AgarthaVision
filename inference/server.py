@@ -6,14 +6,25 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
+import jwt
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image
 from ultralytics import YOLO
 
-API_KEY = os.environ["INFERENCE_API_KEY"]
-WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH", "weights/yolo26n-efficientnetv2s.pt")
-MODEL_VERSION = os.environ.get("MODEL_VERSION", "yolo26n-effv2s-v1-cloud-fp32")
+# Auth: the app sends the signed-in user's Supabase access token, and the server checks it
+# against the project's public signing keys (JWKS). No shared secret. See README.md, "Auth".
+SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
+JWT_ISSUER = f"{SUPABASE_URL}/auth/v1"
+JWKS_URL = f"{JWT_ISSUER}/.well-known/jwks.json"
+# Supabase's asymmetric signing algorithms. HS256 is left out on purpose: the project signs
+# with ES256, so an HS256 token is a forgery, and accepting it would invite key confusion.
+JWT_ALGORITHMS = ["ES256", "RS256"]
+# How long the fetched key set is reused. A token with an unknown `kid` refetches it sooner,
+# so a rotated key is picked up without a restart.
+JWKS_CACHE_S = float(os.environ.get("JWKS_CACHE_S", "600"))
+WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH", "weights/yolo26n-mobilenetv4hybridlarge.pt")
+MODEL_VERSION = os.environ.get("MODEL_VERSION", "yolo26n-mobv4hybridl-v1-cloud-fp32")
 
 # Queue and micro-batching. See README.md, "Queue and batching", before changing these.
 # Most frames per forward pass.
@@ -113,12 +124,53 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-security = HTTPBearer()
+# auto_error=False: a missing header is answered with 401 below on every FastAPI version
+# (older ones answer 403 themselves, and Kaggle's FastAPI is not pinned).
+security = HTTPBearer(auto_error=False)
+# Short timeout: a JWKS fetch happens inside a request, which must answer within REQUEST_TIMEOUT_S.
+jwks = jwt.PyJWKClient(JWKS_URL, lifespan=JWKS_CACHE_S, timeout=5)
 
 
-def verify_key(creds: HTTPAuthorizationCredentials = Depends(security)) -> None:
-    if creds.credentials != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+def unauthorized(detail: str) -> HTTPException:
+    return HTTPException(status_code=401, detail=detail, headers={"WWW-Authenticate": "Bearer"})
+
+
+def verify_user(creds: HTTPAuthorizationCredentials | None = Depends(security)) -> dict:
+    """Accept only a signed-in user's Supabase access token, and return its claims.
+
+    A plain `def`, so FastAPI runs it on a thread: a JWKS fetch never blocks the event loop.
+    """
+    if creds is None:
+        raise unauthorized("Missing bearer token")
+    token = creds.credentials
+    try:
+        signing_key = jwks.get_signing_key_from_jwt(token)
+    except jwt.PyJWKClientConnectionError:
+        # Supabase cannot be reached, so the token cannot be judged either way. That is the
+        # server's problem, not the caller's: 503, and the app falls back and retries.
+        log.warning("JWKS unreachable at %s", JWKS_URL)
+        raise busy("Cannot verify the token right now") from None
+    except (jwt.PyJWKClientError, jwt.InvalidTokenError):
+        # Not a JWT, or signed with a key this project does not publish.
+        raise unauthorized("Invalid token") from None
+    try:
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=JWT_ALGORITHMS,
+            audience="authenticated",
+            issuer=JWT_ISSUER,
+            options={"require": ["exp", "iss", "aud", "sub"]},
+        )
+    except jwt.ExpiredSignatureError:
+        raise unauthorized("Token expired") from None
+    except jwt.InvalidTokenError:
+        raise unauthorized("Invalid token") from None
+    # `aud` is "authenticated" for signed-in users, but `role` is what Supabase itself
+    # authorises on, so check it too: an anon or service-role token is not a user.
+    if claims.get("role") != "authenticated":
+        raise unauthorized("Not a signed-in user")
+    return claims
 
 
 def decode(raw: bytes) -> Image.Image:
@@ -136,7 +188,7 @@ async def health() -> dict:
 
 
 @app.post("/infer")
-async def infer(request: Request, response: Response, _: None = Depends(verify_key)) -> dict:
+async def infer(request: Request, response: Response, _: dict = Depends(verify_user)) -> dict:
     raw = await request.body()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty request body")

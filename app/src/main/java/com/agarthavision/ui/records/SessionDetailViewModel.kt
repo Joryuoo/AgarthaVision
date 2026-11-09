@@ -7,12 +7,16 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.supabase.RestoreReportFilesUseCase
 import com.agarthavision.domain.model.LpfDensity
+import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.usecase.records.GenerateSessionReportUseCase
 import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionPendingCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
+import com.agarthavision.domain.usecase.records.PreviewSessionReportUseCase
 import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.SessionSamplesResult
@@ -70,6 +74,7 @@ data class SessionDetailState(
      */
     val isActiveSession: Boolean = false,
     val selectedTab: SessionDetailTab = SessionDetailTab.REPORT,
+    val reportSheet: SessionReportSheetState? = null,
 ) {
     /**
      * The Verify Queue always shows the *active* session, so the shortcut into it is only
@@ -130,7 +135,7 @@ sealed interface SessionDetailEvent {
 // Each parameter here is a separately tested, separately named use case — bundling would not
 // simplify the dependency graph; LongParameterList is the expected cost of composing 7 flows.
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions")
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -140,11 +145,15 @@ class SessionDetailViewModel @Inject constructor(
     observeSessionPendingCountUseCase: ObserveSessionPendingCountUseCase,
     private val sessionEggCountUseCase: SessionEggCountUseCase,
     private val generateSessionReportUseCase: GenerateSessionReportUseCase,
+    private val previewSessionReportUseCase: PreviewSessionReportUseCase,
+    private val patientRepository: PatientRepository,
     private val restoreReportFilesUseCase: RestoreReportFilesUseCase,
     sessionManager: SessionManager,
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
     private val generationState = MutableStateFlow(GenerationState())
+    private var previewRequestId = 0L
+    private val reportSheetState = MutableStateFlow<SessionReportSheetState?>(null)
 
     /** Zero-based reports page; moved by [goToNextReportPage] / [goToPreviousReportPage]. */
     private val currentReportPage = MutableStateFlow(0)
@@ -216,8 +225,14 @@ class SessionDetailViewModel @Inject constructor(
         observeSessionPendingCountUseCase(sessionId),
         isActiveSessionFlow,
         selectedTab,
-    ) { partial, pending, isActive, tab ->
-        partial.copy(pendingFlagged = pending, isActiveSession = isActive, selectedTab = tab)
+        reportSheetState,
+    ) { partial, pending, isActive, tab, sheet ->
+        partial.copy(
+            pendingFlagged = pending,
+            isActiveSession = isActive,
+            selectedTab = tab,
+            reportSheet = sheet,
+        )
     }
         .mapLatest { it }
         .stateIn(
@@ -230,27 +245,116 @@ class SessionDetailViewModel @Inject constructor(
         selectedTab.value = tab
     }
 
+    fun onOpenGenerateReport() {
+        previewRequestId++
+        val currentSession = state.value.session ?: return
+        val verifiedCount = currentSession.samples.size
+        viewModelScope.launch {
+            val patient = patientRepository.getPatientById(currentSession.session.patientId)
+            reportSheetState.value = SessionReportSheetState(
+                step = ReportSheetStep.CONFIGURATION,
+                config = ReportConfig(),
+                verifiedSampleCount = verifiedCount,
+                patientDisplayName = patient?.displayName.orEmpty(),
+                patientMaskedName = patient?.maskedDisplayName.orEmpty(),
+                isPatientCodename = patient?.isCodename == true,
+            )
+        }
+    }
+
+    fun onDismissReportSheet() {
+        previewRequestId++
+        reportSheetState.value = null
+    }
+
+    fun onUpdateReportConfig(config: ReportConfig) {
+        previewRequestId++
+        reportSheetState.update { current ->
+            if (current == null) return@update null
+            val isRestrictedCensor = current.isPatientCodename &&
+                config.patientNameOption == PatientNameOption.CENSOR
+            val effectiveConfig = if (isRestrictedCensor) {
+                config.copy(patientNameOption = current.config.patientNameOption)
+            } else {
+                config
+            }
+            current.copy(config = effectiveConfig, previewPdfBytes = null, isLoadingPreview = false)
+        }
+    }
+
+    fun onAcknowledgeReportWarning(acknowledged: Boolean) {
+        reportSheetState.update { current ->
+            current?.copy(isWarningAcknowledged = acknowledged)
+        }
+    }
+
+    fun onPreviewSessionReport() {
+        val currentSheet = reportSheetState.value ?: return
+        val requestId = ++previewRequestId
+        viewModelScope.launch {
+            if (requestId != previewRequestId) return@launch
+            reportSheetState.update { it?.copy(isLoadingPreview = true, error = null) }
+            previewSessionReportUseCase(sessionId, currentSheet.config).fold(
+                onSuccess = { pdfBytes ->
+                    reportSheetState.update {
+                        if (requestId != previewRequestId) return@update it
+                        it?.copy(
+                            step = ReportSheetStep.PREVIEW,
+                            previewPdfBytes = pdfBytes,
+                            isLoadingPreview = false,
+                            error = null,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    reportSheetState.update {
+                        if (requestId != previewRequestId) return@update it
+                        it?.copy(
+                            isLoadingPreview = false,
+                            error = error.message ?: error::class.simpleName,
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun onBackToReportConfig() {
+        previewRequestId++
+        reportSheetState.update { current ->
+            current?.copy(step = ReportSheetStep.CONFIGURATION, isLoadingPreview = false)
+        }
+    }
+
+    fun onFinalizeSessionReport() {
+        previewRequestId++
+        val currentSheet = reportSheetState.value
+        val config = currentSheet?.config ?: ReportConfig()
+        viewModelScope.launch {
+            reportSheetState.update { it?.copy(isGenerating = true, error = null) }
+            generationState.update { it.copy(isGenerating = true, error = null) }
+            generateSessionReportUseCase(sessionId, config).fold(
+                onSuccess = { report ->
+                    generationState.update { GenerationState() }
+                    reportSheetState.value = null
+                    currentReportPage.value = 0
+                    _events.emit(SessionDetailEvent.ReportGenerated(pdfPath = report.pdfFilePath))
+                },
+                onFailure = { error ->
+                    val errorMsg = error.message ?: error::class.simpleName
+                    generationState.update { GenerationState(error = errorMsg) }
+                    reportSheetState.update { it?.copy(isGenerating = false, error = errorMsg) }
+                },
+            )
+        }
+    }
+
     /**
      * Generates a fresh PDF report for this session. Emits [SessionDetailEvent.ReportGenerated]
      * on success so the screen can offer the medtech a share action for it.
      */
     fun generateReport() {
-        viewModelScope.launch {
-            generationState.update { it.copy(isGenerating = true, error = null) }
-            generateSessionReportUseCase(sessionId).fold(
-                onSuccess = { report ->
-                    generationState.update { GenerationState() }
-                    // The new report is newest, so it lands on the first page — jump there.
-                    currentReportPage.value = 0
-                    _events.emit(SessionDetailEvent.ReportGenerated(pdfPath = report.pdfFilePath))
-                },
-                onFailure = { error ->
-                    generationState.update {
-                        GenerationState(error = error.message ?: error::class.simpleName)
-                    }
-                },
-            )
-        }
+        onFinalizeSessionReport()
     }
 
     /**

@@ -104,6 +104,7 @@ class SessionPickerViewModelTest {
         observeSyncInProgressUseCase = observeSyncInProgressUseCase,
         getPatientReportCandidatesUseCase = mock(),
         generatePatientReportUseCase = mock(),
+        previewPatientReportUseCase = mock(),
         observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),

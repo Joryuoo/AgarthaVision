@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-11-05
+commit: 2cc16989
 ---
 
 # register-patient
@@ -37,7 +37,10 @@ Recording a patient, named or codenamed, so smears have someone to belong to.
    (`supabase/migrations/0001_init.sql:131-147`).
 5. **Queue the push.** `syncScheduler.requestSync()`, fire-and-forget: the save never fails
    because the network did. An edit (`::update`) resets `supabase_status` to `pending` and
-   requests sync the same way; the remote write is an upsert.
+   requests sync the same way. The remote write is an insert that, on HTTP 409, becomes an
+   update which must return the row (`data/supabase/PatientRemoteDataSource.kt::upsertPatient`,
+   14zcqntr43e), so a patient the server already holds re-syncs instead of sticking at
+   `sync_failed` with its sessions and samples behind it.
 
 ## Why this shape
 

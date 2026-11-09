@@ -297,6 +297,10 @@ fun SessionsScreen(
             onSelectAll = viewModel::onSelectAllReportSessions,
             onToggleSession = viewModel::onToggleReportSession,
             onGenerate = viewModel::onGeneratePatientReport,
+            onConfigChange = viewModel::onUpdatePatientReportConfig,
+            onAcknowledgeWarning = viewModel::onAcknowledgePatientReportWarning,
+            onPreview = viewModel::onPreviewPatientReport,
+            onBackToConfig = viewModel::onBackToPatientReportConfig,
         )
     }
     renamingSessionData?.let { target ->

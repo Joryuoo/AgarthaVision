@@ -10,8 +10,10 @@ import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.RecordsTotals
+import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
@@ -115,7 +117,7 @@ class GenerateSessionReportUseCaseTest {
         assertEquals("Lahug, City of Cebu", header.barangayLabel)
         assertEquals("Dr. Reyes", header.generatedByName)
         // The same instant used for the report row's timestamp is the one age was computed
-        // from — not a beat apart, which would let the printed age and "Generated at" disagree.
+        // from â€” not a beat apart, which would let the printed age and "Generated at" disagree.
         assertEquals(reportRepository.lastInserted?.generatedAt, header.generatedAt)
     }
 
@@ -285,6 +287,90 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(0, syncScheduler.requests)
     }
 
+    @Test
+    fun `config patientNameOption formats patient name on report and pdf`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val patient = patient(lastname = "Cruz", firstname = "Gerald")
+        val useCase = standardUseCase(
+            reportRepository = reportRepository,
+            reportFileStore = reportFileStore,
+            renderer = renderer,
+            patient = patient,
+        )
+
+        val resultShow = useCase("session-1", config = ReportConfig(patientNameOption = PatientNameOption.SHOW))
+        assertTrue(resultShow.isSuccess)
+        assertEquals("Cruz, Gerald", resultShow.getOrThrow().patientName)
+        assertEquals("Cruz, Gerald", renderer.lastDocument!!.header.patientName)
+
+        val resultCensor = useCase("session-1", config = ReportConfig(patientNameOption = PatientNameOption.CENSOR))
+        assertTrue(resultCensor.isSuccess)
+        assertEquals(patient.maskedDisplayName, resultCensor.getOrThrow().patientName)
+        assertEquals(patient.maskedDisplayName, renderer.lastDocument!!.header.patientName)
+
+        val resultExclude = useCase("session-1", config = ReportConfig(patientNameOption = PatientNameOption.EXCLUDE))
+        assertTrue(resultExclude.isSuccess)
+        assertEquals("Excluded", resultExclude.getOrThrow().patientName)
+        assertEquals("Excluded", renderer.lastDocument!!.header.patientName)
+    }
+
+    @Test
+    fun `config includeSampleImages builds appendix samples in pdf`() = runTest {
+        val renderer = FakeReportPdfRenderer()
+        val useCase = standardUseCase(
+            reportRepository = FakeReportRepository(),
+            reportFileStore = FakeReportFileStore(),
+            renderer = renderer,
+        )
+
+        useCase("session-1", config = ReportConfig(includeSampleImages = true))
+        val docWithAppendix = renderer.lastDocument!!
+        assertTrue(docWithAppendix.header.includeSampleImages)
+        assertEquals(2, docWithAppendix.appendixSamples.size)
+        assertEquals("sample-1", docWithAppendix.appendixSamples[0].sampleId)
+        assertEquals("sample-2", docWithAppendix.appendixSamples[1].sampleId)
+        assertEquals(2, docWithAppendix.header.totalPages)
+
+        useCase("session-1", config = ReportConfig(includeSampleImages = false))
+        val docNoAppendix = renderer.lastDocument!!
+        assertTrue(!docNoAppendix.header.includeSampleImages)
+        assertTrue(docNoAppendix.appendixSamples.isEmpty())
+        assertEquals(1, docNoAppendix.header.totalPages)
+    }
+
+    @Test
+    fun `final pdf identity and data match persisted report`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val useCase = standardUseCase(
+            reportRepository = reportRepository,
+            reportFileStore = reportFileStore,
+            renderer = renderer,
+        )
+
+        val result = useCase(
+            sessionId = "session-1",
+            config = ReportConfig(patientNameOption = PatientNameOption.CENSOR),
+        )
+
+        assertTrue(result.isSuccess)
+        val report = result.getOrThrow()
+        assertEquals(1, renderer.renderCallCount)
+        val document = renderer.lastDocument!!
+        assertEquals(report.id, document.header.reportId)
+        assertEquals(report.generatedAt, document.header.generatedAt)
+        assertEquals(report.patientName, document.header.patientName)
+        assertEquals(report.totalSamples, document.header.fieldsExamined)
+        assertEquals(report.id, reportFileStore.lastPdfReportId)
+        assertTrue(FAKE_PDF_BYTES.contentEquals(reportFileStore.lastPdfBytes))
+        assertEquals("/Documents/AgarthaVision/report.pdf", report.pdfFilePath)
+        assertEquals(patient().maskedDisplayName, report.patientName)
+        assertEquals(report.id, reportRepository.lastInserted?.id)
+    }
+
     @Suppress("LongParameterList")
     private fun standardUseCase(
         reportRepository: FakeReportRepository,
@@ -347,9 +433,11 @@ private val FAKE_PDF_BYTES = byteArrayOf('%'.code.toByte(), 'P'.code.toByte(), '
 
 private class FakeReportPdfRenderer : ReportPdfRenderer {
     var lastDocument: ReportPdfDocument? = null
+    var renderCallCount: Int = 0
 
     override suspend fun render(document: ReportPdfDocument): ByteArray {
         lastDocument = document
+        renderCallCount++
         return FAKE_PDF_BYTES
     }
 }

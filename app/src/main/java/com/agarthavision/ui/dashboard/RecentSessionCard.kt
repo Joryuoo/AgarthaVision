@@ -44,7 +44,7 @@ internal fun RecentSessionCard(
     val label = session.label ?: "Session ${session.id.take(8)}"
     val queueBadge = sessionQueueBadge(sessionSummary.totalFrames, sessionSummary.framesToReview)
     val now = remember { System.currentTimeMillis() }
-    val relativeTime = shortRelativeTimeText(sessionSummary.lastActivityAt, now)
+    val relativeTime = relativeTimeText(sessionSummary.lastActivityAt, now, style = RelativeTimeStyle.Short)
 
     val badgeText = when (queueBadge) {
         SessionQueueBadge.NO_ITEMS -> "No frames"

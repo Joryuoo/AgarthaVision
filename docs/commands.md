@@ -1,120 +1,181 @@
 # Commands
 
-Everything runnable in this repo. Bun scripts are thin wrappers over Gradle — the Gradle
-column is what actually executes, so either form works.
+Bun is the default installer and script runner. Run `bun install --frozen-lockfile`; `bun.lock`
+is the single supported installer lockfile. Do not add npm/yarn lockfiles. npm script execution
+may work, but is not a second supported installer workflow.
 
-Requires **JDK 21** and the **Android SDK (API 36)**. Without them every command in the first
-two tables fails.
+All scripts require Python 3.11+ on PATH (`python`); Android commands additionally need JDK 21
+and Android SDK API 36. Activate a test environment first:
 
-## Bun scripts
+```sh
+python -m venv .venv-qa
+# POSIX: . .venv-qa/bin/activate
+# PowerShell: .\.venv-qa\Scripts\Activate.ps1
+python -m pip install -r inference/requirements-test.txt
+```
 
-All defined in `package.json` `scripts`.
+`package.json::scripts` delegates to `tools/qa/run.py::commands` and
+`tools/qa/gradle.py` selects `gradlew.bat` on Windows and `gradlew` on POSIX.
+The Android Studio Windows JBR is detected when JAVA_HOME is unset.
+For direct Gradle commands in PowerShell, replace `./gradlew` with `.\gradlew.bat`.
 
-| Command | Runs | Purpose |
+## Testing and QA
+| Bun command | Purpose / prerequisites | Equivalent direct invocation |
 |---|---|---|
-| `bun run build` | `./gradlew assembleDebug` | Build the debug APK |
-| `bun run build:release` | `./gradlew assembleRelease` | Build the release APK (unminified — `isMinifyEnabled = false` in `app/build.gradle.kts` `buildTypes`) |
-| `bun run compile` | `./gradlew :app:compileDebugKotlin` | Kotlin compile only; fastest sanity check |
-| `bun run test` | `./gradlew testDebugUnitTest` | JVM unit tests |
-| `bun run test:all` | `./gradlew :app:test` | Unit tests across all variants |
-| `bun run lint` | `./gradlew ktlintCheck detekt` | ktlint + detekt. Zero violations expected |
-| `bun run lint:fix` | `./gradlew ktlintFormat` | Apply ktlint formatting in place |
-| `bun run install:device` | `./gradlew :app:installDebug` | Install debug build on a connected device |
-| `bun run clean` | `./gradlew clean` | Clean Gradle outputs |
-| `bun run sync` | `./gradlew --refresh-dependencies` | Force dependency re-resolution |
-| `bun run stop` | `./gradlew --stop` | Stop Gradle daemons |
-| `bun run emulator` | `emulator -avd AgarthaVision_Test` | Launch the named AVD. Requires that AVD to exist locally |
-| `bun run prepare` | `husky` | Install the git hooks. Runs automatically on `bun install` |
+| `bun run test:unit` (also `test`) | All debug JVM tests, including Compose/Robolectric and local integration; JDK 21 + SDK API 36 | `./gradlew :app:testDebugUnitTest` |
+| `bun run test:screenshots` | The same full debug suite **once**, with Roborazzi golden verification | `./gradlew :app:verifyRoborazziDebug` |
+| `bun run screenshots:record` | Manually update references; review every changed image | `./gradlew :app:recordRoborazziDebug` |
+| `bun run test:api` | GPU-free API contracts, JWT, queue and failures; Python test requirements | `python -m pytest inference/tests -q --junitxml=build/qa/api.xml` |
+| `bun run test:integration` | Classified local Room/repository and sync tests; not deployed Supabase | `python tools/qa/run.py integration` (Gradle filters below) |
+| `bun run test:device` | Instrumentation; **emulator or dedicated test device only**, JDK + SDK + adb | `./gradlew :app:connectedDebugAndroidTest` |
+| `bun run test:smoke --local` | Starts/stops localhost fake-model API, real JWT validation with ephemeral test key; Python test requirements | `python tools/qa/run.py smoke --local` |
+| `bun run test:smoke` | Designated staging; requires `QA_SMOKE_URL`, `QA_SMOKE_TOKEN`, `QA_DEPLOYED_REVISION` | `python tools/qa/run.py smoke` |
+| `bun run check` | Tooling tests, compile, lint, debug APK, one full screenshot/unit pass, GPU-free API | `python tools/qa/run.py check` |
+| `bun run qa:evidence` | Execute `check` + localhost smoke; collect reports, logs, summary and explicit gaps | `python tools/qa/run.py evidence` |
+| `bun run test:all` | Android JVM tests across variants **only**, not API/device/smoke | `./gradlew :app:test` |
+### Classification and focused selection
 
-## Gradle directly
+`app/src/test/` contains pure JVM/domain tests, Room/repository integration under Robolectric,
+Supabase client requests against fake HTTP, and Compose UI/screenshot tests. These all belong to
+the debug JVM suite. `test:unit` includes these categories; it does not assert screenshot goldens.
+`test:screenshots` enables comparison while executing that same suite, so aggregate checks never
+run a second full `test:unit` pass. Recording is manual and requires review of changed references.
 
-| Task | Purpose |
+`tools/qa/run.py::INTEGRATION` selects these existing local integration packages:
+
+```sh
+./gradlew :app:testDebugUnitTest --tests 'com.agarthavision.data.local.dao.*' --tests 'com.agarthavision.data.repository.*' --tests 'com.agarthavision.domain.usecase.sync.*' --tests 'com.agarthavision.domain.sync.*'
+```
+
+These are a conservative superset (some mapper/repository tests use fakes), not proof of deployed
+Supabase permissions, migrations or real cloud/model operation. No tests were moved or renamed.
+
+Pre-commit compiles Kotlin, runs `:app:ktlintCheck :app:detekt`, then focused debug JVM tests.
+It first prints a **warning and continues** when staged production code lacks added/modified
+staged unit test files in the same subsystem. Android production means Kotlin/Java under
+`app/src/{main,debug,release}/{java,kotlin}/`; unit test names end in `Test` or `Tests` under
+`app/src/{test,testDebug,testRelease}/{java,kotlin}/`. Inference production means Python under
+`inference/`, excluding `tests/` and export tooling; matching test files under `inference/tests/`
+are named `test_*.py` or `*_test.py`. A staged test deletion, helper/fixture edit or Android
+instrumentation test does not suppress the reminder. Android test changes do not suppress an
+inference reminder (or vice versa). Docs, resources, config and test-only changes do not warn.
+This is a file-based reminder, not proof of coverage or a dependency analysis; it does not change
+test selection, add API tests to pre-commit, or block the commit by itself.
+If the staged changes contain only `app/src/test/java/**/*Test.kt` and Markdown, it selects
+those exact test classes, provided no staged file is deleted or renamed. Deletions and renames
+use the broader fallback: a deleted test is no longer runnable, and a renamed file may still
+declare its previous class name. Any other change also uses the documented broader fast fallback:
+`./gradlew :app:testDebugUnitTest --tests 'com.agarthavision.domain.*'`. This deliberately does
+not guess production dependency relationships; the full regression/screenshot gate is pre-push.
+The fallback excludes UI/data packages to keep commit feedback bounded.
+
+### Device safety
+
+Never run `connectedAndroidTest` / `connectedDebugAndroidTest` on a phone holding real samples.
+Instrumentation uninstalls the app afterwards and can erase its database, images and unsynced work.
+Use an emulator or dedicated test device with synthetic profiles/fixtures. `test:device` is explicit
+and excluded from `check`/`qa:evidence`. The species-dropdown popup interaction requires device
+coverage: it does not reach idle under Robolectric (`VerificationSheet` test suite header).
+
+### Hooks and CI
+
+| Placement | Checks |
 |---|---|
-| `./gradlew assembleDebug` | Debug APK |
-| `./gradlew :app:compileDebugKotlin` | Compile Kotlin |
-| `./gradlew :app:testDebugUnitTest` | Debug unit tests |
-| `./gradlew :app:verifyRoborazziDebug` | Run unit tests and compare Roborazzi screenshot goldens |
-| `./gradlew :app:recordRoborazziDebug` | Re-record Roborazzi screenshot goldens when UI changes are intentional |
-| `./gradlew :app:ktlintCheck :app:detekt` | Lint the app module — the exact pair the pre-commit hook runs |
-| `./gradlew :app:connectedDebugAndroidTest` | Instrumented tests (`app/src/androidTest/`: the generated stub and `OnDeviceInferenceParityTest`). **Emulator or spare device only** — see below |
-| `./gradlew tasks` | Enumerate what is actually available in this build |
+| `.husky/pre-commit` | Compile + app ktlint/detekt + focused tests/fallback above; abort on failure |
+| `.husky/pre-push` | One full `:app:verifyRoborazziDebug` pass, then GPU-free API tests; no deployed smoke |
+| PR CI (`.github/workflows/build-and-test.yml`) | `bun run check`, then shared `bun run test:smoke --local`; required failures fail job |
+| Staging after successful deployment | Dispatch `build-and-test` with exact confirmed `deployed_revision`; shared `bun run test:smoke` |
 
-On Windows PowerShell use `.\gradlew.bat …` when the shell does not resolve `./gradlew`.
+The staging job uses the GitHub `staging` environment variable `QA_SMOKE_URL` (HTTPS) and
+secret `QA_SMOKE_TOKEN` (dedicated synthetic test-user access token). The deployer must trigger
+it only after a successful deployment and supply the confirmed deployed revision; this repository
+has no automatic inference deployment workflow. Missing inputs/credentials fail explicitly.
+PR smoke runs a localhost fake model, not deployed-model evidence. Production `verify_user`
+remains active: only the model and JWKS source use test fixtures in the isolated smoke process.
+Health readiness is bounded to 30 seconds (individual requests timeout at 10 seconds).
+Smoke asserts health 200, missing bearer 401 and signed synthetic-image inference/schema 200.
 
-### Compose UI tests run on the JVM, not a device
+CI always uploads only sanitized `build/qa/` evidence, including copied Gradle XML/HTML reports
+and Roborazzi outputs/differences, even
+on failure. The upload includes the tested source revision and staging smoke includes the
+separate deployed revision. References are verified, never recorded by hooks or CI.
+SDK setup explicitly installs `platform-tools`; Gradle resolves required compile SDK/build tools
+using accepted licenses. Local CI smoke runs after failed checks only when the prior setup and
+Python dependency installation succeeded. If setup fails before evidence exists, CI records that
+absence in the job summary and skips the artifact upload rather than adding misleading failures.
+`commit-msg` still enforces C9. Install hooks with `bun run prepare` (also run by `bun install`).
 
-`:app:testDebugUnitTest` covers both plain unit tests and the Compose UI tests under
-`app/src/test/java/com/agarthavision/ui/` (verify, capture, records, dashboard and others). Those render under
-Robolectric with `testOptions.unitTests.isIncludeAndroidResources` (`app/build.gradle.kts` `testOptions`),
-so screen-level behaviour is gated by the pre-commit hook without an emulator. Run one suite
-with `./gradlew :app:testDebugUnitTest --tests "com.agarthavision.ui.verify.*"`.
+### Actual evidence versus STD
 
-One interaction cannot be tested this way and needs an instrumented test instead: the inside
-of the species dropdown in `VerificationSheet`. It puts a text field inside a popup window,
-which never reaches idle under Robolectric — a lookup after it opens spins until the Espresso
-timeout. The suite documents this in its header. (There were two until 86d4ab4tq deleted
-`ManualSheet` and its bespoke custom-species dialog; the merged screen uses the dropdown for
-both sources.)
+Every QA command produces `build/qa/<UTC-run-id>-<command>/summary.json` and numbered redacted
+logs. API XML is in that directory. `tools/qa/run.py::main` copies existing Gradle reports into
+`artifacts/`; each file records whether it was updated during this run. Prior/cached output never
+overrides a failed command. JUnit records preserve pass/fail/skip, class/method case IDs,
+requirement category IDs, expected/actual outcomes and artifact references. These category IDs
+are QA traceability, not a claim that an evaluator has approved the product requirements.
+The summary includes commit, dirty-tree flag, date, environment and process exit codes.
+Device evidence includes sanitized XML from `app/build/outputs/androidTest-results/` and
+HTML/assets from `app/build/reports/androidTests/`, with individual case statuses categorized
+as `QA-device-instrumentation`. A device invocation reports missing individual case results
+explicitly; other commands label collected device reports as prior/cached evidence rather than
+claiming instrumentation was executed. Instrumentation does not establish the complete capture
+or offline workflow by itself.
+All requested steps execute even after another step fails, and the command returns a nonzero
+status if any step fails. Missing Python dependencies are actionable failures, never passes.
 
-### Never run instrumented tests on a phone that holds real samples
+Smoke records three scenarios and a bounded sequential workload (default 10 authenticated
+requests, `--requests 1..100`), duration, throughput, error rate and p50/p95/p99 request latency.
+Local fake-model timings are a smoke microbenchmark, not real-model or device performance.
+No GPU/device/server telemetry is fabricated. Synthetic uniform JPEGs contain no patient data.
+Never put real credentials or patient data in tests; tokens are environment-only and logs redact
+JWTs/configured secret values in streamed logs, copied text reports and directly generated Python XML.
+Raw Gradle reports stay local and are never uploaded. Unsupported opaque binary reports are excluded
+with reasons; screenshot PNGs are preserved unchanged. Review artifacts before sharing them.
 
-`connectedAndroidTest` / `connectedDebugAndroidTest` install the app, run the suite, then
-**uninstall the app**. Uninstalling deletes its Room database and its JPEGs, so every sample not
-yet synced is gone — including frames still waiting in the inference queue, which exist nowhere
-else. Run them on an emulator or a device kept for testing. Listed in
-[`non-negotiables.md`](non-negotiables.md).
+The summary explicitly lists unavailable system, deployed integration, real performance,
+usability and evaluator-acceptance evidence. Completing those requires an actual designated
+fixture/device/deployment. Staging smoke summaries follow the structured smoke result: a passing
+staging run records its deployed revision without claiming it was skipped; failed or missing
+outcomes stay explicit. Local fake-model runs continue to mark deployed staging smoke as skipped.
+Completing human acceptance or usability evidence requires participant observations and evaluator
+sign-off. Link any genuine
+product defect to its failed case in ClickUp, including expected/actual result, status, fix revision
+and retest artifact; setup failures are not invented product defects. The `defects` array starts
+empty until real linked defects exist. Do not describe planned cases as executed.
+STD plans/procedures/expected cases remain separate from these actual execution artifacts.
 
-`ktlint` and `detekt` are applied at both the root project and `:app` (the `plugins {}` block of `build.gradle.kts` and of
-`app/build.gradle.kts`), so the unqualified `ktlintCheck` / `detekt` used by
-`bun run lint` and the `:app:`-qualified form used by the hook are not identical invocations.
-When in doubt, run the `:app:`-qualified pair — that is the one gating commits.
+Focused tooling verification: `python -m unittest discover -s tools/qa -p test_run.py -v`.
 
-## Git hooks
+## Other commands
 
-Installed by Husky into `.git/hooks` via `bun run prepare`.
-
-| Hook | Runs | File |
-|---|---|---|
-| `pre-commit` | `:app:compileDebugKotlin` → `:app:verifyRoborazziDebug` → `assembleDebug` → `:app:ktlintCheck :app:detekt`, aborting on the first failure | `.husky/pre-commit` |
-| `commit-msg` | Validates subject format `[type][ClickUp-ID][Lastname]: Task title` against C9 | `.husky/commit-msg` |
-| `pre-push` | `assembleDebug` | `.husky/pre-push` |
-
-`pre-commit` and `pre-push` auto-detect `JAVA_HOME`, falling back to the Android Studio JBR path on Windows.
-
-`verifyRoborazziDebug` stands in for `:app:testDebugUnitTest` in the hook rather than being an
-extra step: it runs the same suite with pixel comparison switched on, so a separate unit-test
-step would just run everything twice. A failed golden aborts the commit; when the UI change
-was intentional, re-record with `./gradlew :app:recordRoborazziDebug` and review the diff
-before committing the new image.
-
-`git commit --no-verify` bypasses `pre-commit`. That is the correct move for a change that
-touches only Markdown, since the hook gates on a full Android build that such a change cannot
-affect. It is not a general-purpose escape hatch — see `constraints.md` C12.
-
-**`commit-msg` hook enforces format.** Restored at `12509f8` to enforce constraint C9
-(`[type][ClickUp-ID][Lastname]: Task title`). `commitlint.config.js` and `lint-staged.config.js`
-are both committed and remain unreferenced by any hook.
-
-## Node tooling
-
-`bun install` installs the hook tooling and runs `prepare`. Note the lockfile drift recorded
-in `stack.md`: `bun.lock` still lists `husky`, `lint-staged`, and the commitlint packages,
-but `package.json` declares no dependencies, so a fresh `bun install` resolves nothing and
-`husky` may not be on `PATH`.
+| Bun command | Equivalent direct invocation |
+|---|---|
+| `bun run build` / `build:release` | `./gradlew assembleDebug` / `assembleRelease` |
+| `bun run compile` | `./gradlew :app:compileDebugKotlin` |
+| `bun run lint` / `lint:fix` | `./gradlew ktlintCheck detekt` / `ktlintFormat` |
+| `bun run install:device` | `./gradlew :app:installDebug` |
+| `bun run clean` / `sync` / `stop` | `./gradlew clean` / `--refresh-dependencies` / `--stop` |
+| `bun run emulator` | `emulator -avd AgarthaVision_Test` (requires configured AVD) |
 
 ## Inference container
 
-Not wired into the Gradle build; run it separately.
-
-```
+```sh
 docker build -t agartha-inference inference/
-docker run -p 8000:8000 -e INFERENCE_API_KEY=<secret> agartha-inference
+docker run -p 8000:8000 -e SUPABASE_URL=https://<project-ref>.supabase.co agartha-inference
 ```
 
-`INFERENCE_API_KEY` is required; everything else it reads (weights path, model version, queue
-and batching limits, GPUs) is in the environment table of `inference/README.md`. Check it with
-`GET /health`, which answers once the model has loaded and stays prompt during inference
-(`inference/server.py::health`). Server tests: `inference/README.md`, "Tests".
+Real service auth requires the project's signed-in user token (`inference/server.py::verify_user`).
+GPU-free API tests substitute a model and public test JWKS, not clinical inference.
+`inference/README.md` owns deployed configuration and real-model checks.
+## Model export and offline assets
+
+Run by hand; their output is committed. Each folder's `README.md` owns the details.
+
+| What | Entry point |
+|---|---|
+| Export a checkpoint to the on-device TFLite models, then check parity and accuracy | `inference/export/export_mobile.py`, `parity_check.py`, `accuracy_report.py`, `make_parity_fixture.py` (`inference/export/README.md`) |
+| Rebuild the bundled PSGC barangay asset | `tools/psgc/build-psgc-asset.py`, then `build-psgc-db.py` (`tools/psgc/README.md`) |
+| Rebuild the offline boundary assets for My coverage | `tools/geo/build-town-keys.py`, `build-geo-shapes.sh`, `build-geo-asset.py` (`tools/geo/README.md`) |
 
 GPU droplets bill by the second. **Destroy the droplet after every test or demo.**
 
@@ -123,10 +184,3 @@ GPU droplets bill by the second. **Destroy the droplet after every test or demo.
 There is no migration command. Open the Supabase dashboard SQL editor, paste the next
 numbered file from `supabase/migrations/`, run it, and commit the file. Promote dev to prod by
 pasting the same file into the prod project. See `constraints.md` C6.
-
-## Continuous Integration (CI)
-
-GitHub Actions runs on every pull request (`.github/workflows/build-and-test.yml`).
-It sets up JDK 21 and Gradle, and runs `./gradlew :app:verifyRoborazziDebug --stacktrace`
-to gate pull requests on clean unit tests and verified screenshot goldens.
-Superseded runs are automatically cancelled via workflow concurrency.

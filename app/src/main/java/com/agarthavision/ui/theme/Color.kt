@@ -41,6 +41,8 @@ object AppColors {
     // Neutrals — warm stone ramp (no blue cast)
     val White       = Color(0xFFFFFFFF)
     val OffWhite    = Color(0xFFFAFAF9)
+    val Warm50      = Color(0xFFFAF9F7)
+    val Warm100     = Color(0xFFF5F3EF)
     val Gray50      = Color(0xFFF5F5F4)
     val Gray100     = Color(0xFFE7E5E4)
     val Gray200     = Color(0xFFD6D3D1)

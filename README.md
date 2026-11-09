@@ -24,10 +24,18 @@ AgarthaVision is a mobile diagnostic-support and surveillance platform for fecal
 
 The project is a decision-support and preprocessing tool. It does not replace qualified medical judgment, final diagnosis, or laboratory validation.
 
+## Deployment & Downloads
+
+The production release APK for Android devices (Android 8.0 / API 26+) is deployed and available via GitHub Releases:
+
+- **Latest Release:** [v0.1.0-mvp](https://github.com/Joryuoo/AgarthaVision/releases/tag/v0.1.0-mvp)
+- **Direct Download:** [`AgarthaVision-v0.1.0-mvp.apk`](https://github.com/Joryuoo/AgarthaVision/releases/download/v0.1.0-mvp/AgarthaVision-v0.1.0-mvp.apk)
+- **Web Administration Console:** [https://agarthan-admin.vercel.app](https://agarthan-admin.vercel.app)
+
 ## Features
 
 - **Patient-based records** — sessions and samples are organized under a patient, with PSGC barangay residence for surveillance aggregation.
-- **AI-assisted capture** — one-shot CameraX capture with synchronous inference against a self-hosted FastAPI container; automatically falls back to manual capture on connection loss.
+- **AI-assisted capture** — CameraX capture that saves the frame at once and queues it for inference in the background: the self-hosted FastAPI container first, the bundled on-device model whenever the cloud cannot answer.
 - **Human-in-the-loop verification** — every model detection is confirmed, corrected, or rejected by a medtech before it counts, with pre-filled answers, per-box species/stage questions, and an always-available manual "Add Egg" path.
 - **LPF density reporting** — per-species Low Power Field density ranges (Direct Smear method) with a qualitative descriptor, replacing EPG/Kato-Katz.
 - **PDF session reports** — generated on-device from local Room data and synced to Supabase.
@@ -35,6 +43,16 @@ The project is a decision-support and preprocessing tool. It does not replace qu
 - **Soft-delete safe** — a duplicate or rejected sample can be hidden from view without deleting its detections from the retraining corpus.
 
 Phase 2 work — owned capture/inference hardware and a fuller self-hosted backend stack — is documented but intentionally deferred; see [`docs/features.md`](docs/features.md).
+
+## Deployment
+
+| Part | Where | Platform |
+| --- | --- | --- |
+| Mobile app (Android 8.0 or newer) | [Release v0.1.0-mvp](https://github.com/Joryuoo/AgarthaVision/releases/tag/v0.1.0-mvp): download `AgarthaVision-v0.1.0-mvp.apk` under Assets | GitHub Releases (signed APK) |
+| Admin console (web) | <https://agarthan-admin.vercel.app> ([repository](https://github.com/kazuretsu/AgarthaVision-Admin)) | Vercel |
+| Backend | Not opened directly: the app and the console sign in and store data through it | Supabase (Auth, Postgres, Storage) |
+
+To install the app, open the release on an Android phone, download the APK, and allow installs from that source when Android asks. APK files are attached to the release, never committed to this repository.
 
 ## Tech Stack
 
@@ -120,7 +138,7 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
    cp local.properties.example local.properties
    ```
 
-4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. The Supabase key is the publishable one (`sb_publishable_…`, Project Settings → API Keys), never the legacy `anon` JWT. Never commit real keys.
+4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. The Supabase key is the publishable one (`sb_publishable_…`, Project Settings → API Keys), never the legacy `anon` JWT. Never commit real keys. See [Environment variables](#environment-variables) for the full list.
 
 5. Open the project in Android Studio and let Gradle sync, or verify from the command line:
 
@@ -130,28 +148,65 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
 
 On Windows PowerShell, use `.\gradlew.bat assembleDebug` if the shell does not resolve `./gradlew`.
 
-### Common Commands
+### Environment variables
 
-| Command | Purpose |
+The app reads these from `local.properties` (gitignored) into `BuildConfig` at build time (`app/build.gradle.kts`). A debug build uses the `_DEV` values and a release build uses the `_PROD` values. [`local.properties.example`](local.properties.example) is the committed template, with placeholders only.
+
+| Name (`_DEV` and `_PROD`) | What it holds |
 | --- | --- |
-| `bun run build` | Build the debug APK |
-| `bun run compile` | Compile debug Kotlin |
-| `bun run test` | Run debug unit tests |
-| `bun run lint` | Run ktlint and detekt |
-| `bun run lint:fix` | Apply ktlint formatting |
-| `bun run install:device` | Install debug build on a connected device |
-| `bun run clean` | Clean Gradle outputs |
+| `SUPABASE_URL` | The Supabase project URL, `https://<project-ref>.supabase.co` |
+| `SUPABASE_ANON_KEY` | The project's publishable key (`sb_publishable_…`) |
+| `TURNSTILE_SITE_KEY` | The Cloudflare Turnstile widget's site key, for the sign-in human check |
+| `TURNSTILE_HOSTNAME` | The hostname that Turnstile widget is registered for |
+| `INFERENCE_URL` | The cloud inference server's base URL |
 
-See [`docs/commands.md`](docs/commands.md) for the full command reference, including Gradle-direct invocations and the inference container.
+There is no inference key: the app sends the signed-in user's Supabase access token. Secret keys (the Supabase service-role key, the Turnstile secret) never go in the app.
+
+A signed release build also needs a keystore. Keep it outside the project folder; `.gitignore` ignores `*.keystore` and `*.jks` as a backstop.
+
+### Testing and QA commands
+
+Use Bun with the committed `bun.lock` (`bun install --frozen-lockfile`), Python 3.11+
+on PATH, and JDK 21 + Android SDK API 36 for Android checks. Create/activate a Python virtual
+environment and run `python -m pip install -r inference/requirements-test.txt` for API/smoke.
+On PowerShell, direct Gradle commands use `.\gradlew.bat`.
+
+| Bun command | Purpose / prerequisites | Equivalent direct invocation |
+|---|---|---|
+| `bun run test:unit` (also `test`) | All debug JVM tests, including Compose/Robolectric and local integration; JDK 21 + SDK API 36 | `./gradlew :app:testDebugUnitTest` |
+| `bun run test:screenshots` | The same full debug suite **once**, with Roborazzi golden verification | `./gradlew :app:verifyRoborazziDebug` |
+| `bun run screenshots:record` | Manually update references; review every changed image | `./gradlew :app:recordRoborazziDebug` |
+| `bun run test:api` | GPU-free API contracts, JWT, queue and failures; Python test requirements | `python -m pytest inference/tests -q --junitxml=build/qa/api.xml` |
+| `bun run test:integration` | Classified local Room/repository and sync tests; not deployed Supabase | `python tools/qa/run.py integration` (Gradle filters below) |
+| `bun run test:device` | Instrumentation; **emulator or dedicated test device only**, JDK + SDK + adb | `./gradlew :app:connectedDebugAndroidTest` |
+| `bun run test:smoke --local` | Starts/stops localhost fake-model API, real JWT validation with ephemeral test key; Python test requirements | `python tools/qa/run.py smoke --local` |
+| `bun run test:smoke` | Designated staging; requires `QA_SMOKE_URL`, `QA_SMOKE_TOKEN`, `QA_DEPLOYED_REVISION` | `python tools/qa/run.py smoke` |
+| `bun run check` | Tooling tests, compile, lint, debug APK, one full screenshot/unit pass, GPU-free API | `python tools/qa/run.py check` |
+| `bun run qa:evidence` | Execute `check` + localhost smoke; collect reports, logs, summary and explicit gaps | `python tools/qa/run.py evidence` |
+| `bun run test:all` | Android JVM tests across variants **only**, not API/device/smoke | `./gradlew :app:test` |
+
+Pre-commit runs compilation, app lint and staged-test selection (domain JVM fallback). Pre-push
+runs the full Android/Roborazzi suite once plus GPU-free API tests. PR CI runs `check` and
+the shared localhost fake-model smoke, retaining reports, logs, revision and screenshot differences.
+After a confirmed staging deployment, dispatch the workflow with the deployed revision; configure
+`QA_SMOKE_URL` and secret `QA_SMOKE_TOKEN` in the staging environment. Missing credentials
+fail the smoke job. Local smoke uses real JWT verification with a throwaway test key.
+
+Generated evidence lives in `build/qa/<run-id>/summary.json` with logs, Python XML and copied
+Gradle reports. Skips and missing human/device/staging evidence stay explicit. STD plans and
+actual evidence remain separate; fake-model timings do not establish real-model performance.
+Screenshot recording is manual, and instrumentation must use an emulator or dedicated test device
+because uninstall can erase local app data. See [`docs/commands.md`](docs/commands.md) for
+prerequisites, exact integration filters, focused fallback, report provenance and other build commands.
 
 ### Backend and Data
 
-Supabase migrations live in `supabase/migrations/`. `0001_init.sql` is the consolidated, current schema for the `agarthavision` project (sessions, samples, detections, predictions, patients, storage RLS, and persisted session reports), applied by hand through the Supabase dashboard. Pre-patient migration history is archived under `supabase/migrations/legacy-dev/` as a record of the earlier dev/prod projects — do not implement against it.
+Supabase migrations live in `supabase/migrations/`. `0001_init.sql` is the consolidated base schema for the `agarthavision` project (sessions, samples, detections, predictions, patients, storage RLS, and persisted session reports), and the numbered files after it change it in order. All of them are applied by hand through the Supabase dashboard; [`docs/file-tree.md`](docs/file-tree.md#supabasemigrations) lists them. Pre-patient migration history is archived under `supabase/migrations/legacy-dev/` as a record of the earlier dev/prod projects — do not implement against it.
 
 The inference container lives in `inference/`. It exposes:
 
 - `GET /health` for connectivity checks.
-- `POST /infer` for frame inference using bearer-token authentication.
+- `POST /infer` for frame inference, authenticated by the signed-in user's Supabase access token.
 
 The mobile app persists verified samples locally with Room, uploads images to Supabase Storage, and writes sample/detection/report metadata to Supabase Postgres when sync succeeds.
 
@@ -169,7 +224,7 @@ Everything it routes to lives under `docs/`:
 
 *(Sprint backlog items and tasks are managed in ClickUp, not this repo.)*
 
-Documentation here is as-built and cited to `path:line`. Where a document and the code disagree, the code wins - fix the document in the same change.
+Documentation here is as-built and cites code by symbol (`path/File.kt::symbol`) and SQL by `path:line`. Where a document and the code disagree, the code wins - fix the document in the same change.
 
 ## Contributing
 

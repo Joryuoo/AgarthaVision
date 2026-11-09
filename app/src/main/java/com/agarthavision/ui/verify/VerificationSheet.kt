@@ -4,6 +4,7 @@ package com.agarthavision.ui.verify
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.VisibleForTesting
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -186,7 +187,6 @@ fun VerificationSheet(
 
 @VisibleForTesting
 @Composable
-@Suppress("CyclomaticComplexMethod")
 internal fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
@@ -206,11 +206,6 @@ internal fun VerificationSheetContent(
             .withZone(ZoneId.systemDefault())
             .format(frame.capturedAt)
     }
-    val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
-    val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
-    val boxCount = frame.predictions.size
-    val anchor = remember { ExpandedCardAnchor() }
-    val expandedIndexState = rememberUpdatedState(state.expandedFindingIndex)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -228,222 +223,25 @@ internal fun VerificationSheetContent(
                 onBack = actions.onCancel,
             )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .onGloballyPositioned { anchor.sheet = it }
-                    .collapseOnOutsideTap(
-                        anchor = anchor,
-                        expandedIndex = { expandedIndexState.value },
-                        onOutsideTap = actions.onCollapseFinding,
-                    )
-                    .verticalScroll(scrollState),
-            ) {
-                // Frame Section: Image preview and sample cycle row scroll with content.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    val imageModel = rememberFrameImageModel(frame, state.imageSource)
-                    val frameModifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(AgarthaTheme.colors.surfaceVariant)
-                        .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
-
-                    if (imageModel == null) {
-                        FrameUnavailable(
-                            reason = state.imageSource,
-                            modifier = frameModifier.testTag(VerifyTestTags.FRAME_UNAVAILABLE),
-                        )
+            VerificationFindingsColumn(
+                state = state,
+                actions = actions,
+                frame = frame,
+                scrollState = scrollState,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+            VerificationSheetFooter(
+                state = state,
+                isEditing = isEditing,
+                onSubmit = actions.onSubmit,
+                onDiscard = {
+                    if (isEditing) {
+                        actions.onCancel()
                     } else {
-                        FrameWithBoxes(
-                            imageModel = imageModel,
-                            boxes = state.findings.frameBoxes(
-                                active = DrawTarget(state.currentDetectionIndex),
-                            ),
-                            showBoxes = state.showBoundingBoxes,
-                            inferenceImageWidth = frame.imageWidth,
-                            inferenceImageHeight = frame.imageHeight,
-                            modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
-                        )
+                        showDiscardConfirm.value = true
                     }
-
-                    CycleRow(
-                        indicator = if (state.frameIndexInQueue > 0) {
-                            stringResource(
-                                R.string.verify_sample_indicator,
-                                state.frameIndexInQueue,
-                                state.queueSize,
-                            )
-                        } else {
-                            stringResource(R.string.verify_sample_out_of_queue)
-                        },
-                        prevDescription = stringResource(R.string.verify_prev_frame),
-                        nextDescription = stringResource(R.string.verify_next_frame),
-                        prevTag = VerifyTestTags.FRAME_PREV,
-                        nextTag = VerifyTestTags.FRAME_NEXT,
-                        canGoPrev = state.canGoPrev,
-                        canGoNext = state.canGoNext,
-                        onPrev = actions.onFramePrev,
-                        onNext = actions.onFrameNext,
-                        centered = true,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
-                    )
-                }
-
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    // 3. Model output: what the container said, or that it said nothing, or that it has
-                    //    not answered yet. Always present, never collapsed to two states.
-                    val showBoxesToggle = boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }
-                    ModelOutputSection(
-                        output = frame.modelOutput(),
-                        onCancelInference = actions.onCancelInferenceRequested
-                            .takeIf { state.isAwaitingInference },
-                        isInferenceRunning = frame.inferenceState == InferenceState.IN_INFERENCE,
-                        footer = if (showBoxesToggle) {
-                            {
-                                BoundingBoxesToggle(
-                                    checked = state.showBoundingBoxes,
-                                    onToggle = actions.onToggleBoundingBoxes,
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // 4. Current detection. Only when there is model output with at least one box -
-                    //    every question in here is a question about a box.
-                    if (boxCount > 0) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(AgarthaTheme.colors.surface, RoundedCornerShape(16.dp))
-                                .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
-                                .padding(16.dp),
-                        ) {
-                            CycleRow(
-                                indicator = stringResource(
-                                    R.string.verify_detection_counter,
-                                    state.currentDetectionIndex + 1,
-                                    boxCount,
-                                ),
-                                subtitle = stringResource(R.string.verify_detection_subtitle),
-                                prevDescription = stringResource(R.string.verify_prev_egg),
-                                nextDescription = stringResource(R.string.verify_next_egg),
-                                prevTag = VerifyTestTags.DETECTION_PREV,
-                                nextTag = VerifyTestTags.DETECTION_NEXT,
-                                // Counted from frame.predictions, never from the answer list: the medtech
-                                // can append a species the model never boxed, so the answer list is the
-                                // longer of the two and paging by it would walk off the end of the boxes.
-                                canGoPrev = state.currentDetectionIndex > 0,
-                                canGoNext = state.currentDetectionIndex < boxCount - 1,
-                                onPrev = actions.onDetectionPrev,
-                                onNext = actions.onDetectionNext,
-                                modifier = Modifier.padding(bottom = 12.dp),
-                            )
-
-                            BoxQuestionChain(
-                                answers = currentAnswers,
-                                suggestedSpecies = currentPrediction
-                                    ?.let { EggSpecies.fromClassLabel(it.classLabel) },
-                                detectionIndex = state.currentDetectionIndex,
-                                actions = actions,
-                                // Derived against this field's own text, so a list fetched for another row
-                                // - or for a keystroke since typed over - simply does not come back.
-                                suggestions = state.suggestionsFor(
-                                    SuggestionTarget.CurrentDetection,
-                                    currentAnswers?.otherSpeciesText.orEmpty(),
-                                ),
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
-                    // 5. Add Species. Always present, with or without model output - it is the only
-                    //    path by which a frame captured with the container unreachable can be verified
-                    //    at all, and a frame with model output still needs it for eggs the model missed.
-                    AddedFindings(
-                        findings = state.findings,
-                        boxCount = boxCount,
-                        actions = actions,
-                        // Locked while the model output is pending: the model pre-fills the
-                        // species, so anything added now would collide with it when it lands.
-                        enabled = !state.isAwaitingInference,
-                        expandedIndex = state.expandedFindingIndex,
-                        onExpandedCardPositioned = { anchor.card = it },
-                        suggestionsFor = { index ->
-                            state.suggestionsFor(
-                                SuggestionTarget.AddedFinding(index),
-                                state.findings.getOrNull(index)?.answers?.otherSpeciesText.orEmpty(),
-                            )
-                        },
-                    )
-
-                    // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
-                    // findings, not asked - see VerificationUiState.missedEgg. Claiming more eggs of a
-                    // species than the model boxed already answers it, and asking again lets the two
-                    // disagree.
-
-                    // 6. Remarks
-                    SheetSectionLabel(
-                        text = stringResource(R.string.verify_remarks_label),
-                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
-                    )
-                    NoteField(
-                        value = state.userNote,
-                        onValueChange = actions.onUserNoteChanged,
-                        placeholder = stringResource(R.string.verify_remarks_placeholder),
-                        enabled = !state.isAwaitingInference,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
-            }
-
-            val colors = AgarthaTheme.colors
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(colors.surface)
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 8.dp, bottom = 16.dp),
-            ) {
-                state.errorMessage?.let {
-                    Text(
-                        text = it,
-                        color = colors.danger,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
-
-                SheetActionRow(
-                    SheetActionRowState(
-                        primaryLabel = stringResource(
-                            if (isEditing) R.string.verify_action_save_changes else R.string.verify_action_submit,
-                        ),
-                        secondaryLabel = stringResource(R.string.verify_action_discard),
-                        onPrimaryClick = actions.onSubmit,
-                        onSecondaryClick = {
-                            if (isEditing) {
-                                actions.onCancel()
-                            } else {
-                                showDiscardConfirm.value = true
-                            }
-                        },
-                        primaryLoading = state.isSubmitting,
-                        primaryEnabled = state.canSubmit,
-                    ),
-                )
-            }
+                },
+            )
         }
 
         // Over the whole sheet while a save is in flight. The Submit button alone used to be
@@ -456,31 +254,13 @@ internal fun VerificationSheetContent(
         }
 
         if (showDiscardConfirm.value) {
-            AlertDialog(
-                onDismissRequest = { showDiscardConfirm.value = false },
-                shape = DialogShape,
-                title = { Text(stringResource(R.string.verify_discard_frame_title)) },
-                text = { Text(stringResource(R.string.verify_discard_frame_body)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDiscardConfirm.value = false
-                            actions.onDeleteFrame()
-                        },
-                        enabled = !state.isSubmitting,
-                        modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
-                    ) {
-                        Text(stringResource(R.string.verify_discard_frame_confirm), color = AgarthaTheme.colors.danger)
-                    }
+            DiscardFrameDialog(
+                isSubmitting = state.isSubmitting,
+                onConfirm = {
+                    showDiscardConfirm.value = false
+                    actions.onDeleteFrame()
                 },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showDiscardConfirm.value = false },
-                        modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
-                    ) {
-                        Text(stringResource(R.string.verify_cancel))
-                    }
-                },
+                onDismiss = { showDiscardConfirm.value = false },
             )
         }
 
@@ -489,77 +269,10 @@ internal fun VerificationSheetContent(
         }
 
         if (state.pendingLeave != null) {
-            AlertDialog(
-                onDismissRequest = actions.onDismissLeave,
-                shape = DialogShape,
-                containerColor = AgarthaTheme.colors.surfaceHigh,
-                titleContentColor = AgarthaTheme.colors.textPrimary,
-                textContentColor = AgarthaTheme.colors.textPrimary,
-                title = {
-                    Text(
-                        stringResource(
-                            if (isEditing) {
-                                R.string.verify_edit_discard_title
-                            } else {
-                                R.string.verify_leave_title
-                            },
-                        )
-                    )
-                },
-                text = {
-                    Text(
-                        stringResource(
-                            if (isEditing) {
-                                R.string.verify_edit_discard_body
-                            } else {
-                                R.string.verify_leave_body
-                            },
-                        )
-                    )
-                },
-                confirmButton = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AgarthaButton(
-                            onClick = actions.onDismissLeave,
-                            variant = AgarthaButtonVariant.Secondary,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.verify_leave_dismiss),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontSize = 13.sp,
-                            )
-                        }
-                        AgarthaButton(
-                            onClick = actions.onConfirmLeave,
-                            variant = AgarthaButtonVariant.Destructive,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    if (isEditing) {
-                                        R.string.verify_edit_discard_confirm
-                                    } else {
-                                        R.string.verify_leave_confirm
-                                    },
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontSize = 13.sp,
-                            )
-                        }
-                    }
-                },
-                dismissButton = null,
+            LeaveUnsavedChangesDialog(
+                isEditing = isEditing,
+                onConfirm = actions.onConfirmLeave,
+                onDismiss = actions.onDismissLeave,
             )
         }
 
@@ -581,7 +294,364 @@ internal fun VerificationSheetContent(
     }
 }
 
+@Composable
+private fun VerificationFindingsColumn(
+    state: VerificationUiState,
+    actions: VerificationSheetActions,
+    frame: FlaggedFrame,
+    scrollState: ScrollState,
+    modifier: Modifier,
+) {
+    val boxCount = frame.predictions.size
+    val anchor = remember { ExpandedCardAnchor() }
+    val expandedIndexState = rememberUpdatedState(state.expandedFindingIndex)
+    Column(
+        modifier = modifier
+            .onGloballyPositioned { anchor.sheet = it }
+            .collapseOnOutsideTap(
+                anchor = anchor,
+                expandedIndex = { expandedIndexState.value },
+                onOutsideTap = actions.onCollapseFinding,
+            )
+            .verticalScroll(scrollState),
+    ) {
+        VerificationFrameSection(state, actions, frame)
 
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            // 3. Model output: what the container said, or that it said nothing, or that it has
+            //    not answered yet. Always present, never collapsed to two states.
+            val showBoxesToggle = boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }
+            ModelOutputSection(
+                output = frame.modelOutput(),
+                onCancelInference = actions.onCancelInferenceRequested
+                    .takeIf { state.isAwaitingInference },
+                isInferenceRunning = frame.inferenceState == InferenceState.IN_INFERENCE,
+                footer = if (showBoxesToggle) {
+                    {
+                        BoundingBoxesToggle(
+                            checked = state.showBoundingBoxes,
+                            onToggle = actions.onToggleBoundingBoxes,
+                        )
+                    }
+                } else {
+                    null
+                },
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 4. Current detection. Only when there is model output with at least one box -
+            //    every question in here is a question about a box.
+            if (boxCount > 0) {
+                VerificationCurrentDetection(state, actions, frame)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 5. Add Species. Always present, with or without model output - it is the only
+            //    path by which a frame captured with the container unreachable can be verified
+            //    at all, and a frame with model output still needs it for eggs the model missed.
+            AddedFindings(
+                findings = state.findings,
+                boxCount = boxCount,
+                actions = actions,
+                // Locked while the model output is pending: the model pre-fills the
+                // species, so anything added now would collide with it when it lands.
+                enabled = !state.isAwaitingInference,
+                expandedIndex = state.expandedFindingIndex,
+                onExpandedCardPositioned = { anchor.card = it },
+                suggestionsFor = { index ->
+                    state.suggestionsFor(
+                        SuggestionTarget.AddedFinding(index),
+                        state.findings.getOrNull(index)?.answers?.otherSpeciesText.orEmpty(),
+                    )
+                },
+            )
+
+            // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
+            // findings, not asked - see VerificationUiState.missedEgg. Claiming more eggs of a
+            // species than the model boxed already answers it, and asking again lets the two
+            // disagree.
+
+            // 6. Remarks
+            SheetSectionLabel(
+                text = stringResource(R.string.verify_remarks_label),
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+            )
+            NoteField(
+                value = state.userNote,
+                onValueChange = actions.onUserNoteChanged,
+                placeholder = stringResource(R.string.verify_remarks_placeholder),
+                enabled = !state.isAwaitingInference,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun VerificationFrameSection(
+    state: VerificationUiState,
+    actions: VerificationSheetActions,
+    frame: FlaggedFrame,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val imageModel = rememberFrameImageModel(frame, state.imageSource)
+        val frameModifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(AgarthaTheme.colors.surfaceVariant)
+            .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
+
+        if (imageModel == null) {
+            FrameUnavailable(
+                reason = state.imageSource,
+                modifier = frameModifier.testTag(VerifyTestTags.FRAME_UNAVAILABLE),
+            )
+        } else {
+            FrameWithBoxes(
+                imageModel = imageModel,
+                boxes = state.findings.frameBoxes(
+                    active = DrawTarget(state.currentDetectionIndex),
+                ),
+                showBoxes = state.showBoundingBoxes,
+                inferenceImageWidth = frame.imageWidth,
+                inferenceImageHeight = frame.imageHeight,
+                modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
+            )
+        }
+
+        CycleRow(
+            indicator = if (state.frameIndexInQueue > 0) {
+                stringResource(
+                    R.string.verify_sample_indicator,
+                    state.frameIndexInQueue,
+                    state.queueSize,
+                )
+            } else {
+                stringResource(R.string.verify_sample_out_of_queue)
+            },
+            prevDescription = stringResource(R.string.verify_prev_frame),
+            nextDescription = stringResource(R.string.verify_next_frame),
+            prevTag = VerifyTestTags.FRAME_PREV,
+            nextTag = VerifyTestTags.FRAME_NEXT,
+            canGoPrev = state.canGoPrev,
+            canGoNext = state.canGoNext,
+            onPrev = actions.onFramePrev,
+            onNext = actions.onFrameNext,
+            centered = true,
+            modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun VerificationCurrentDetection(
+    state: VerificationUiState,
+    actions: VerificationSheetActions,
+    frame: FlaggedFrame,
+) {
+    val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
+    val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
+    val boxCount = frame.predictions.size
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AgarthaTheme.colors.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+    ) {
+        CycleRow(
+            indicator = stringResource(
+                R.string.verify_detection_counter,
+                state.currentDetectionIndex + 1,
+                boxCount,
+            ),
+            subtitle = stringResource(R.string.verify_detection_subtitle),
+            prevDescription = stringResource(R.string.verify_prev_egg),
+            nextDescription = stringResource(R.string.verify_next_egg),
+            prevTag = VerifyTestTags.DETECTION_PREV,
+            nextTag = VerifyTestTags.DETECTION_NEXT,
+            // Counted from frame.predictions, never from the answer list: the medtech
+            // can append a species the model never boxed, so the answer list is the
+            // longer of the two and paging by it would walk off the end of the boxes.
+            canGoPrev = state.currentDetectionIndex > 0,
+            canGoNext = state.currentDetectionIndex < boxCount - 1,
+            onPrev = actions.onDetectionPrev,
+            onNext = actions.onDetectionNext,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+
+        BoxQuestionChain(
+            answers = currentAnswers,
+            suggestedSpecies = currentPrediction
+                ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+            detectionIndex = state.currentDetectionIndex,
+            actions = actions,
+            // Derived against this field's own text, so a list fetched for another row
+            // - or for a keystroke since typed over - simply does not come back.
+            suggestions = state.suggestionsFor(
+                SuggestionTarget.CurrentDetection,
+                currentAnswers?.otherSpeciesText.orEmpty(),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun VerificationSheetFooter(
+    state: VerificationUiState,
+    isEditing: Boolean,
+    onSubmit: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.surface)
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 16.dp),
+    ) {
+        state.errorMessage?.let {
+            Text(
+                text = it,
+                color = colors.danger,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+
+        SheetActionRow(
+            SheetActionRowState(
+                primaryLabel = stringResource(
+                    if (isEditing) R.string.verify_action_save_changes else R.string.verify_action_submit,
+                ),
+                secondaryLabel = stringResource(R.string.verify_action_discard),
+                onPrimaryClick = onSubmit,
+                onSecondaryClick = onDiscard,
+                primaryLoading = state.isSubmitting,
+                primaryEnabled = state.canSubmit,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun DiscardFrameDialog(
+    isSubmitting: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = DialogShape,
+        title = { Text(stringResource(R.string.verify_discard_frame_title)) },
+        text = { Text(stringResource(R.string.verify_discard_frame_body)) },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !isSubmitting,
+                modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
+            ) {
+                Text(stringResource(R.string.verify_discard_frame_confirm), color = AgarthaTheme.colors.danger)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
+            ) {
+                Text(stringResource(R.string.verify_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun LeaveUnsavedChangesDialog(
+    isEditing: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = DialogShape,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
+        titleContentColor = AgarthaTheme.colors.textPrimary,
+        textContentColor = AgarthaTheme.colors.textPrimary,
+        title = {
+            Text(
+                stringResource(
+                    if (isEditing) {
+                        R.string.verify_edit_discard_title
+                    } else {
+                        R.string.verify_leave_title
+                    },
+                )
+            )
+        },
+        text = {
+            Text(
+                stringResource(
+                    if (isEditing) {
+                        R.string.verify_edit_discard_body
+                    } else {
+                        R.string.verify_leave_body
+                    },
+                )
+            )
+        },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AgarthaButton(
+                    onClick = onDismiss,
+                    variant = AgarthaButtonVariant.Secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
+                ) {
+                    Text(
+                        text = stringResource(R.string.verify_leave_dismiss),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 13.sp,
+                    )
+                }
+                AgarthaButton(
+                    onClick = onConfirm,
+                    variant = AgarthaButtonVariant.Destructive,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (isEditing) {
+                                R.string.verify_edit_discard_confirm
+                            } else {
+                                R.string.verify_leave_confirm
+                            },
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        },
+        dismissButton = null,
+    )
+}
 
 /**
  * Show / hide the model's boxes on the preview. Sits directly above the first question

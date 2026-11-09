@@ -31,6 +31,20 @@ as working.
   untouched; other devices need the new password. `ui/settings/ChangePasswordScreen.kt`,
   `domain/usecase/auth/ChangePasswordUseCase.kt`,
   `data/repository/SupabaseAuthRepository.kt::changePassword`.
+- **Human check on sign-in** (14zcqntnqxf). Sign-in and the password change send a Cloudflare
+  Turnstile token, which Supabase verifies as `captchaToken`; the app never holds the secret.
+  Submit waits for the check, every failed attempt runs it again, and a refused check has its
+  own message (`ui/components/HumanCheckWidget.kt::HumanCheckWidget`,
+  `domain/model/HumanCheck.kt`, `data/repository/SupabaseAuthRepository.kt`). A blank
+  `TURNSTILE_SITE_KEY_*` turns it off.
+- **Biometric app lock** (86d4bywtk). Off by default; switched on in Settings
+  (`ui/settings/SettingsCards.kt::BiometricLockCard`, hidden when the device has no usable
+  biometric). While on, the app starts locked and locks again whenever it leaves the foreground
+  (`MainViewModel::isLocked`, `MainActivity::onStop`)
+  and a signed-in medtech returns to `ui/components/BiometricLockOverlay.kt` and the system
+  prompt (`core/auth/BiometricPromptManager.kt::BiometricPromptManager`, strong or weak
+  biometrics, no PIN fallback). The setting is kept in DataStore
+  (`data/repository/BiometricLockRepositoryImpl.kt`).
 - **Signed out and wiped when the account is removed** (14zcqntjph8). The first sync pass after
   the server refuses to renew the login (the login was deleted or banned, or its password was
   changed elsewhere) removes everything synced from the phone: patients, sessions, samples,
@@ -73,7 +87,7 @@ as working.
   Capture, and a colleague's sample offers no edit, re-verify, add-species, redraw or delete; both
   say "Recorded by …" (`ui/components/ReadOnlyAuthorNote.kt`,
   `domain/model/RecordAuthorship.kt::isColleagueRecord`). Names come from the `colleagues` cache
-  (`0008_colleague_names.sql`, Room v24).
+  (`0008_colleague_names.sql`, added in Room v24).
 - **No client delete.** Patient deletion is restricted to server administrators; no client path
   or DAO method allows deleting a patient.
 - **Non-cascading edits.** Editing a patient's details does not cascade to existing session
@@ -133,8 +147,9 @@ as working.
 - **Bounding box overlay and redraw.** `ui/verify/FrameWithBoxes.kt` renders the boxes;
   `ui/verify/DrawMode.kt` draws a replacement box, or a box for an added egg.
 - **Verification layout and actions.** The sample image frame scrolls with the content column; the
-  bottom action bar is pinned (`ui/verify/VerificationSheet.kt::SheetActionRow`), with labels
-  "Discard" / "Save changes" in edit mode and "Discard" / "Submit" in initial verification mode.
+  pinned footer shows any save error above the action row
+  (`ui/verify/VerificationSheet.kt::VerificationSheetFooter`). The actions are "Discard" / "Save changes"
+  in edit mode and "Discard" / "Submit" in initial verification mode.
 - **Tombstoning duplicates.** A duplicate verified sample is tombstoned via `samples.deleted_at`
   (`supabase/migrations/0001_init.sql:202`), hiding it from queries, counts, and reports
   while preserving its detections in the retraining corpus (C8). The legacy `is_repeat` flag is
@@ -153,6 +168,10 @@ as working.
 - **WorkManager sync worker**: `@HiltWorker` `SyncWorker` enqueued as unique work with network
   constraints and exponential backoff (`domain/sync/SyncScheduler.kt`, implemented by
   `data/sync/WorkManagerSyncScheduler.kt`; `data/sync/SyncWorker.kt`).
+- **Inactive accounts are told why sync is refused** (0018). The server refuses every write by
+  an account that is not an active member of an active laboratory, and the Settings sync card
+  says so instead of showing a generic failure (`domain/sync/InactiveMemberRefusal.kt`;
+  see [`map/processes/sync.md`](map/processes/sync.md)).
 
 ### Records and reports
 - **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
@@ -179,6 +198,10 @@ as working.
   `domain/usecase/records/GetPatientReportCandidatesUseCase.kt`).
 
 ### Home dashboard
+- **Relative timestamps.** Recent session cards use compact labels such as `5 m ago`. The dashboard's
+  activity feed and session rows, including the session list, use full labels such as `5 minutes ago`.
+  Both styles show `Just now` for ages under a minute and switch to a localized `MMM d` date in
+  `Asia/Manila` at seven days (`ui/dashboard/RelativeTime.kt::relativeTimeText`).
 - **First-download status banner.** Under the header, a signed-in user whose first full download
   has not finished sees either "Downloading your records…" (a sync pass is running, from the
   manual button or the background worker) or a warning to connect to the internet before working
@@ -217,8 +240,9 @@ as working.
 ### Backend and inference service
 - **Postgres schema**: see [`file-tree.md`](file-tree.md#supabasemigrations) for the migration
   layout and the `legacy-dev/` archive.
-- **FastAPI inference container**: `GET /health` and `POST /infer`, bearer-token authentication,
-  model weights bundled, requests micro-batched on a bounded queue with one worker per GPU
+- **FastAPI inference container**: `GET /health` and `POST /infer`, `/infer` open only to a
+  signed-in user's Supabase access token, verified against the project's JWKS
+  (`inference/server.py::verify_user`, 14zcqnttfeq), model weights bundled, requests micro-batched on a bounded queue with one worker per GPU
   (`inference/server.py::health`, `::infer`, `::worker`; `inference/README.md` "Queue and
   batching").
 

@@ -29,6 +29,7 @@ tools/geo/build/*.geojson
 .mcp.json
 AGENTS.md
 *.keystore
+*.jks
 
 .DS_Store
 Thumbs.db
