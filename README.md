@@ -138,7 +138,7 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
    cp local.properties.example local.properties
    ```
 
-4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. The Supabase key is the publishable one (`sb_publishable_…`, Project Settings → API Keys), never the legacy `anon` JWT. Never commit real keys. See [Environment variables](#environment-variables) for the full list.
+4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. The Supabase key is the publishable one (`sb_publishable_…`, Project Settings → API Keys), never the legacy `anon` JWT. Never commit real keys. See [Environment Variables & Configuration](#environment-variables--configuration) for the full list.
 
 5. Open the project in Android Studio and let Gradle sync, or verify from the command line:
 
@@ -148,7 +148,7 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
 
 On Windows PowerShell, use `.\gradlew.bat assembleDebug` if the shell does not resolve `./gradlew`.
 
-### Environment variables
+### Environment Variables & Configuration
 
 The app reads these from `local.properties` (gitignored) into `BuildConfig` at build time (`app/build.gradle.kts`). A debug build uses the `_DEV` values and a release build uses the `_PROD` values. [`local.properties.example`](local.properties.example) is the committed template, with placeholders only.
 
