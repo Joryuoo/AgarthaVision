@@ -28,7 +28,7 @@ INTEGRATION = ["com.agarthavision.data.local.dao.*", "com.agarthavision.data.rep
 # development/staging/main (ClickUp 14zcqntvucd). Until then the local hook is the only gate.
 PUSH_SKIPS_ENABLED = False
 
-PREFLIGHT_RUNS = {"pre-push", "api", "check", "evidence", "verify"}
+PREFLIGHT_RUNS = {"pre-push", "api", "check", "evidence"}
 INSTALL_COMMAND = "python -m pip install -r inference/requirements-test.txt"
 IMPORT_NAMES = {"pyjwt": "jwt", "pillow": "PIL", "pyyaml": "yaml", "python-multipart": "multipart", "opencv-python": "cv2",
                 "scikit-learn": "sklearn"}
@@ -303,7 +303,7 @@ def main():
             (output / "summary.json").write_text(redact(json.dumps(summary, indent=2)), encoding="utf-8")
             print(f"QA evidence: {output}")
             return 1
-    skips = pre_push_skips(read_push_stdin()) if name == "pre-push" else {}
+    skips = pre_push_skips(read_push_stdin() if PUSH_SKIPS_ENABLED else "") if name == "pre-push" else {}
     for step, reason in skips.items():
         label = "Gradle/Roborazzi" if step == "gradle" else "Python API tests"
         print(f"SKIP pre-push {label}: {reason}")

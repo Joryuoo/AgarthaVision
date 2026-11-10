@@ -286,7 +286,7 @@ class PreflightTests(unittest.TestCase):
             self.assertEqual(qa.missing_packages(self.TEXT), ["pillow", "PyJWT", "httpx"])
 
     def test_main_short_circuits_before_any_command_and_records_failure(self):
-        for name in sorted(qa.PREFLIGHT_RUNS - {"verify"}):
+        for name in sorted(qa.PREFLIGHT_RUNS):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 with patch.object(qa, "ROOT", root), patch.object(sys, "argv", ["run.py", name]), patch.object(qa.subprocess, "check_output", side_effect=["revision\n", b""]), \
