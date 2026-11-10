@@ -82,6 +82,8 @@ object InferenceModule {
             }
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
+                    // This interceptor runs after the one above, so it would log the bearer token.
+                    redactHeader("Authorization")
                     level = if (BuildConfig.DEBUG) {
                         HttpLoggingInterceptor.Level.HEADERS
                     } else {

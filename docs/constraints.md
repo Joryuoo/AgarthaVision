@@ -316,8 +316,10 @@ detekt's `ForbiddenImport` and `ForbiddenMethodCall` (`detekt.yml`) fail the bui
 `android.util.Log` or `println` anywhere else in `main`. Two limits, code wins:
 `Logger.sanitizeThrowable` returns the throwable unchanged, so it sanitizes nothing yet; and
 OkHttp's `HttpLoggingInterceptor` is not covered by the rule. On debug builds it logs the
-inference call at `HEADERS` with no `redactHeader`, so the user's bearer token reaches logcat
-(`core/di/InferenceModule.kt::provideOkHttpClient`).
+inference call at `HEADERS` with `redactHeader("Authorization")`, so the user's bearer token
+never reaches logcat; release builds log nothing (`Level.NONE`)
+(`core/di/InferenceModule.kt::provideOkHttpClient`). Any new header that carries a credential
+must be redacted there too.
 
 **Super admins read patients de-identified (D19, 14zcqntjvjw).** A super admin, an active
 `super_admins` row since `0014` and `profiles.role = 'admin'` before it, is the AgarthaVision
