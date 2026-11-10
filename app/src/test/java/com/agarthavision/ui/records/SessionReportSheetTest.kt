@@ -1,5 +1,8 @@
 package com.agarthavision.ui.records
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -11,6 +14,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.ui.components.BiometricLockHost
+import com.agarthavision.ui.components.BiometricLockTestTags
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -919,5 +924,97 @@ class SessionReportSheetTest {
             verifiedSampleCount = 5,
         )
         assertEquals(3, fiveSamplesWithImages.estimatedPages) // 1 + (5+3)/4 = 3
+    }
+
+    @Test
+    fun `report preview and configuration sheet are hidden while locked and resume coherently on unlock`() {
+        var isLocked by mutableStateOf(false)
+        var darkTheme by mutableStateOf(false)
+        var step by mutableStateOf(ReportSheetStep.CONFIGURATION)
+        var dismissed = false
+        var generated = false
+
+        composeRule.setContent {
+            AgarthaVisionTheme(darkTheme = darkTheme) {
+                BiometricLockHost(
+                    isLocked = isLocked,
+                    onUnlockClick = {
+                        // Simulates failed/cancelled biometric auth not unlocking automatically
+                    },
+                ) {
+                    SessionReportSheet(
+                        state = SessionReportSheetState(
+                            step = step,
+                            config = ReportConfig(
+                                includeSampleImages = true,
+                                patientNameOption = PatientNameOption.CENSOR,
+                            ),
+                            verifiedSampleCount = 12,
+                            patientDisplayName = "Dela Cruz, Juan M.",
+                            patientMaskedName = "D*** C**z, J**n M.",
+                        ),
+                        sessionLabel = "Session #1",
+                        sessionDate = "Oct 24, 2026",
+                        onDismiss = { dismissed = true },
+                        onConfigChange = {},
+                        onAcknowledgeWarning = {},
+                        onPreview = { step = ReportSheetStep.PREVIEW },
+                        onBackToConfig = { step = ReportSheetStep.CONFIGURATION },
+                        onGeneratePdf = { generated = true },
+                    )
+                }
+            }
+        }
+
+        // Open in CONFIGURATION step ("Generate Report")
+        composeRule.onNodeWithTag(ReportSheetTestTags.SHEET).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON).assertIsDisplayed()
+
+        // Lock while Generate Report configuration is open
+        isLocked = true
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(BiometricLockTestTags.OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.SHEET).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON).assertDoesNotExist()
+        assertFalse(dismissed)
+
+        // Unlock and proceed to Report Preview
+        isLocked = false
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON).performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertIsDisplayed()
+
+        // Background/resume while Report Preview is open (including dark mode transition)
+        darkTheme = true
+        isLocked = true
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(BiometricLockTestTags.OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.SHEET).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.EDIT_OPTIONS_BUTTON).assertDoesNotExist()
+
+        // Cancelled/failed biometric prompt click keeps report content hidden
+        composeRule.onNodeWithTag(BiometricLockTestTags.UNLOCK_BUTTON).performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertDoesNotExist()
+        assertFalse(dismissed)
+        assertFalse(generated)
+
+        // Successful biometric unlock restores Report Preview in coherent state
+        isLocked = false
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+            .assertIsDisplayed()
+            .performClick()
+        assertTrue(generated)
     }
 }

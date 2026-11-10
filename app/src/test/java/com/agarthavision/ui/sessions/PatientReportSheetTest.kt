@@ -1,5 +1,8 @@
 package com.agarthavision.ui.sessions
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -14,6 +17,8 @@ import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
+import com.agarthavision.ui.components.BiometricLockHost
+import com.agarthavision.ui.components.BiometricLockTestTags
 import com.agarthavision.ui.records.ReportSheetStep
 import com.agarthavision.ui.records.ReportSheetTestTags
 import com.agarthavision.ui.theme.AgarthaVisionTheme
@@ -759,5 +764,78 @@ class PatientReportSheetTest {
 
         composeRule.onNodeWithTag(ReportSheetTestTags.EDIT_OPTIONS_BUTTON).performClick()
         assertTrue(backCalled)
+    }
+
+    @Test
+    fun `patient report sheet configuration and preview are hidden while locked and resume coherently on unlock`() {
+        var isLocked by mutableStateOf(false)
+        var step by mutableStateOf(ReportSheetStep.CONFIGURATION)
+        var dismissed = false
+        var generated = false
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                BiometricLockHost(
+                    isLocked = isLocked,
+                    onUnlockClick = {},
+                ) {
+                    PatientReportSheet(
+                        sheet = PatientReportSheetState(
+                            step = step,
+                            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+                            selectedSessionIds = setOf("s1"),
+                        ),
+                        patientName = "Dela Cruz, Juan M.",
+                        onDismiss = { dismissed = true },
+                        onDateRangeSelected = { _, _ -> },
+                        onSelectAll = {},
+                        onToggleSession = {},
+                        onPreview = { step = ReportSheetStep.PREVIEW },
+                        onBackToConfig = { step = ReportSheetStep.CONFIGURATION },
+                        onGenerate = { generated = true },
+                    )
+                }
+            }
+        }
+
+        // Open in CONFIGURATION step
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.SHEET).assertIsDisplayed()
+        composeRule.onNodeWithText("MEIK-M21-S01").assertIsDisplayed()
+
+        // Lock while CONFIGURATION step is open
+        isLocked = true
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(BiometricLockTestTags.OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.SHEET).assertDoesNotExist()
+        composeRule.onNodeWithText("MEIK-M21-S01").assertDoesNotExist()
+        assertFalse(dismissed)
+
+        // Unlock and switch to PREVIEW step
+        isLocked = false
+        step = ReportSheetStep.PREVIEW
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertIsDisplayed()
+
+        // Lock while Report Preview is open
+        isLocked = true
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(BiometricLockTestTags.OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.SHEET).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertDoesNotExist()
+
+        // Unlock and verify Report Preview resumes coherently
+        isLocked = false
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+            .assertIsDisplayed()
+            .performClick()
+        assertTrue(generated)
     }
 }
