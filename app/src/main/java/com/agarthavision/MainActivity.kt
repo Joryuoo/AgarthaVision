@@ -4,21 +4,14 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Modifier
-import com.agarthavision.ui.components.BiometricLockOverlay
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.lifecycle.Lifecycle
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.launch
 import com.agarthavision.core.auth.BiometricPromptManager
 import com.agarthavision.core.auth.BiometricResult
 import com.agarthavision.core.auth.BiometricStatus
@@ -26,6 +19,7 @@ import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.usecase.auth.AuthGate
+import com.agarthavision.ui.components.BiometricLockHost
 import com.agarthavision.ui.navigation.AgarthaNavGraph
 import com.agarthavision.ui.navigation.onboardingExitRoute
 import com.agarthavision.ui.navigation.startRouteFor
@@ -66,11 +60,11 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
-            val authGate by mainViewModel.authGate.collectAsStateWithLifecycle()
+            val authGate by mainViewModel.authGate.collectAsState()
             val hasSeenOnboarding by mainViewModel.hasSeenOnboarding.collectAsStateWithLifecycle()
             val signedOutByServer by mainViewModel.signedOutByServer.collectAsStateWithLifecycle()
-            val isBiometricLockEnabled by mainViewModel.isBiometricLockEnabled.collectAsStateWithLifecycle()
-            val isLocked by mainViewModel.isLocked.collectAsStateWithLifecycle()
+            val isBiometricLockEnabled by mainViewModel.isBiometricLockEnabled.collectAsState()
+            val isLocked by mainViewModel.isLocked.collectAsState()
 
             val isDark = when (themeMode) {
                 ThemeMode.LIGHT -> false
@@ -79,7 +73,7 @@ class MainActivity : FragmentActivity() {
             }
             val showLockOverlay = isBiometricLockEnabled && authGate == AuthGate.Authed && isLocked
 
-            androidx.compose.runtime.LaunchedEffect(showLockOverlay) {
+            LaunchedEffect(showLockOverlay) {
                 if (showLockOverlay) {
                     triggerBiometricPrompt()
                 }
@@ -92,7 +86,10 @@ class MainActivity : FragmentActivity() {
                     // Fixed for the life of the graph: finishing onboarding flips
                     // hasSeenOnboarding, which must not rebuild the NavHost.
                     val startRoute = rememberSaveable { startRouteFor(authGate, hasSeenOnboarding == true) }
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    BiometricLockHost(
+                        isLocked = showLockOverlay,
+                        onUnlockClick = { triggerBiometricPrompt() },
+                    ) {
                         AgarthaNavGraph(
                             cameraManager = cameraManager,
                             frameSampler = frameSampler,
@@ -101,12 +98,6 @@ class MainActivity : FragmentActivity() {
                             onboardingExitRoute = onboardingExitRoute(authGate),
                             biometricPromptManager = biometricPromptManager,
                         )
-
-                        if (showLockOverlay) {
-                            BiometricLockOverlay(
-                                onUnlockClick = { triggerBiometricPrompt() },
-                            )
-                        }
                     }
                 }
             }
@@ -133,9 +124,9 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onStop() {
-        super.onStop()
         if (mainViewModel.isBiometricLockEnabled.value) {
             mainViewModel.lockApp()
         }
+        super.onStop()
     }
 }
