@@ -432,6 +432,88 @@ class SessionDetailViewModelReportSheetTest {
             }
         }
 
+    @Test
+    fun `onDismissReportSheet with changed config requests discard confirmation and preserves settings`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = makePatient(PATIENT_ID, "Santos", "Maria")
+            val (vm, _) = createViewModel(patient = patient, sampleCount = 6)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val changedConfig = ReportConfig(
+                    includeSampleImages = true,
+                    patientNameOption = PatientNameOption.CENSOR,
+                )
+                vm.onUpdateReportConfig(changedConfig)
+                advanceUntilIdle()
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                val sheetAfterDismissAttempt = expectMostRecentItem().reportSheet
+                assertNotNull(sheetAfterDismissAttempt)
+                assertTrue(sheetAfterDismissAttempt?.showDiscardConfirm ?: false)
+                assertEquals(changedConfig, sheetAfterDismissAttempt?.config)
+                assertEquals(ReportSheetStep.CONFIGURATION, sheetAfterDismissAttempt?.step)
+
+                // Keeping the wizard open clears only the dialog and retains all selections
+                vm.onCancelDiscardReportSheet()
+                advanceUntilIdle()
+
+                val sheetAfterKeep = expectMostRecentItem().reportSheet
+                assertNotNull(sheetAfterKeep)
+                assertFalse(sheetAfterKeep?.showDiscardConfirm ?: true)
+                assertEquals(changedConfig, sheetAfterKeep?.config)
+
+                // Confirming discard closes the wizard, and reopening uses initial configuration
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+                assertTrue(expectMostRecentItem().reportSheet?.showDiscardConfirm ?: false)
+
+                vm.onConfirmDiscardReportSheet()
+                advanceUntilIdle()
+                assertNull(expectMostRecentItem().reportSheet)
+
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+                val reopened = expectMostRecentItem().reportSheet
+                assertNotNull(reopened)
+                assertEquals(ReportConfig(), reopened?.config)
+                assertFalse(reopened?.hasUnsavedChanges ?: true)
+                assertFalse(reopened?.showDiscardConfirm ?: true)
+            }
+        }
+
+    @Test
+    fun `returning session report config to initial values removes discard prompt requirement`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = makePatient(PATIENT_ID, "Santos", "Maria")
+            val (vm, _) = createViewModel(patient = patient, sampleCount = 6)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onUpdateReportConfig(ReportConfig(includeSampleImages = true))
+                advanceUntilIdle()
+                assertTrue(expectMostRecentItem().reportSheet?.hasUnsavedChanges ?: false)
+
+                // Revert back to initial values
+                vm.onUpdateReportConfig(ReportConfig())
+                advanceUntilIdle()
+                assertFalse(expectMostRecentItem().reportSheet?.hasUnsavedChanges ?: true)
+
+                // Now dismissing closes immediately without showing confirmation
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+                assertNull(expectMostRecentItem().reportSheet)
+            }
+        }
+
     // -------------------------------------------------------------------------
     // Test helpers & fixtures
     // -------------------------------------------------------------------------

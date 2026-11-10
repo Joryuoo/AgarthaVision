@@ -1,8 +1,13 @@
 package com.agarthavision.ui.records
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -12,6 +17,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.unit.dp
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.ui.components.BiometricLockHost
@@ -1016,5 +1024,162 @@ class SessionReportSheetTest {
             .assertIsDisplayed()
             .performClick()
         assertTrue(generated)
+    }
+
+    @Test
+    fun `changed session options request confirmation on dismiss and preserve state on keep`() {
+        var dismissed = false
+        var darkTheme by mutableStateOf(false)
+        var sheetWidthDp by mutableStateOf(411.dp)
+        var state by mutableStateOf(
+            SessionReportSheetState(
+                step = ReportSheetStep.CONFIGURATION,
+                config = ReportConfig(),
+                verifiedSampleCount = 10,
+                patientDisplayName = "Dela Cruz, Juan M.",
+                patientMaskedName = "D*** C**z, J**n M.",
+            ),
+        )
+        var backDispatcher: OnBackPressedDispatcher? = null
+
+        composeRule.setContent {
+            backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            AgarthaVisionTheme(darkTheme = darkTheme) {
+                Box(modifier = Modifier.size(width = sheetWidthDp, height = 891.dp)) {
+                    SessionReportSheet(
+                        state = state,
+                        sessionLabel = "Session #1",
+                        sessionDate = "Oct 24, 2026",
+                        onDismiss = { dismissed = true },
+                        onConfigChange = { state = state.copy(config = it) },
+                        onAcknowledgeWarning = { state = state.copy(isWarningAcknowledged = it) },
+                        onPreview = { state = state.copy(step = ReportSheetStep.PREVIEW) },
+                        onBackToConfig = { state = state.copy(step = ReportSheetStep.CONFIGURATION) },
+                        onGeneratePdf = {},
+                    )
+                }
+            }
+        }
+
+        // 1. Change image inclusion -> header X requests confirmation
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH).performClick()
+        assertTrue(state.config.includeSampleImages)
+        assertTrue(state.hasUnsavedChanges)
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        assertFalse(dismissed)
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithText("Discard changes?").assertIsDisplayed()
+
+        // Keep editing preserves configuration
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertDoesNotExist()
+        assertFalse(dismissed)
+        assertTrue(state.config.includeSampleImages)
+
+        // 2. Cancel button also requests confirmation when changed
+        composeRule.onNodeWithTag(ReportSheetTestTags.CANCEL_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+        assertFalse(dismissed)
+
+        // 3. System Back requests confirmation when changed
+        composeRule.runOnIdle { backDispatcher?.onBackPressed() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+        assertFalse(dismissed)
+
+        // 4. Downward swipe in dark mode and compact/expanded sheet sizes requests confirmation
+        darkTheme = true
+        sheetWidthDp = 600.dp
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(ReportSheetTestTags.SHEET).performTouchInput { swipeDown() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+        assertFalse(dismissed)
+
+        // 5. Returning all settings to initial values removes the discard prompt
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH).performClick()
+        assertFalse(state.config.includeSampleImages)
+        assertFalse(state.hasUnsavedChanges)
+
+        // Now changing patient name to CENSOR re-enables protection, and reverting to SHOW removes it
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR).performClick()
+        assertTrue(state.hasUnsavedChanges)
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_SHOW).performClick()
+        assertFalse(state.hasUnsavedChanges)
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertDoesNotExist()
+        assertTrue(dismissed)
+    }
+
+    @Test
+    fun `preview close button returns to edit options without discard prompt and preserves settings`() {
+        var dismissed = false
+        var state by mutableStateOf(
+            SessionReportSheetState(
+                step = ReportSheetStep.CONFIGURATION,
+                config = ReportConfig(),
+                verifiedSampleCount = 12,
+                patientDisplayName = "Dela Cruz, Juan M.",
+                patientMaskedName = "D*** C**z, J**n M.",
+            ),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SessionReportSheet(
+                    state = state,
+                    sessionLabel = "Session #1",
+                    sessionDate = "Oct 24, 2026",
+                    onDismiss = { dismissed = true },
+                    onConfigChange = { state = state.copy(config = it) },
+                    onAcknowledgeWarning = { state = state.copy(isWarningAcknowledged = it) },
+                    onPreview = { state = state.copy(step = ReportSheetStep.PREVIEW) },
+                    onBackToConfig = { state = state.copy(step = ReportSheetStep.CONFIGURATION) },
+                    onGeneratePdf = {},
+                )
+            }
+        }
+
+        // Change options (includeSampleImages: false -> true, patientNameOption: SHOW -> CENSOR) and open Preview
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON).performClick()
+
+        assertEquals(ReportSheetStep.PREVIEW, state.step)
+        composeRule.onNodeWithText("Included").assertIsDisplayed()
+        composeRule.onNodeWithText("Censor").assertIsDisplayed()
+
+        // Tap X in Report Preview -> returns to CONFIGURATION without discard prompt and without closing wizard
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertDoesNotExist()
+        assertFalse(dismissed)
+        assertEquals(ReportSheetStep.CONFIGURATION, state.step)
+        assertTrue(state.config.includeSampleImages)
+        assertEquals(PatientNameOption.CENSOR, state.config.patientNameOption)
+
+        // Further edit options and reopen preview -> preview reflects updated settings
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_EXCLUDE).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON).performClick()
+
+        assertEquals(ReportSheetStep.PREVIEW, state.step)
+        composeRule.onNodeWithText("Not included").assertIsDisplayed()
+        composeRule.onNodeWithText("Exclude").assertIsDisplayed()
+
+        // Confirming discard when exiting the changed wizard closes it
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        assertEquals(ReportSheetStep.CONFIGURATION, state.step)
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_CONFIRM).performClick()
+        assertTrue(dismissed)
     }
 }

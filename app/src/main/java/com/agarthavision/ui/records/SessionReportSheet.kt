@@ -150,6 +150,7 @@ fun SessionReportSheet(
     }
     val currentHasUnsavedChanges by rememberUpdatedState(state.hasUnsavedChanges)
     val currentRequestDismiss by rememberUpdatedState(requestDismiss)
+    BackHandler(enabled = true, onBack = requestDismiss)
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { targetValue ->
