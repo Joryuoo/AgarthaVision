@@ -13,6 +13,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.agarthavision.R
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 
@@ -38,6 +39,7 @@ internal fun DeleteSamplesConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     val total = verifiedCount + unverifiedCount
     AlertDialog(
         onDismissRequest = onDismiss,
