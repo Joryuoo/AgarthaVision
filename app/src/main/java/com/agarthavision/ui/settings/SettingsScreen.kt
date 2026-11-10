@@ -33,6 +33,7 @@ import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.sync.SyncCompletion
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 import kotlinx.coroutines.flow.collectLatest
@@ -219,6 +220,7 @@ private fun SignOutConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     val colors = AgarthaTheme.colors
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -253,6 +255,7 @@ private fun SignOutConfirmDialog(
 
 @Composable
 private fun SignOutBlockedDialog(reason: String, onDismiss: () -> Unit) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,

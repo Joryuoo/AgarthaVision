@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonVariant
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 
@@ -28,6 +29,7 @@ internal fun DiscardConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
@@ -70,6 +72,7 @@ internal fun SameBarangayDuplicateDialog(
     onOpenExisting: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
@@ -127,6 +130,7 @@ internal fun DifferentBarangayDuplicateDialog(
     onOpenExisting: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
