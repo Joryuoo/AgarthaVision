@@ -2,6 +2,7 @@
 
 package com.agarthavision.ui.records
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -24,11 +25,16 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,7 +67,10 @@ data class SessionReportSheetState(
     val isWarningAcknowledged: Boolean = false,
     val error: String? = null,
     val isPatientCodename: Boolean = false,
+    val initialConfig: ReportConfig = ReportConfig(),
+    val showDiscardConfirm: Boolean = false,
 ) {
+    val hasUnsavedChanges: Boolean get() = config != initialConfig
     val requiresWarningAck: Boolean get() = verifiedSampleCount < RECOMMENDED_MIN_SAMPLES
     val canGeneratePdf: Boolean get() = !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
     val estimatedPages: Int get() = if (config.includeSampleImages && verifiedSampleCount > 0) {
@@ -84,6 +93,8 @@ data class SessionReportSheetState(
         if (isWarningAcknowledged != other.isWarningAcknowledged) return false
         if (error != other.error) return false
         if (isPatientCodename != other.isPatientCodename) return false
+        if (initialConfig != other.initialConfig) return false
+        if (showDiscardConfirm != other.showDiscardConfirm) return false
         return true
     }
 
@@ -99,6 +110,8 @@ data class SessionReportSheetState(
         result = 31 * result + isWarningAcknowledged.hashCode()
         result = 31 * result + (error?.hashCode() ?: 0)
         result = 31 * result + isPatientCodename.hashCode()
+        result = 31 * result + initialConfig.hashCode()
+        result = 31 * result + showDiscardConfirm.hashCode()
         return result
     }
 }
@@ -116,13 +129,41 @@ fun SessionReportSheet(
     onBackToConfig: () -> Unit,
     onGeneratePdf: () -> Unit,
     modifier: Modifier = Modifier,
+    onRequestDismiss: () -> Unit = {},
+    onDismissDiscard: () -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
+    var localShowDiscardConfirm by remember { mutableStateOf(false) }
+    LaunchedEffect(state.hasUnsavedChanges) {
+        if (!state.hasUnsavedChanges) {
+            localShowDiscardConfirm = false
+        }
+    }
     if (LocalAppLocked.current) return
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val requestDismiss = {
+        if (state.hasUnsavedChanges) {
+            localShowDiscardConfirm = true
+            onRequestDismiss()
+        } else {
+            onDismiss()
+        }
+    }
+    val currentHasUnsavedChanges by rememberUpdatedState(state.hasUnsavedChanges)
+    val currentRequestDismiss by rememberUpdatedState(requestDismiss)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { targetValue ->
+            if (targetValue == SheetValue.Hidden && currentHasUnsavedChanges) {
+                currentRequestDismiss()
+                false
+            } else {
+                true
+            }
+        },
+    )
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = requestDismiss,
         sheetState = sheetState,
         containerColor = colors.surfaceHigh,
         dragHandle = {
@@ -146,6 +187,10 @@ fun SessionReportSheet(
             onPreview = onPreview,
             onBackToConfig = onBackToConfig,
             onGeneratePdf = onGeneratePdf,
+            onRequestDismiss = onRequestDismiss,
+            onDismissDiscard = onDismissDiscard,
+            externalShowDiscardConfirm = localShowDiscardConfirm,
+            onExternalShowDiscardConfirmChange = { localShowDiscardConfirm = it },
         )
     }
 }
@@ -162,12 +207,36 @@ internal fun SessionReportSheetContent(
     onBackToConfig: () -> Unit,
     onGeneratePdf: () -> Unit,
     modifier: Modifier = Modifier,
+    onRequestDismiss: () -> Unit = {},
+    onDismissDiscard: () -> Unit = {},
+    externalShowDiscardConfirm: Boolean = false,
+    onExternalShowDiscardConfirmChange: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
     var previewTotalPages by rememberSaveable { mutableIntStateOf(state.estimatedPages) }
+    var internalShowDiscardConfirm by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    LaunchedEffect(state.estimatedPages, state.previewPdfBytes) {
+        previewCurrentPage = 1
+        previewTotalPages = state.estimatedPages
+    }
+    LaunchedEffect(state.hasUnsavedChanges) {
+        if (!state.hasUnsavedChanges) {
+            internalShowDiscardConfirm = false
+        }
+    }
     if (LocalAppLocked.current) return
+    val requestDismiss = {
+        if (state.hasUnsavedChanges) {
+            internalShowDiscardConfirm = true
+            onExternalShowDiscardConfirmChange(true)
+            onRequestDismiss()
+        } else {
+            onDismiss()
+        }
+    }
+    BackHandler(enabled = true, onBack = requestDismiss)
 
     Column(
         modifier = modifier
@@ -182,7 +251,7 @@ internal fun SessionReportSheetContent(
                 SessionReportSheetHeader(
                     title = stringResource(R.string.report_sheet_generate_title),
                     subtitle = "$sessionLabel · $sessionDate",
-                    onDismiss = onDismiss,
+                    onDismiss = requestDismiss,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -279,7 +348,7 @@ internal fun SessionReportSheetContent(
                 Spacer(Modifier.height(8.dp))
 
                 Button(
-                    onClick = onDismiss,
+                    onClick = requestDismiss,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Transparent,
                         contentColor = colors.textSecondary,
@@ -305,7 +374,7 @@ internal fun SessionReportSheetContent(
                         previewCurrentPage,
                         previewTotalPages,
                     ),
-                    onDismiss = onDismiss,
+                    onDismiss = onBackToConfig,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -394,6 +463,21 @@ internal fun SessionReportSheetContent(
             }
         }
     }
+
+    if (state.showDiscardConfirm || externalShowDiscardConfirm || internalShowDiscardConfirm) {
+        ReportDiscardConfirmDialog(
+            onConfirm = {
+                internalShowDiscardConfirm = false
+                onExternalShowDiscardConfirmChange(false)
+                onDismiss()
+            },
+            onDismiss = {
+                internalShowDiscardConfirm = false
+                onExternalShowDiscardConfirmChange(false)
+                onDismissDiscard()
+            },
+        )
+    }
 }
 
 @Composable
@@ -426,7 +510,8 @@ private fun SessionReportSheetHeader(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(colors.surfaceMuted),
+                .background(colors.surfaceMuted)
+                .testTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON),
         ) {
             Icon(
                 imageVector = AgarthaIcons.Close,

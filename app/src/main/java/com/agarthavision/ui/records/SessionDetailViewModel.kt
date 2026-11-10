@@ -263,8 +263,22 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     fun onDismissReportSheet() {
+        val current = reportSheetState.value ?: return
+        if (current.hasUnsavedChanges) {
+            reportSheetState.update { it?.copy(showDiscardConfirm = true) }
+        } else {
+            previewRequestId++
+            reportSheetState.value = null
+        }
+    }
+
+    fun onConfirmDiscardReportSheet() {
         previewRequestId++
         reportSheetState.value = null
+    }
+
+    fun onCancelDiscardReportSheet() {
+        reportSheetState.update { it?.copy(showDiscardConfirm = false) }
     }
 
     fun onUpdateReportConfig(config: ReportConfig) {
@@ -278,7 +292,13 @@ class SessionDetailViewModel @Inject constructor(
             } else {
                 config
             }
-            current.copy(config = effectiveConfig, previewPdfBytes = null, isLoadingPreview = false)
+            val hasChanges = effectiveConfig != current.initialConfig
+            current.copy(
+                config = effectiveConfig,
+                previewPdfBytes = null,
+                isLoadingPreview = false,
+                showDiscardConfirm = if (hasChanges) current.showDiscardConfirm else false,
+            )
         }
     }
 
