@@ -228,7 +228,9 @@ position permanently separating the retraining corpus from patient PII is docume
 ## C9 — Commit and branch format
 
 Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
-Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Branches:
+Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Enforced by the
+`.husky/commit-msg` hook and by the `Commit message format` CI check on PRs; the single rule
+is `tools/qa/commit_format.py`. Branches:
 cut from `development` as `feat/<description>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
 `test/…`. PRs target `development` (workflow: `development` → `staging` → `main`).
 

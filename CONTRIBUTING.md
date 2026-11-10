@@ -47,7 +47,8 @@ Supabase/inference credential — see C10 in `docs/constraints.md`.
 
 ## Commits
 
-Format, enforced by `.husky/commit-msg`:
+Format, enforced locally by `.husky/commit-msg` and on every PR by the `Commit message format`
+CI check. Both run the single rule in `tools/qa/commit_format.py`:
 
 ```
 [type][ClickUp-ID][Lastname]: Task title
@@ -61,9 +62,7 @@ Example: `[feat][86d4a6mpt][Ledon]: Add the settings screen`
   empty barangay list`) — a maintainer will reconcile it with a ClickUp ID on merge if needed.
 - Commits are sole-authored: no `Co-Authored-By` trailer, no AI/tool attribution line, in the
   commit subject, body, or the PR description.
-- `git commit --no-verify` bypasses the hook and is acceptable for a docs-only change that
-  touches no Kotlin, Gradle, or SQL (the hook gates on a full Android build). It is not a
-  general-purpose escape hatch.
+- Hooks are not bypassed (no `--no-verify`); CI checks the commit messages regardless.
 
 ## Before you push
 

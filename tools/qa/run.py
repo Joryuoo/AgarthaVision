@@ -52,7 +52,7 @@ def commands(name, output):
         "device": [gradle(":app:connectedDebugAndroidTest")],
         "smoke": [[PYTHON, "tools/qa/smoke.py", "--output", str(output / "smoke.json"), *sys.argv[2:]]],
         "pre-push": [full, api],
-        "check": [[PYTHON, "-m", "unittest", "discover", "-s", "tools/qa", "-p", "test_run.py", "-v"], gradle(":app:compileDebugKotlin", ":app:ktlintCheck", ":app:detekt", "assembleDebug"), full, api],
+        "check": [[PYTHON, "-m", "unittest", "discover", "-s", "tools/qa", "-p", "test_*.py", "-v"], gradle(":app:compileDebugKotlin", ":app:ktlintCheck", ":app:detekt", "assembleDebug"), full, api],
     }
     if name == "pre-commit":
         # A changed production symbol can affect tests anywhere. No guessed dependency mapping.
