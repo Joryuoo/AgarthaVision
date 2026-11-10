@@ -11,7 +11,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.agarthavision.core.auth.BiometricPromptManager
 import com.agarthavision.core.auth.BiometricResult
 import com.agarthavision.core.auth.BiometricStatus
@@ -72,10 +75,13 @@ class MainActivity : FragmentActivity() {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
             val showLockOverlay = isBiometricLockEnabled && authGate == AuthGate.Authed && isLocked
+            val lifecycleOwner = LocalLifecycleOwner.current
 
-            LaunchedEffect(showLockOverlay) {
+            LaunchedEffect(showLockOverlay, lifecycleOwner) {
                 if (showLockOverlay) {
-                    triggerBiometricPrompt()
+                    lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                        triggerBiometricPrompt()
+                    }
                 }
             }
 
@@ -88,7 +94,7 @@ class MainActivity : FragmentActivity() {
                     val startRoute = rememberSaveable { startRouteFor(authGate, hasSeenOnboarding == true) }
                     BiometricLockHost(
                         isLocked = showLockOverlay,
-                        onUnlockClick = { triggerBiometricPrompt() },
+                        onUnlockClick = { triggerBiometricPrompt(force = true) },
                     ) {
                         AgarthaNavGraph(
                             cameraManager = cameraManager,
@@ -104,8 +110,11 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun triggerBiometricPrompt() {
-        if (isPromptShowing) return
+    private fun triggerBiometricPrompt(force: Boolean = false) {
+        if (isPromptShowing && !force) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || supportFragmentManager.isStateSaved) {
+            return
+        }
         val status = biometricPromptManager.getBiometricStatus()
         if (status == BiometricStatus.READY) {
             isPromptShowing = true
@@ -124,6 +133,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onStop() {
+        isPromptShowing = false
         if (mainViewModel.isBiometricLockEnabled.value) {
             mainViewModel.lockApp()
         }
