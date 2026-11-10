@@ -1,6 +1,7 @@
 """Cross-platform commands and actual execution evidence (Python 3.11+)."""
 import datetime as dt
 import html
+import importlib.util
 import json
 import os
 import platform
@@ -23,8 +24,172 @@ INTEGRATION = ["com.agarthavision.data.local.dao.*", "com.agarthavision.data.rep
                "com.agarthavision.domain.usecase.sync.*", "com.agarthavision.domain.sync.*"]
 
 
+# Pre-push skips are OFF until the CI check is a required status check on
+# development/staging/main (ClickUp 14zcqntvucd). Until then the local hook is the only gate.
+PUSH_SKIPS_ENABLED = False
+
+PREFLIGHT_RUNS = {"pre-push", "api", "check", "evidence", "verify"}
+INSTALL_COMMAND = "python -m pip install -r inference/requirements-test.txt"
+IMPORT_NAMES = {"pyjwt": "jwt", "pillow": "PIL", "pyyaml": "yaml", "python-multipart": "multipart", "opencv-python": "cv2",
+                "scikit-learn": "sklearn"}
+SCREENSHOT_HINT = ("Screenshot verification failed. If the UI change is intentional or a new screenshot test has no "
+                   "reference image, run: bun run screenshots:record, review the changed images, and commit them.")
+ZERO_SHA = re.compile(r"0+")
+
+
 def gradle(*args):
     return GRADLE + list(args)
+
+
+def requirement_import_names(text):
+    """(requirement, import name) pairs; tolerates comments, extras, version pins, markers and options."""
+    result = []
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line or line.startswith("-"):
+            continue
+        match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", line)
+        if not match:
+            continue
+        requirement = match.group(0)
+        key = re.sub(r"[-_.]+", "-", requirement).lower()
+        result.append((requirement, IMPORT_NAMES.get(key, re.sub(r"[-.]+", "_", requirement))))
+    return result
+
+
+def importable(module):
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError, AttributeError):
+        return False
+
+
+def missing_packages(requirements_text=None):
+    if requirements_text is None:
+        requirements_text = (ROOT / "inference/requirements-test.txt").read_text(encoding="utf-8")
+    return [req for req, module in requirement_import_names(requirements_text) if not importable(module)]
+
+
+def preflight_message(missing):
+    return ("QA preflight failed: missing Python packages in the interpreter running the hooks "
+            f"({PYTHON}): {', '.join(missing)}\n"
+            f"  Install them with: {INSTALL_COMMAND}\n"
+            "  Hooks use the `python` found on PATH, so the right virtual environment must be active where git runs "
+            "(IDE git clients may not inherit your shell's venv).\n"
+            "No checks were run.")
+
+
+def parse_push_refs(text):
+    """Lines of `<local ref> <local sha> <remote ref> <remote sha>` from git's pre-push stdin."""
+    refs = []
+    for line in (text or "").splitlines():
+        parts = line.split()
+        if len(parts) == 4:
+            refs.append(tuple(parts))
+    return refs
+
+
+def push_changed_paths(refs, changes):
+    """Set of changed paths, or None when everything must run (unknown/new/force-push/no refs).
+
+    `changes(remote_sha, local_sha)` returns a list of paths, or None if the range is unknown or not a fast-forward.
+    """
+    live = [ref for ref in refs if not ZERO_SHA.fullmatch(ref[1])]  # deleted refs are ignored
+    if not live:
+        return None
+    paths = set()
+    for _, local, _, remote in live:
+        if ZERO_SHA.fullmatch(remote):  # new branch
+            return None
+        found = changes(remote, local)
+        if found is None:
+            return None
+        paths.update(found)
+    return paths
+
+
+def plan_push_skips(paths):
+    """{'gradle': reason, 'api': reason} for the steps that can be skipped; empty means run everything."""
+    if not paths:
+        return {}
+    skips = {}
+    if all(p.endswith(".md") or p.startswith(("docs/", "inference/")) for p in paths):
+        skips["gradle"] = "only Markdown, docs/ and inference/ files changed"
+    if not any(p.startswith("inference/") for p in paths):
+        skips["api"] = "no files under inference/ changed"
+    return skips
+
+
+def git_push_changes(remote, local):
+    try:
+        ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", remote, local], cwd=ROOT, capture_output=True)
+        if ancestor.returncode != 0:
+            return None
+        out = subprocess.run(["git", "diff", "--name-only", "-z", f"{remote}..{local}"], cwd=ROOT, capture_output=True)
+        if out.returncode != 0:
+            return None
+        return [p for p in out.stdout.decode("utf-8", errors="replace").split("\0") if p]
+    except OSError:
+        return None
+
+
+def pre_push_skips(stdin_text, changes=None):
+    """Never raises: any problem means no skips."""
+    if not PUSH_SKIPS_ENABLED:
+        return {}
+    try:
+        paths = push_changed_paths(parse_push_refs(stdin_text), changes or git_push_changes)
+        return plan_push_skips(paths) if paths is not None else {}
+    except Exception:  # noqa: BLE001 - a skip decision must never break the hook
+        return {}
+
+
+def read_push_stdin():
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return ""
+        return sys.stdin.read()
+    except (OSError, ValueError):
+        return ""
+
+
+STAGED_TEST_FILE = re.compile(r"app/src/test/(java|kotlin)/.+\.(kt|java)")
+CLASS_DECLARATION = re.compile(r"^(?:(?:public|internal|open|final)\s+)*class\s+([A-Za-z_]\w*)", re.MULTILINE)
+TEST_MARKER = re.compile(r"@(?:\w+\.)*(?:Test|ParameterizedTest|RunWith)\b")
+
+
+def concrete_test_classes(text):
+    """Fully-qualified concrete top-level test classes, or None when they cannot be determined safely."""
+    package = re.search(r"^\s*package\s+([A-Za-z_][\w.]*)", text, re.MULTILINE)
+    if not package or not TEST_MARKER.search(text):
+        return None
+    names = CLASS_DECLARATION.findall(text)
+    if len(names) > 1:  # helper classes would make a filter match nothing
+        names = [n for n in names if re.search(r"(Tests?|Spec|IT)$", n)]
+    return [f"{package.group(1)}.{n}" for n in names] or None
+
+
+def read_staged(path):
+    try:
+        return subprocess.check_output(["git", "show", f":{path}"], cwd=ROOT, stderr=subprocess.DEVNULL).decode("utf-8", errors="replace")
+    except (subprocess.CalledProcessError, OSError):
+        try:
+            return (ROOT / path).read_text(encoding="utf-8")
+        except OSError:
+            return None
+
+
+def select_staged_test_classes(test_files, reader=None):
+    """Class filters for every staged test file, or None (use the broader fallback) if any file is uncertain."""
+    reader = reader or read_staged
+    selected = []
+    for path in test_files:
+        text = reader(path)
+        classes = concrete_test_classes(text) if text is not None else None
+        if not classes:
+            return None
+        selected.extend(c for c in classes if c not in selected)
+    return selected or None
 
 
 def warn_missing_staged_unit_tests(files, changed_files):
@@ -40,7 +205,7 @@ def warn_missing_staged_unit_tests(files, changed_files):
             print("  Review whether test updates are needed; this file-based reminder does not measure coverage.")
 
 
-def commands(name, output):
+def commands(name, output, skips=None):
     api = [PYTHON, "-m", "pytest", "inference/tests", "-q", f"--junitxml={output / 'api.xml'}"]
     full = gradle(":app:verifyRoborazziDebug")
     options = {
@@ -60,15 +225,18 @@ def commands(name, output):
         changed_files = subprocess.check_output(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], cwd=ROOT).decode().split("\0")
         removed_or_renamed = subprocess.check_output(["git", "diff", "--cached", "--name-only", "--diff-filter=DR", "--find-renames", "-z"], cwd=ROOT).decode().split("\0")
         warn_missing_staged_unit_tests(files, changed_files)
-        tests = [f for f in changed_files if f.endswith("Test.kt") and f.startswith("app/src/test/java/")]
+        tests = [f for f in changed_files if STAGED_TEST_FILE.fullmatch(f)]
         # Deleted classes cannot be selected; a renamed file may still declare its old class.
         # Use the domain fallback for either status rather than guessing runnable class names.
         safe = tests and not any(removed_or_renamed) and all(not f or f in tests or f.endswith(".md") for f in files)
-        selection = sum((["--tests", f.removeprefix("app/src/test/java/").removesuffix(".kt").replace("/", ".")] for f in tests), []) if safe else ["--tests", "com.agarthavision.domain.*"]
-        print("Focused selection: staged test classes" if safe else "Broader fast fallback: all domain JVM tests; full regression remains pre-push")
+        classes = select_staged_test_classes(tests) if safe else None  # parsed from content, never from file names
+        selection = sum((["--tests", c] for c in classes), []) if classes else ["--tests", "com.agarthavision.domain.*"]
+        print("Focused selection: staged test classes" if classes else "Broader fast fallback: all domain JVM tests; full regression remains pre-push")
         return [gradle(":app:compileDebugKotlin", ":app:ktlintCheck", ":app:detekt"), gradle(":app:testDebugUnitTest", *selection)]
     if name == "evidence":
         return options["check"] + [[PYTHON, "tools/qa/smoke.py", "--local", "--output", str(output / "smoke.json")]]
+    if name == "pre-push" and skips:
+        return ([] if "gradle" in skips else [full]) + ([] if "api" in skips else [api])
     return options[name]
 
 
@@ -120,8 +288,30 @@ def main():
     if name != "device":
         summary["limitations"].append("Device instrumentation was not executed by this command; any collected device reports retain their earlier/cached provenance.")
     failed = 0
+    if name in PREFLIGHT_RUNS:
+        missing = missing_packages()
+        if missing:
+            message = preflight_message(missing)
+            print(message)
+            (output / "preflight.log").write_text(message + "\n", encoding="utf-8")
+            summary["records"].append({"case_id": "QA-PREFLIGHT", "requirement_id": "QA-repeatable-checks", "command": [PYTHON, "-c", "import <requirements>"],
+                                       "expected": "all packages in inference/requirements-test.txt importable",
+                                       "actual": "missing packages: " + ", ".join(missing) + f"; install with: {INSTALL_COMMAND}",
+                                       "status": "fail", "seconds": 0, "artifact": "preflight.log"})
+            summary["limitations"].append("Preflight failed: no command was executed.")
+            summary["exit_code"] = 1
+            (output / "summary.json").write_text(redact(json.dumps(summary, indent=2)), encoding="utf-8")
+            print(f"QA evidence: {output}")
+            return 1
+    skips = pre_push_skips(read_push_stdin()) if name == "pre-push" else {}
+    for step, reason in skips.items():
+        label = "Gradle/Roborazzi" if step == "gradle" else "Python API tests"
+        print(f"SKIP pre-push {label}: {reason}")
+        summary["records"].append({"case_id": f"QA-PRE-PUSH-SKIP-{step.upper()}", "requirement_id": "QA-repeatable-checks", "command": [],
+                                   "expected": "step runs or is skipped with reason", "actual": f"skipped: {reason}", "status": "skip", "seconds": 0, "artifact": None})
+        summary["limitations"].append(f"SKIP pre-push {label}: {reason}.")
     started = time.time()
-    for index, command in enumerate(commands(name, output)):
+    for index, command in enumerate(commands(name, output, skips) if skips else commands(name, output)):
         log = output / f"{index + 1}.log"
         begin = time.monotonic()
         try:
@@ -152,6 +342,12 @@ def main():
         summary["records"].append({"case_id": f"QA-{name.upper()}-{index + 1}", "requirement_id": "QA-repeatable-checks",
                                    "command": command, "expected": "exit 0", "actual": f"exit {code}",
                                    "status": "pass" if code == 0 else "fail", "seconds": round(time.monotonic() - begin, 3), "artifact": log.name})
+        if code not in (0, 130) and ":app:verifyRoborazziDebug" in command:
+            print(SCREENSHOT_HINT)
+            with log.open("a", encoding="utf-8") as stream:
+                stream.write(SCREENSHOT_HINT + "\n")
+            summary["records"][-1]["hint"] = SCREENSHOT_HINT
+            summary["limitations"].append(SCREENSHOT_HINT)
         if code == 130:
             summary["limitations"].append("Remaining command steps were not executed after interruption.")
             break

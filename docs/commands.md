@@ -14,6 +14,13 @@ python -m venv .venv-qa
 python -m pip install -r inference/requirements-test.txt
 ```
 
+Hooks run the `python` found on PATH, so the virtual environment holding these packages must be
+active where git runs (IDE git clients may not inherit your shell's environment). Before any
+command, `pre-push`, `api`, `check`, `evidence` and `verify` runs a **preflight**: every package in
+`inference/requirements-test.txt` must be importable by that interpreter. If not, one message lists
+all missing packages plus the install command, no Gradle or other step runs, and `summary.json`
+records a failed `QA-PREFLIGHT` case. Fix the environment; do not bypass the hook.
+
 `package.json::scripts` delegates to `tools/qa/run.py::commands` and
 `tools/qa/gradle.py` selects `gradlew.bat` on Windows and `gradlew` on POSIX.
 The Android Studio Windows JBR is detected when JAVA_HOME is unset.
@@ -61,8 +68,12 @@ instrumentation test does not suppress the reminder. Android test changes do not
 inference reminder (or vice versa). Docs, resources, config and test-only changes do not warn.
 This is a file-based reminder, not proof of coverage or a dependency analysis; it does not change
 test selection, add API tests to pre-commit, or block the commit by itself.
-If the staged changes contain only `app/src/test/java/**/*Test.kt` and Markdown, it selects
-those exact test classes, provided no staged file is deleted or renamed. Deletions and renames
+If the staged changes contain only Java/Kotlin files under `app/src/test/{java,kotlin}/` and
+Markdown, it selects exact classes, provided no staged file is deleted or renamed. Class names are
+read from the staged file content (`package` plus top-level concrete `class` declarations), never
+derived from the path. If any staged test file has no concrete test class (abstract-only, `object`,
+`interface`, no `@Test`) or its package/class cannot be determined, the broader fallback is used so
+a filter never matches nothing. Deletions and renames
 use the broader fallback: a deleted test is no longer runnable, and a renamed file may still
 declare its previous class name. Any other change also uses the documented broader fast fallback:
 `./gradlew :app:testDebugUnitTest --tests 'com.agarthavision.domain.*'`. This deliberately does
@@ -83,6 +94,7 @@ coverage: it does not reach idle under Robolectric (`VerificationSheet` test sui
 |---|---|
 | `.husky/pre-commit` | Compile + app ktlint/detekt + focused tests/fallback above; abort on failure |
 | `.husky/pre-push` | One full `:app:verifyRoborazziDebug` pass, then GPU-free API tests; no deployed smoke |
+| `.husky/pre-push` skips | Disabled (`PUSH_SKIPS_ENABLED = False` in `tools/qa/run.py`) until the CI check is a required status check on development/staging/main. When enabled: from the pushed ref ranges, if every changed path is `*.md`, `docs/**` or `inference/**` the Gradle/Roborazzi step is skipped; if nothing under `inference/` changed the API tests are skipped. A new branch, force-push/non-ancestor or unknown remote revision, manual run (no stdin) or any git error runs everything. Skips are printed and recorded in `summary.json` |
 | PR CI (`.github/workflows/build-and-test.yml`) | `bun run check`, then shared `bun run test:smoke --local`; required failures fail job |
 | Staging after successful deployment | Dispatch `build-and-test` with exact confirmed `deployed_revision`; shared `bun run test:smoke` |
 
@@ -103,6 +115,9 @@ SDK setup explicitly installs `platform-tools`; Gradle resolves required compile
 using accepted licenses. Local CI smoke runs after failed checks only when the prior setup and
 Python dependency installation succeeded. If setup fails before evidence exists, CI records that
 absence in the job summary and skips the artifact upload rather than adding misleading failures.
+When Roborazzi verification fails, the run prints (and records in the log and `summary.json`):
+"Screenshot verification failed. If the UI change is intentional or a new screenshot test has no
+reference image, run: bun run screenshots:record, review the changed images, and commit them."
 `commit-msg` still enforces C9. Install hooks with `bun run prepare` (also run by `bun install`).
 
 ### Actual evidence versus STD

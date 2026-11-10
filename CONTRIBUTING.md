@@ -62,7 +62,7 @@ Example: `[feat][86d4a6mpt][Ledon]: Add the settings screen`
   empty barangay list`) — a maintainer will reconcile it with a ClickUp ID on merge if needed.
 - Commits are sole-authored: no `Co-Authored-By` trailer, no AI/tool attribution line, in the
   commit subject, body, or the PR description.
-- Hooks are not bypassed (no `--no-verify`); CI checks the commit messages regardless.
+- Hooks are never bypassed; CI checks the commit messages regardless.
 
 ## Before you push
 
@@ -74,6 +74,14 @@ bun run build
 bun run test
 bun run lint
 ```
+
+Hooks run the `python` found on PATH. Create and activate a virtual environment and run
+`python -m pip install -r inference/requirements-test.txt` where git runs (IDE git clients may not
+inherit your shell's venv). A preflight lists any missing packages and stops before running
+anything. If the pre-push screenshot check fails because the UI change is intentional or a new
+screenshot test has no reference image, run `bun run screenshots:record`, review the changed
+images and commit them. Pre-push may skip the Gradle or API step for docs-only / inference-only
+pushes, but only once the CI check is a required status check; see `docs/commands.md`.
 
 On Windows PowerShell, use `.\gradlew.bat assembleDebug` if the shell does not resolve
 `./gradlew`. See [`docs/commands.md`](docs/commands.md) for the full command reference.

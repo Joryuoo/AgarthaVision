@@ -170,6 +170,11 @@ Use Bun with the committed `bun.lock` (`bun install --frozen-lockfile`), Python 
 on PATH, and JDK 21 + Android SDK API 36 for Android checks. Create/activate a Python virtual
 environment and run `python -m pip install -r inference/requirements-test.txt` for API/smoke.
 On PowerShell, direct Gradle commands use `.\gradlew.bat`.
+Git hooks run the `python` on PATH, so that venv must be active where git runs (IDE git clients
+included); a preflight lists missing packages and stops before any check. Pre-push may skip the
+Gradle or API step for docs-only/inference-only pushes only once CI is a required check. If
+screenshot verification fails on an intentional UI change, run `bun run screenshots:record`,
+review the images and commit them. See [`docs/commands.md`](docs/commands.md).
 
 | Bun command | Purpose / prerequisites | Equivalent direct invocation |
 |---|---|---|
