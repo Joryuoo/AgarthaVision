@@ -11,6 +11,26 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/login-deactivated-laboratory-message — sign-in explains a deactivated laboratory · 2026-11-10
+
+### Replace "User is banned" with a plain message at sign-in · `14zcqnttvpa`
+
+- **`SupabaseAuthRepository::signIn`** turns `user_banned` into `LaboratoryAccessInactiveException`;
+  **`LoginViewModel`** shows "Your laboratory's access to AgarthaVision is not active. Contact your
+  laboratory's administrator." (DEF-44, found by ST-06). Wrong password, unknown e-mail and a
+  refused human check show what they showed before.
+- **`docs/map/processes/sign-in.md`** describes the new refusal.
+
+## fix/redact-inference-auth-logging — debug builds no longer log the access token · 2026-11-10
+
+### Redact the Authorization header in the inference client's HTTP log · `14zcqnttvpb`
+
+- **`core/di/InferenceModule.kt::provideOkHttpClient`** calls `redactHeader("Authorization")` on the
+  `HttpLoggingInterceptor`. Before, debug builds (`Level.HEADERS`) wrote the full
+  `Authorization: Bearer <token>` line to Logcat on every inference call (DEF-45, found by ST-03).
+  The request still carries the real token; only the log line is redacted. Release builds still log nothing.
+- **`docs/constraints.md`** no longer lists the leak as a known limit.
+
 ## refactor/shared-supabase-row-decoding — Supabase remote data sources share a fault-tolerant row decoder · 2026-11-08
 
 ### Decode Supabase rows through one shared skip-malformed helper · `14zcqnttqu6`

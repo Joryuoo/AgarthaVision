@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.agarthavision.domain.model.HumanCheckRejectedException
+import com.agarthavision.domain.model.LaboratoryAccessInactiveException
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.repository.AuthRepository
@@ -70,6 +71,7 @@ class SupabaseAuthRepository @Inject constructor(
             }
         } catch (error: RestException) {
             if (error.isHumanCheckRefusal()) throw HumanCheckRejectedException(error)
+            if (error.isBannedRefusal()) throw LaboratoryAccessInactiveException(error)
             throw error
         }
         cacheIdentity(email)
@@ -187,6 +189,13 @@ private fun Throwable.isNoConnection(): Boolean = this is HttpRequestException |
  */
 internal fun RestException.isHumanCheckRefusal(): Boolean = error == CAPTCHA_FAILED
 
+/**
+ * Whether the provider refused the sign-in because the account is banned (14zcqnttvpa): the Admin
+ * Console bans a deactivated laboratory's accounts, and Supabase answers `user_banned`.
+ */
+internal fun RestException.isBannedRefusal(): Boolean = error == USER_BANNED
+
 private const val INVALID_CREDENTIALS = "invalid_credentials"
 private const val CAPTCHA_FAILED = "captcha_failed"
+private const val USER_BANNED = "user_banned"
 private const val SAME_PASSWORD = "same_password"
