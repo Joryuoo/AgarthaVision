@@ -15,15 +15,21 @@ qa = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(qa)
 
 
-class CommandTests(unittest.TestCase):
+class StubbedPlatformTestCase(unittest.TestCase):
+    """platform.platform() shells out to `uname` on Linux, which would consume mocked check_output results."""
+
     def setUp(self):
+        patcher = patch.object(qa.platform, "platform", return_value="test-environment")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class CommandTests(StubbedPlatformTestCase):
+    def setUp(self):
+        super().setUp()
         patcher = patch.object(qa, "missing_packages", return_value=[])
         patcher.start()
         self.addCleanup(patcher.stop)
-        # platform.platform() shells out to `uname` on Linux, which would consume mocked check_output results.
-        platform_patcher = patch.object(qa.platform, "platform", return_value="test-environment")
-        platform_patcher.start()
-        self.addCleanup(platform_patcher.stop)
 
     def test_production_without_staged_unit_tests_warns_and_keeps_existing_commands(self):
         for path, subsystem in (("app/src/main/java/com/agarthavision/Feature.kt", "Android"), ("app/src/release/kotlin/com/agarthavision/Feature.kt", "Android"), ("inference/server.py", "inference")):
@@ -241,7 +247,7 @@ class CommandTests(unittest.TestCase):
 FALLBACK = qa.gradle(":app:testDebugUnitTest", "--tests", "com.agarthavision.domain.*")
 
 
-class SelectionTests(unittest.TestCase):
+class SelectionTests(StubbedPlatformTestCase):
     def select(self, path, source):
         files = (path + "\0").encode()
         with patch.object(qa.subprocess, "check_output", side_effect=[files, files, b""]), patch.object(qa, "read_staged", return_value=source), patch("sys.stdout", new_callable=io.StringIO):
@@ -278,7 +284,7 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(qa.select_staged_test_classes(["g"], reader=lambda p: good), ["a.GoodTest"])
 
 
-class PreflightTests(unittest.TestCase):
+class PreflightTests(StubbedPlatformTestCase):
     TEXT = "# comment\nfastapi\nuvicorn[standard]>=0.3  # pin\npillow\nPyJWT[crypto]==2.0\n-r other.txt\nhttpx\npytest\n"
 
     def test_requirement_names_map_to_imports(self):
@@ -315,7 +321,7 @@ class PreflightTests(unittest.TestCase):
             self.assertEqual(qa.main(), 0)
 
 
-class PushSkipTests(unittest.TestCase):
+class PushSkipTests(StubbedPlatformTestCase):
     ZERO = "0" * 40
     A = "a" * 40
     B = "b" * 40
@@ -399,7 +405,7 @@ class PushSkipTests(unittest.TestCase):
             self.assertTrue(any("SKIP pre-push Gradle" in n for n in summary["limitations"]))
 
 
-class ScreenshotHintTests(unittest.TestCase):
+class ScreenshotHintTests(StubbedPlatformTestCase):
     def run_main(self, name, fail):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
