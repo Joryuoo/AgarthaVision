@@ -11,6 +11,16 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/login-deactivated-laboratory-message — sign-in explains a deactivated laboratory · 2026-11-10
+
+### Replace "User is banned" with a plain message at sign-in · `14zcqnttvpa`
+
+- **`SupabaseAuthRepository::signIn`** turns `user_banned` into `LaboratoryAccessInactiveException`;
+  **`LoginViewModel`** shows "Your laboratory's access to AgarthaVision is not active. Contact your
+  laboratory's administrator." (DEF-44, found by ST-06). Wrong password, unknown e-mail and a
+  refused human check show what they showed before.
+- **`docs/map/processes/sign-in.md`** describes the new refusal.
+
 ## fix/redact-inference-auth-logging — debug builds no longer log the access token · 2026-11-10
 
 ### Redact the Authorization header in the inference client's HTTP log · `14zcqnttvpb`

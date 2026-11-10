@@ -50,7 +50,10 @@ the same identity signing in with a new password.
    email and display name (`full_name` from auth metadata) to DataStore. Supabase checks the
    token with Cloudflare; a refused one (`captcha_failed`) becomes `HumanCheckRejectedException`,
    and the screen says the security check expired or did not pass, never that the password was
-   wrong.
+   wrong. A banned account (`user_banned`, which is what deactivating a laboratory in the Admin
+   Console does) becomes `LaboratoryAccessInactiveException`, and the screen says the laboratory's
+   access is not active and to contact its administrator, not the server's "User is banned".
+   Other refusals (wrong password, unknown e-mail) still show the server's own message.
 4. **Await the patient list only, then leave the screen.** `LoginViewModel` calls
    `CompleteSignInUseCase`, which awaits `FetchRemoteDataUseCase::pullPatientsOnly` (about a
    second or two) and then calls `SyncScheduler::requestSyncAfterSignIn`, even if the pull failed.

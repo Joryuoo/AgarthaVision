@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.HumanCheckConfig
 import com.agarthavision.domain.model.HumanCheckRejectedException
+import com.agarthavision.domain.model.LaboratoryAccessInactiveException
 import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
@@ -207,10 +208,15 @@ class LoginViewModel @Inject constructor(
                     _state.update {
                         it.copy(isSubmitting = false, stage = null, humanCheck = it.humanCheck.renewed())
                     }
-                    val message = if (error is HumanCheckRejectedException) HUMAN_CHECK_REJECTED else error.message
-                    _events.emit(LoginEvent.ShowLoginError(message))
+                    _events.emit(LoginEvent.ShowLoginError(signInErrorMessage(error)))
                 }
         }
+    }
+
+    private fun signInErrorMessage(error: Throwable): String? = when (error) {
+        is HumanCheckRejectedException -> HUMAN_CHECK_REJECTED
+        is LaboratoryAccessInactiveException -> LABORATORY_ACCESS_INACTIVE
+        else -> error.message
     }
 
     private fun observeConnectivity() {
@@ -233,6 +239,9 @@ class LoginViewModel @Inject constructor(
         const val TAG = "LoginViewModel"
         const val HUMAN_CHECK_REJECTED =
             "The security check expired or did not pass. Wait for it to finish, then sign in again."
+        const val LABORATORY_ACCESS_INACTIVE =
+            "Your laboratory's access to AgarthaVision is not active. " +
+                "Contact your laboratory's administrator."
         val EMAIL_PATTERN = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")
     }
 }
