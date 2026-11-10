@@ -535,6 +535,7 @@ class SessionsViewModel @Inject constructor(
                                 candidates = candidates,
                                 selectedIds = eligible,
                                 selectedSessionIds = eligible,
+                                initialSelectedIds = eligible,
                                 isLoadingCandidates = false,
                             ) ?: PatientReportSheetState(
                                 patientDisplayName = resolvedDisplay,
@@ -543,6 +544,7 @@ class SessionsViewModel @Inject constructor(
                                 candidates = candidates,
                                 selectedIds = eligible,
                                 selectedSessionIds = eligible,
+                                initialSelectedIds = eligible,
                                 isLoadingCandidates = false,
                             ),
                         )
@@ -565,9 +567,30 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun onDismissReportSheet() {
+        val sheet = internalState.value.reportSheet ?: return
+        if (sheet.hasUnsavedChanges) {
+            internalState.update { state ->
+                state.copy(reportSheet = state.reportSheet?.copy(showDiscardConfirm = true))
+            }
+        } else {
+            previewRequestId++
+            internalState.update { it.copy(reportSheet = null) }
+        }
+    }
+
+    fun onConfirmDiscardReportSheet() {
         previewRequestId++
         internalState.update { it.copy(reportSheet = null) }
     }
+
+    fun onCancelDiscardReportSheet() {
+        internalState.update { state ->
+            state.copy(reportSheet = state.reportSheet?.copy(showDiscardConfirm = false))
+        }
+    }
+
+    private fun PatientReportSheetState.syncDiscardConfirm(): PatientReportSheetState =
+        if (hasUnsavedChanges) this else copy(showDiscardConfirm = false)
 
     /**
      * Applies a date range to the report sheet and re-derives the selection from scratch to the
@@ -592,7 +615,7 @@ class SessionsViewModel @Inject constructor(
                     selectedSessionIds = eligible,
                     previewPdfBytes = null,
                     isLoadingPreview = false,
-                ),
+                ).syncDiscardConfirm(),
             )
         }
     }
@@ -631,7 +654,7 @@ class SessionsViewModel @Inject constructor(
                     selectedSessionIds = updated,
                     previewPdfBytes = null,
                     isLoadingPreview = false,
-                ),
+                ).syncDiscardConfirm(),
             )
         }
     }
@@ -648,7 +671,7 @@ class SessionsViewModel @Inject constructor(
                     selectedSessionIds = updated,
                     previewPdfBytes = null,
                     isLoadingPreview = false,
-                ),
+                ).syncDiscardConfirm(),
             )
         }
     }
@@ -665,7 +688,11 @@ class SessionsViewModel @Inject constructor(
                 config
             }
             state.copy(
-                reportSheet = sheet.copy(config = effectiveConfig, previewPdfBytes = null, isLoadingPreview = false),
+                reportSheet = sheet.copy(
+                    config = effectiveConfig,
+                    previewPdfBytes = null,
+                    isLoadingPreview = false,
+                ).syncDiscardConfirm(),
             )
         }
     }
