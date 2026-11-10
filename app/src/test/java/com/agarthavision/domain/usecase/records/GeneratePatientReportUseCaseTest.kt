@@ -4,6 +4,8 @@ import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.ActivityItem
+import com.agarthavision.domain.model.Detection
+import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PasswordChangeResult
@@ -323,6 +325,89 @@ class GeneratePatientReportUseCaseTest {
     }
 
     @Test
+    fun `pooled appendix agrees with session rows when model finding is edited to WRONG_CLASS`() = runTest {
+        val renderer = PrFakePdfRenderer()
+        val sessions = listOf(
+            prSession("session-1", startedAt = LocalDate.of(2026, 1, 1)),
+            prSession("session-2", startedAt = LocalDate.of(2026, 1, 2)),
+        )
+        val samples = listOf(
+            prSample("sample-1", "session-1"),
+            prSample("sample-2", "session-2"),
+        )
+        val detectionsBySample = mapOf(
+            "sample-1" to listOf(
+                Detection(
+                    id = "d1",
+                    sampleId = "sample-1",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.93f,
+                    bboxX = 0.1f,
+                    bboxY = 0.1f,
+                    bboxW = 0.2f,
+                    bboxH = 0.2f,
+                    verdict = DetectionVerdict.WRONG_CLASS,
+                    expertClass = "Trichuris trichiura",
+                ),
+            ),
+            "sample-2" to listOf(
+                Detection(
+                    id = "d2",
+                    sampleId = "sample-2",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.62f,
+                    bboxX = 0.1f,
+                    bboxY = 0.1f,
+                    bboxW = 0.2f,
+                    bboxH = 0.2f,
+                    verdict = DetectionVerdict.FALSE_POSITIVE,
+                    expertClass = null,
+                ),
+            ),
+        )
+        val findingsBySession = mapOf(
+            "session-1" to listOf(SampleSpeciesFindingEntity("f1", "sample-1", "Trichuris trichiura", null, 1)),
+            "session-2" to emptyList(),
+        )
+        val useCase = GeneratePatientReportUseCase(
+            authRepository = PrFakeAuthRepository("user-1"),
+            patientRepository = PrFakePatientRepository(prPatient()),
+            psgcRepository = PrFakePsgcRepository(prBarangay()),
+            sessionRepository = PrFakeSessionRepository(sessions),
+            sampleRepository = PrFakeSampleRepository(samples),
+            detectionRepository = PrFakeDetectionRepository(
+                eggCountsBySession = mapOf(
+                    "session-1" to listOf(EggCount("Trichuris trichiura", 1)),
+                    "session-2" to emptyList(),
+                ),
+                detectionsBySample = detectionsBySample,
+            ),
+            findingDao = prFindingDao(findingsBySession),
+            reportRepository = PrFakeReportRepository(),
+            reportFileStore = PrFakeReportFileStore(),
+            patientReportPdfBuilder = PatientReportPdfBuilder(),
+            patientReportPdfRenderer = renderer,
+            syncReportUseCase = prNoOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
+        )
+
+        val result = useCase("patient-1", config = ReportConfig(includeSampleImages = true))
+
+        assertTrue(result.isSuccess)
+        val doc = renderer.lastDocument!!
+        assertEquals(listOf("Trichuris trichiura"), doc.sessionRows[0].positiveSpecies)
+        assertEquals(1, doc.sessionRows[0].eggsConfirmed)
+        assertEquals(emptyList<String>(), doc.sessionRows[1].positiveSpecies)
+        assertEquals(0, doc.sessionRows[1].eggsConfirmed)
+
+        assertEquals(2, doc.appendixSamples.size)
+        assertEquals(1, doc.appendixSamples[0].eggCount)
+        assertEquals("Trichuris trichiura", doc.appendixSamples[0].findingsSummary)
+        assertEquals(0, doc.appendixSamples[1].eggCount)
+        assertEquals("No parasites detected", doc.appendixSamples[1].findingsSummary)
+    }
+
+    @Test
     fun `final pdf identity and data match persisted report`() = runTest {
         val reportRepository = PrFakeReportRepository()
         val fileStore = PrFakeReportFileStore()
@@ -589,11 +674,12 @@ private class PrFakeSampleRepository(private val samples: List<Sample>) : Sample
 
 private class PrFakeDetectionRepository(
     private val eggCountsBySession: Map<String, List<EggCount>>,
+    private val detectionsBySample: Map<String, List<Detection>> = emptyMap(),
 ) : DetectionRepository {
     override suspend fun getDetectionsForSample(sampleId: String) =
-        emptyList<com.agarthavision.domain.model.Detection>()
+        detectionsBySample[sampleId].orEmpty()
     override fun observeDetectionsForSample(sampleId: String) =
-        flowOf(emptyList<com.agarthavision.domain.model.Detection>())
+        flowOf(detectionsBySample[sampleId].orEmpty())
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         eggCountsBySession[sessionId].orEmpty()
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =

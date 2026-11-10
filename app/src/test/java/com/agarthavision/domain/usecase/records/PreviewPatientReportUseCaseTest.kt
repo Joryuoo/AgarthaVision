@@ -103,6 +103,83 @@ class PreviewPatientReportUseCaseTest {
     }
 
     @Test
+    fun `preview pooled appendix agrees with session rows for edited findings`() = runTest {
+        val renderer = PpFakePdfRenderer()
+        val sessions = listOf(
+            ppSession("session-1", startedAt = LocalDate.of(2026, 1, 1)),
+            ppSession("session-2", startedAt = LocalDate.of(2026, 1, 2)),
+        )
+        val samples = listOf(
+            ppSample("sample-1", "session-1"),
+            ppSample("sample-2", "session-2"),
+        )
+        val detectionsBySample = mapOf(
+            "sample-1" to listOf(
+                ppDetection(
+                    id = "d1",
+                    sampleId = "sample-1",
+                    classLabel = "Ascaris lumbricoides",
+                    verdict = DetectionVerdict.WRONG_CLASS,
+                    expertClass = "Trichuris trichiura",
+                ),
+                ppDetection(
+                    id = "d2",
+                    sampleId = "sample-1",
+                    classLabel = "Hookworm",
+                    verdict = DetectionVerdict.BOX_INCORRECT,
+                    expertClass = null,
+                ),
+            ),
+            "sample-2" to listOf(
+                ppDetection(
+                    id = "d3",
+                    sampleId = "sample-2",
+                    classLabel = "Ascaris lumbricoides",
+                    verdict = DetectionVerdict.FALSE_POSITIVE,
+                ),
+            ),
+        )
+        val findingsBySession = mapOf(
+            "session-1" to listOf(
+                SampleSpeciesFindingEntity("f1", "sample-1", "Trichuris trichiura", null, 1),
+                SampleSpeciesFindingEntity("f2", "sample-1", "Hookworm", null, 1),
+            ),
+            "session-2" to emptyList(),
+        )
+        val useCase = PreviewPatientReportUseCase(
+            authRepository = PpFakeAuthRepository("user-1"),
+            patientRepository = PpFakePatientRepository(ppPatient()),
+            psgcRepository = PpFakePsgcRepository(ppBarangay()),
+            sessionRepository = PpFakeSessionRepository(sessions),
+            sampleRepository = PpFakeSampleRepository(samples),
+            detectionRepository = PpFakeDetectionRepository(
+                eggCountsBySession = mapOf(
+                    "session-1" to listOf(EggCount("Trichuris trichiura", 1), EggCount("Hookworm", 1)),
+                    "session-2" to emptyList(),
+                ),
+                detectionsBySample = detectionsBySample,
+            ),
+            findingDao = ppFindingDao(findingsBySession),
+            patientReportPdfBuilder = PatientReportPdfBuilder(),
+            patientReportPdfRenderer = renderer,
+        )
+
+        val result = useCase("patient-1", config = ReportConfig(includeSampleImages = true))
+
+        assertTrue(result.isSuccess)
+        val doc = renderer.lastDocument!!
+        assertEquals(2, doc.sessionRows[0].eggsConfirmed)
+        assertEquals(listOf("Hookworm", "Trichuris trichiura"), doc.sessionRows[0].positiveSpecies)
+        assertEquals(0, doc.sessionRows[1].eggsConfirmed)
+
+        assertEquals(2, doc.appendixSamples.size)
+        assertEquals(2, doc.appendixSamples[0].eggCount)
+        assertEquals("Trichuris trichiura, Hookworm", doc.appendixSamples[0].findingsSummary)
+        assertEquals(0, doc.appendixSamples[1].eggCount)
+        assertEquals("No parasites detected", doc.appendixSamples[1].findingsSummary)
+    }
+
+    @Test
     fun `date range scope filters sessions in preview`() = runTest {
         val renderer = PpFakePdfRenderer()
         val useCase = standardUseCase(renderer = renderer)
@@ -268,6 +345,25 @@ private fun ppSample(id: String, sessionId: String): Sample = Sample(
     status = SampleStatus.SYNCED,
 )
 
+private fun ppDetection(
+    id: String,
+    sampleId: String,
+    classLabel: String,
+    verdict: DetectionVerdict = DetectionVerdict.CONFIRMED,
+    expertClass: String? = null,
+): Detection = Detection(
+    id = id,
+    sampleId = sampleId,
+    classLabel = classLabel,
+    confidence = 0.90f,
+    bboxX = 0.1f,
+    bboxY = 0.1f,
+    bboxW = 0.2f,
+    bboxH = 0.2f,
+    verdict = verdict,
+    expertClass = expertClass,
+)
+
 private fun ppPatient(
     id: String = "patient-1",
     psgcBarangayCode: String = "0723017001",
@@ -428,11 +524,12 @@ private class PpFakeSampleRepository(private val samples: List<Sample>) : Sample
 
 private class PpFakeDetectionRepository(
     private val eggCountsBySession: Map<String, List<EggCount>>,
+    private val detectionsBySample: Map<String, List<Detection>> = emptyMap(),
 ) : DetectionRepository {
     override suspend fun getDetectionsForSample(sampleId: String) =
-        emptyList<Detection>()
+        detectionsBySample[sampleId].orEmpty()
     override fun observeDetectionsForSample(sampleId: String) =
-        flowOf(emptyList<Detection>())
+        flowOf(detectionsBySample[sampleId].orEmpty())
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         eggCountsBySession[sessionId].orEmpty()
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
