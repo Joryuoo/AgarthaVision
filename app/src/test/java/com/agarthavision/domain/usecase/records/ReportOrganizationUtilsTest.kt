@@ -156,21 +156,102 @@ class ReportOrganizationUtilsTest {
     }
 
     @Test
-    fun `buildAppendixSamples filters out unconfirmed and non-confirmed detections`() {
+    fun `buildAppendixSamples includes CONFIRMED, WRONG_CLASS, and BOX_INCORRECT and excludes FALSE_POSITIVE`() {
         val sample = createSample("s1")
         val detections = listOf(
             createDetection("d1", "s1", "Ascaris lumbricoides", verdict = DetectionVerdict.CONFIRMED),
             createDetection("d2", "s1", "Trichuris trichiura", verdict = DetectionVerdict.FALSE_POSITIVE),
-            createDetection("d3", "s1", "Hookworm", verdict = DetectionVerdict.WRONG_CLASS),
-            createDetection("d4", "s1", "Ascaris lumbricoides", verdict = DetectionVerdict.BOX_INCORRECT),
+            createDetection(
+                "d3",
+                "s1",
+                "Ascaris lumbricoides",
+                verdict = DetectionVerdict.WRONG_CLASS,
+                expertClass = "Trichuris trichiura",
+            ),
+            createDetection(
+                "d4",
+                "s1",
+                "Hookworm",
+                verdict = DetectionVerdict.BOX_INCORRECT,
+                expertClass = null,
+            ),
         )
         val appendix = buildAppendixSamples(
             samples = listOf(sample),
             detectionsBySample = mapOf("s1" to detections),
         )
 
+        assertEquals(3, appendix[0].eggCount)
+        assertEquals("Ascaris lumbricoides, Trichuris trichiura, Hookworm", appendix[0].findingsSummary)
+    }
+
+    @Test
+    fun `buildAppendixSamples displays corrected species and count for edited WRONG_CLASS finding`() {
+        val sample = createSample("s1")
+        // Regression for 14zcqnttyt8: Ascaris lumbricoides predicted by model, corrected to Trichuris trichiura.
+        val editedDetection = createDetection(
+            id = "d1",
+            sampleId = "s1",
+            classLabel = "Ascaris lumbricoides",
+            verdict = DetectionVerdict.WRONG_CLASS,
+            expertClass = "Trichuris trichiura",
+        )
+        val appendix = buildAppendixSamples(
+            samples = listOf(sample),
+            detectionsBySample = mapOf("s1" to listOf(editedDetection)),
+        )
+
         assertEquals(1, appendix[0].eggCount)
-        assertEquals("Ascaris lumbricoides", appendix[0].findingsSummary)
+        assertEquals("Trichuris trichiura", appendix[0].findingsSummary)
+    }
+
+    @Test
+    fun `buildAppendixSamples handles BOX_INCORRECT with corrected species and manual unboxed findings`() {
+        val sample = createSample("s1")
+        val detections = listOf(
+            createDetection(
+                id = "d-box-edited-species",
+                sampleId = "s1",
+                classLabel = "Ascaris lumbricoides",
+                verdict = DetectionVerdict.BOX_INCORRECT,
+                expertClass = "Hookworm",
+            ),
+            Detection(
+                id = "d-manual-added",
+                sampleId = "s1",
+                classLabel = "Trichuris trichiura",
+                confidence = 1.0f,
+                bboxX = null,
+                bboxY = null,
+                bboxW = null,
+                bboxH = null,
+                verdict = DetectionVerdict.CONFIRMED,
+                expertClass = "Trichuris trichiura",
+            ),
+        )
+        val appendix = buildAppendixSamples(
+            samples = listOf(sample),
+            detectionsBySample = mapOf("s1" to detections),
+        )
+
+        assertEquals(2, appendix[0].eggCount)
+        assertEquals("Hookworm, Trichuris trichiura", appendix[0].findingsSummary)
+    }
+
+    @Test
+    fun `buildAppendixSamples emits No parasites detected when all detections are FALSE_POSITIVE`() {
+        val sample = createSample("s1")
+        val detections = listOf(
+            createDetection("d1", "s1", "Ascaris lumbricoides", verdict = DetectionVerdict.FALSE_POSITIVE),
+            createDetection("d2", "s1", "Trichuris trichiura", verdict = DetectionVerdict.FALSE_POSITIVE),
+        )
+        val appendix = buildAppendixSamples(
+            samples = listOf(sample),
+            detectionsBySample = mapOf("s1" to detections),
+        )
+
+        assertEquals(0, appendix[0].eggCount)
+        assertEquals("No parasites detected", appendix[0].findingsSummary)
     }
 
     @Test
