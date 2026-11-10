@@ -54,6 +54,7 @@ import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.usecase.patients.PatientSort
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.components.BarangayPickerState
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SearchableDropdown
 import com.agarthavision.ui.components.SearchableDropdownActions
 import com.agarthavision.ui.components.SearchableDropdownConfig
@@ -116,7 +117,6 @@ internal fun PatientsFilterSheet(
     onBarangayQueryChange: (String) -> Unit,
 ) {
     val colors = AgarthaTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var draftSort by remember(state.sort) { mutableStateOf(state.sort) }
     var draftSex by remember(state.selectedSex) { mutableStateOf(state.selectedSex) }
@@ -125,6 +125,10 @@ internal fun PatientsFilterSheet(
     }
     var draftMinAge by remember(state.minAge) { mutableStateOf(state.minAge) }
     var draftMaxAge by remember(state.maxAge) { mutableStateOf(state.maxAge) }
+    val scrollState = rememberScrollState()
+    if (LocalAppLocked.current) return
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val hasFilters = draftSort != PatientSort.RECENT ||
         draftSex != null ||
@@ -149,7 +153,7 @@ internal fun PatientsFilterSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
@@ -289,7 +293,7 @@ private fun FilterSortSelector(
                 )
             }
             DropdownMenu(
-                expanded = expanded,
+                expanded = expanded && !LocalAppLocked.current,
                 onDismissRequest = { expanded = false },
             ) {
                 DropdownMenuItem(

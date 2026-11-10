@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -55,6 +56,10 @@ internal fun RenameSessionSheet(
     onSubmit: (label: String) -> Unit,
 ) {
     val colors = AgarthaTheme.colors
+    var label by remember(initialLabel) { mutableStateOf(initialLabel) }
+    var showEmptyError by remember { mutableStateOf(false) }
+    if (LocalAppLocked.current) return
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -71,9 +76,6 @@ internal fun RenameSessionSheet(
         },
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
     ) {
-        var label by remember(initialLabel) { mutableStateOf(initialLabel) }
-        var showEmptyError by remember { mutableStateOf(false) }
-
         val activeErrorMessage = when {
             showEmptyError && label.isBlank() -> stringResource(R.string.session_new_label_required)
             !state.errorMessage.isNullOrBlank() -> state.errorMessage
