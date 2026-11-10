@@ -2136,6 +2136,220 @@ class SessionsViewModelTest {
                 cancelAndIgnoreRemainingEvents()
             }
         }
+
+    @Test
+    fun `unchanged patient report dismisses immediately without discard prompt`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet!!
+                assertFalse(sheet.hasUnsavedChanges)
+                assertFalse(sheet.showDiscardConfirm)
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `changing session selection triggers discard confirmation on dismiss request`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                PatientReportCandidate(makeSession("s2", "u1").session, verifiedSampleCount = 2),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onToggleReportSession("s2")
+                advanceUntilIdle()
+
+                val changedSheet = expectMostRecentItem().reportSheet!!
+                assertTrue(changedSheet.hasUnsavedChanges)
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                val promptSheet = expectMostRecentItem().reportSheet!!
+                assertTrue(promptSheet.showDiscardConfirm)
+
+                // Dismiss prompt without discarding
+                vm.onCancelDiscardReportSheet()
+                advanceUntilIdle()
+
+                val keptSheet = expectMostRecentItem().reportSheet!!
+                assertFalse(keptSheet.showDiscardConfirm)
+                assertEquals(setOf("s1"), keptSheet.selectedSessionIds)
+
+                // Confirm discard
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+                vm.onConfirmDiscardReportSheet()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `changing date range triggers discard confirmation and revert clears prompt`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val from = LocalDate.of(2026, 1, 1)
+                val to = LocalDate.of(2026, 1, 31)
+                vm.onReportDateRangeSelected(from, to)
+                advanceUntilIdle()
+
+                val changedSheet = expectMostRecentItem().reportSheet!!
+                assertTrue(changedSheet.hasUnsavedChanges)
+
+                // Revert back to all time (null, null)
+                vm.onReportDateRangeSelected(null, null)
+                advanceUntilIdle()
+
+                val revertedSheet = expectMostRecentItem().reportSheet!!
+                assertFalse(revertedSheet.hasUnsavedChanges)
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `changing report config triggers discard confirmation on dismiss request`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val dirtyConfig = ReportConfig(
+                    includeSampleImages = true,
+                    patientNameOption = PatientNameOption.CENSOR,
+                )
+                vm.onUpdatePatientReportConfig(dirtyConfig)
+                advanceUntilIdle()
+
+                val changedSheet = expectMostRecentItem().reportSheet!!
+                assertTrue(changedSheet.hasUnsavedChanges)
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                val promptSheet = expectMostRecentItem().reportSheet!!
+                assertTrue(promptSheet.showDiscardConfirm)
+
+                // Revert config to default
+                vm.onCancelDiscardReportSheet()
+                vm.onUpdatePatientReportConfig(ReportConfig())
+                advanceUntilIdle()
+
+                val revertedSheet = expectMostRecentItem().reportSheet!!
+                assertFalse(revertedSheet.hasUnsavedChanges)
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `returning from preview to config preserves settings without discard confirmation`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val previewUseCase = mock<PreviewPatientReportUseCase> {
+                onBlocking {
+                    invoke(any(), any(), any())
+                } doReturn Result.success(byteArrayOf(1, 2, 3))
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                previewUseCase = previewUseCase,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val dirtyConfig = ReportConfig(
+                    includeSampleImages = true,
+                    patientNameOption = PatientNameOption.EXCLUDE,
+                )
+                vm.onUpdatePatientReportConfig(dirtyConfig)
+                advanceUntilIdle()
+
+                vm.onPreviewPatientReport()
+                advanceUntilIdle()
+
+                val previewSheet = expectMostRecentItem().reportSheet!!
+                assertEquals(ReportSheetStep.PREVIEW, previewSheet.step)
+
+                // Returning to config
+                vm.onBackToPatientReportConfig()
+                advanceUntilIdle()
+
+                val configSheet = expectMostRecentItem().reportSheet!!
+                assertEquals(ReportSheetStep.CONFIGURATION, configSheet.step)
+                assertFalse(configSheet.showDiscardConfirm)
+                assertTrue(configSheet.hasUnsavedChanges)
+                assertEquals(dirtyConfig, configSheet.config)
+
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
 }
 
 // ---------------------------------------------------------------------------

@@ -51,6 +51,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
@@ -111,23 +112,40 @@ fun ReportDiscardConfirmDialog(
         title = { Text(stringResource(R.string.report_discard_title)) },
         text = { Text(stringResource(R.string.report_discard_body)) },
         confirmButton = {
-            AgarthaButton(
-                onClick = onConfirm,
-                variant = AgarthaButtonVariant.Destructive,
-                modifier = Modifier.testTag(ReportSheetTestTags.DISCARD_DIALOG_CONFIRM),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(stringResource(R.string.report_discard_confirm))
+                AgarthaButton(
+                    onClick = onDismiss,
+                    variant = AgarthaButtonVariant.Secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS),
+                ) {
+                    Text(
+                        text = stringResource(R.string.report_discard_keep),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                AgarthaButton(
+                    onClick = onConfirm,
+                    variant = AgarthaButtonVariant.Destructive,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(ReportSheetTestTags.DISCARD_DIALOG_CONFIRM),
+                ) {
+                    Text(
+                        text = stringResource(R.string.report_discard_confirm),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         },
-        dismissButton = {
-            AgarthaButton(
-                onClick = onDismiss,
-                variant = AgarthaButtonVariant.Secondary,
-                modifier = Modifier.testTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS),
-            ) {
-                Text(stringResource(R.string.report_discard_keep))
-            }
-        },
+        dismissButton = null,
         modifier = Modifier.testTag(ReportSheetTestTags.DISCARD_DIALOG),
     )
 }
