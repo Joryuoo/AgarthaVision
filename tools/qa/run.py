@@ -24,9 +24,9 @@ INTEGRATION = ["com.agarthavision.data.local.dao.*", "com.agarthavision.data.rep
                "com.agarthavision.domain.usecase.sync.*", "com.agarthavision.domain.sync.*"]
 
 
-# Pre-push skips are OFF until the CI check is a required status check on
-# development/staging/main (ClickUp 14zcqntvucd). Until then the local hook is the only gate.
-PUSH_SKIPS_ENABLED = False
+# Pre-push skips rely on CI as the enforced backstop: the build-and-test check is a required
+# status check on development/staging/main (ClickUp 14zcqntvucd). Set False to run everything.
+PUSH_SKIPS_ENABLED = True
 
 PREFLIGHT_RUNS = {"pre-push", "api", "check", "evidence"}
 INSTALL_COMMAND = "python -m pip install -r inference/requirements-test.txt"

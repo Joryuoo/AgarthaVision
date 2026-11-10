@@ -80,8 +80,9 @@ Hooks run the `python` found on PATH. Create and activate a virtual environment 
 inherit your shell's venv). A preflight lists any missing packages and stops before running
 anything. If the pre-push screenshot check fails because the UI change is intentional or a new
 screenshot test has no reference image, run `bun run screenshots:record`, review the changed
-images and commit them. Pre-push may skip the Gradle or API step for docs-only / inference-only
-pushes, but only once the CI check is a required status check; see `docs/commands.md`.
+images and commit them. Pre-push skips the Gradle step for docs-only / inference-only
+pushes and the API step when nothing under `inference/` changed; CI is a required status check
+and remains the backstop. See `docs/commands.md`.
 
 On Windows PowerShell, use `.\gradlew.bat assembleDebug` if the shell does not resolve
 `./gradlew`. See [`docs/commands.md`](docs/commands.md) for the full command reference.

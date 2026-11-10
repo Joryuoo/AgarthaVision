@@ -22,6 +22,10 @@ class StubbedPlatformTestCase(unittest.TestCase):
         patcher = patch.object(qa.platform, "platform", return_value="test-environment")
         patcher.start()
         self.addCleanup(patcher.stop)
+        # Never read the real stdin of the test runner (pre-push skips are enabled).
+        stdin_patcher = patch.object(qa, "read_push_stdin", return_value="")
+        stdin_patcher.start()
+        self.addCleanup(stdin_patcher.stop)
 
 
 class CommandTests(StubbedPlatformTestCase):
@@ -333,9 +337,11 @@ class PushSkipTests(StubbedPlatformTestCase):
         with patch.object(qa, "PUSH_SKIPS_ENABLED", True):
             return qa.pre_push_skips(text, changes)
 
-    def test_disabled_by_default_constant(self):
-        self.assertFalse(qa.PUSH_SKIPS_ENABLED)
-        self.assertEqual(qa.pre_push_skips(self.ref(), lambda r, l: ["README.md"]), {})
+    def test_skips_enabled_and_can_be_switched_off(self):
+        self.assertTrue(qa.PUSH_SKIPS_ENABLED)
+        self.assertIn("gradle", qa.pre_push_skips(self.ref(), lambda r, l: ["README.md"]))
+        with patch.object(qa, "PUSH_SKIPS_ENABLED", False):
+            self.assertEqual(qa.pre_push_skips(self.ref(), lambda r, l: ["README.md"]), {})
 
     def test_skip_rules(self):
         cases = [

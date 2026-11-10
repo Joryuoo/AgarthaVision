@@ -272,7 +272,7 @@ developers to understand, verify, and decide how to solve.
 
 
 **Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
-above (the `types` and `pattern` variables in `.husky/commit-msg`). Merge, revert, fixup, and squash subjects are skipped
+above (defined once in `tools/qa/commit_format.py`, which the hook calls). Merge, revert, fixup, and squash subjects are skipped
 because git writes those itself; only the first line is checked, so bodies are free-form.
 A rejected commit prints the format, the type list with a gloss for each, and the subject
 that failed.
@@ -413,8 +413,8 @@ job with the confirmed deployment revision and test-user token. Screenshot recor
 Python 3.11+ is required; Android checks require JDK 21 + SDK, API tests require
 `inference/requirements-test.txt`, importable by the `python` on PATH where git runs (the
 venv must be active for IDE git clients); a preflight fails fast listing every missing package.
-Pre-push skips (docs-only: no Gradle; no `inference/` change: no API tests) are off until the CI
-check is a required status check. A failed screenshot verify prints the `screenshots:record`
+Pre-push skips (docs-only: no Gradle; no `inference/` change: no API tests) are on because the CI
+check is a required status check (`PUSH_SKIPS_ENABLED` in `tools/qa/run.py`). A failed screenshot verify prints the `screenshots:record`
 hint. Bun and `bun.lock` are the supported installer workflow.
 See `commands.md` for exact selections, failure/report handling and evidence limitations.
 

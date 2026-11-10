@@ -94,7 +94,7 @@ coverage: it does not reach idle under Robolectric (`VerificationSheet` test sui
 |---|---|
 | `.husky/pre-commit` | Compile + app ktlint/detekt + focused tests/fallback above; abort on failure |
 | `.husky/pre-push` | One full `:app:verifyRoborazziDebug` pass, then GPU-free API tests; no deployed smoke |
-| `.husky/pre-push` skips | Disabled (`PUSH_SKIPS_ENABLED = False` in `tools/qa/run.py`) until the CI check is a required status check on development/staging/main. When enabled: from the pushed ref ranges, if every changed path is `*.md`, `docs/**` or `inference/**` the Gradle/Roborazzi step is skipped; if nothing under `inference/` changed the API tests are skipped. A new branch, force-push/non-ancestor or unknown remote revision, manual run (no stdin) or any git error runs everything. Skips are printed and recorded in `summary.json` |
+| `.husky/pre-push` skips | Enabled (`PUSH_SKIPS_ENABLED = True` in `tools/qa/run.py`; CI is a required status check on development/staging/main, so it is the backstop). From the pushed ref ranges, if every changed path is `*.md`, `docs/**` or `inference/**` the Gradle/Roborazzi step is skipped; if nothing under `inference/` changed the API tests are skipped. A new branch, force-push/non-ancestor or unknown remote revision, manual run (no stdin) or any git error runs everything. Skips are printed and recorded in `summary.json` |
 | PR CI (`.github/workflows/build-and-test.yml`) | `bun run check`, then shared `bun run test:smoke --local`; required failures fail job |
 | Staging after successful deployment | Dispatch `build-and-test` with exact confirmed `deployed_revision`; shared `bun run test:smoke` |
 
