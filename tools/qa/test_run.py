@@ -20,6 +20,10 @@ class CommandTests(unittest.TestCase):
         patcher = patch.object(qa, "missing_packages", return_value=[])
         patcher.start()
         self.addCleanup(patcher.stop)
+        # platform.platform() shells out to `uname` on Linux, which would consume mocked check_output results.
+        platform_patcher = patch.object(qa.platform, "platform", return_value="test-environment")
+        platform_patcher.start()
+        self.addCleanup(platform_patcher.stop)
 
     def test_production_without_staged_unit_tests_warns_and_keeps_existing_commands(self):
         for path, subsystem in (("app/src/main/java/com/agarthavision/Feature.kt", "Android"), ("app/src/release/kotlin/com/agarthavision/Feature.kt", "Android"), ("inference/server.py", "inference")):
