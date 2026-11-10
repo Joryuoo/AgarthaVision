@@ -355,6 +355,60 @@ class ReportPdfBuilderTest {
     }
 
     @Test
+    fun `build with includeSampleImages true reflects species-corrected WRONG_CLASS finding in appendix`() {
+        val builder = ReportPdfBuilder()
+        val metadata = ReportMetadata(
+            reportId = "report-edited",
+            session = Session(
+                id = "session-edited",
+                userId = "u1",
+                deviceId = "d1",
+                startedAt = 0L,
+                patientId = "p1",
+                label = "Smear Edited",
+            ),
+            patient = reportPatient(),
+            generatedBy = "u1",
+            generatedByName = "Tech",
+            generatedAt = Instant.now(),
+            totalSamples = 1,
+            totalEggsConfirmed = 1,
+            positiveSpecies = listOf("Trichuris trichiura"),
+            lpfPerSpecies = mapOf("Trichuris trichiura" to LpfDensity(min = 1, max = 1)),
+        )
+        val samples = listOf(sampleFixture("s1", sessionId = "session-edited"))
+        val detectionsBySample = mapOf(
+            "s1" to listOf(
+                Detection(
+                    id = "det-edited",
+                    sampleId = "s1",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = SAMPLE_CONFIDENCE,
+                    bboxX = SAMPLE_BBOX_X,
+                    bboxY = SAMPLE_BBOX_Y,
+                    bboxW = SAMPLE_BBOX_W,
+                    bboxH = SAMPLE_BBOX_H,
+                    verdict = DetectionVerdict.WRONG_CLASS,
+                    expertClass = "Trichuris trichiura",
+                ),
+            ),
+        )
+
+        val doc = builder.build(
+            metadata = metadata,
+            samples = samples,
+            detectionsBySample = detectionsBySample,
+            config = ReportConfig(includeSampleImages = true),
+        )
+
+        assertEquals(1, doc.speciesRows.size)
+        assertEquals("Trichuris trichiura", doc.speciesRows[0].speciesDisplayName)
+        assertEquals(1, doc.appendixSamples.size)
+        assertEquals(1, doc.appendixSamples[0].eggCount)
+        assertEquals("Trichuris trichiura", doc.appendixSamples[0].findingsSummary)
+    }
+
+    @Test
     fun `build derives organization from email or respects explicit organization override`() {
         val builder = ReportPdfBuilder()
         val metadata = ReportMetadata(
