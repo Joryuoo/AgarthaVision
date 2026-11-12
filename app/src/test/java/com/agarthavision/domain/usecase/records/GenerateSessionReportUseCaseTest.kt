@@ -341,6 +341,68 @@ class GenerateSessionReportUseCaseTest {
     }
 
     @Test
+    fun `appendix agrees with session findings after editing model species or box`() = runTest {
+        val renderer = FakeReportPdfRenderer()
+        val editedSample = reportSample(id = "sample-edited", sessionId = "session-1", userId = "user-1")
+        val negativeSample = reportSample(id = "sample-neg", sessionId = "session-1", userId = "user-1")
+        val detectionsBySample = mapOf(
+            "sample-edited" to listOf(
+                reportDetection(
+                    sampleId = "sample-edited",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.92f,
+                    verdict = DetectionVerdict.WRONG_CLASS,
+                    expertClass = "Trichuris trichiura",
+                ),
+            ),
+            "sample-neg" to listOf(
+                reportDetection(
+                    sampleId = "sample-neg",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.65f,
+                    verdict = DetectionVerdict.FALSE_POSITIVE,
+                ),
+            ),
+        )
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "sample-edited", "Trichuris trichiura", null, 1),
+        )
+        val useCase = GenerateSessionReportUseCase(
+            authRepository = ReportAuthRepository(userId = "user-1"),
+            sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
+            sampleRepository = ReportSampleRepository(samples = listOf(editedSample, negativeSample)),
+            detectionRepository = ReportDetectionRepository(
+                detectionsBySample = detectionsBySample,
+                eggCounts = listOf(EggCount("Trichuris trichiura", 1)),
+            ),
+            findingDao = mockFindingDao(findings),
+            patientRepository = FakePatientRepository(patient = patient()),
+            psgcRepository = FakePsgcRepository(barangay = barangay()),
+            reportRepository = FakeReportRepository(),
+            reportFileStore = FakeReportFileStore(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = renderer,
+            syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
+        )
+
+        val result = useCase("session-1", config = ReportConfig(includeSampleImages = true))
+
+        assertTrue(result.isSuccess)
+        val report = result.getOrThrow()
+        assertEquals(1, report.totalEggsConfirmed)
+        assertEquals(listOf("Trichuris trichiura"), report.positiveSpecies)
+
+        val doc = renderer.lastDocument!!
+        assertEquals(listOf("Trichuris trichiura"), doc.speciesRows.map { it.speciesDisplayName })
+        assertEquals(2, doc.appendixSamples.size)
+        assertEquals(1, doc.appendixSamples[0].eggCount)
+        assertEquals("Trichuris trichiura", doc.appendixSamples[0].findingsSummary)
+        assertEquals(0, doc.appendixSamples[1].eggCount)
+        assertEquals("No parasites detected", doc.appendixSamples[1].findingsSummary)
+    }
+
+    @Test
     fun `final pdf identity and data match persisted report`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
@@ -737,6 +799,7 @@ private fun reportDetection(
     sampleId: String,
     classLabel: String,
     confidence: Float,
+    verdict: DetectionVerdict = DetectionVerdict.CONFIRMED,
     expertClass: String? = null,
 ): Detection =
     Detection(
@@ -748,7 +811,7 @@ private fun reportDetection(
         bboxY = 0.2f,
         bboxW = 0.3f,
         bboxH = 0.4f,
-        verdict = DetectionVerdict.CONFIRMED,
+        verdict = verdict,
         expertClass = expertClass,
     )
 

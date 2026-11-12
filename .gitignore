@@ -63,3 +63,7 @@ __pycache__/
 *.pyc
 *.npy
 .venv*/
+
+# skills & local agents
+.agents/
+SKILL.md
