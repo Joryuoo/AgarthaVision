@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -50,14 +51,19 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonVariant
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Description
 import com.agarthavision.ui.icons.Warning
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.DialogShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -85,6 +91,63 @@ object ReportSheetTestTags {
     const val EDIT_OPTIONS_BUTTON = "report_action_edit_options_button"
     const val CANCEL_BUTTON = "report_action_cancel_button"
     const val PREVIEW_VIEWPORT = "report_preview_viewport"
+    const val HEADER_CLOSE_BUTTON = "report_sheet_close_button"
+    const val DISCARD_DIALOG = "report_discard_confirm_dialog"
+    const val DISCARD_DIALOG_CONFIRM = "report_discard_confirm_button"
+    const val DISCARD_DIALOG_DISMISS = "report_discard_dismiss_button"
+}
+
+@Composable
+fun ReportDiscardConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (LocalAppLocked.current) return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = DialogShape,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
+        titleContentColor = AgarthaTheme.colors.textPrimary,
+        textContentColor = AgarthaTheme.colors.textPrimary,
+        title = { Text(stringResource(R.string.report_discard_title)) },
+        text = { Text(stringResource(R.string.report_discard_body)) },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AgarthaButton(
+                    onClick = onDismiss,
+                    variant = AgarthaButtonVariant.Secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS),
+                ) {
+                    Text(
+                        text = stringResource(R.string.report_discard_keep),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                AgarthaButton(
+                    onClick = onConfirm,
+                    variant = AgarthaButtonVariant.Destructive,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(ReportSheetTestTags.DISCARD_DIALOG_CONFIRM),
+                ) {
+                    Text(
+                        text = stringResource(R.string.report_discard_confirm),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        },
+        dismissButton = null,
+        modifier = Modifier.testTag(ReportSheetTestTags.DISCARD_DIALOG),
+    )
 }
 
 @Composable

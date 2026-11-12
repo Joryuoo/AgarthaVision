@@ -553,6 +553,10 @@
     <string name="report_action_generate_pdf">Generate PDF</string>
     <string name="report_action_edit_options">Edit options</string>
     <string name="report_action_cancel">Cancel</string>
+    <string name="report_discard_title">Discard changes?</string>
+    <string name="report_discard_body">Your report options will not be saved.</string>
+    <string name="report_discard_confirm">Discard</string>
+    <string name="report_discard_keep">Keep editing</string>
 
     <!-- Redesigned PDF strings -->
     <string name="report_pdf_brand_title">AGARTHA VISION</string>
