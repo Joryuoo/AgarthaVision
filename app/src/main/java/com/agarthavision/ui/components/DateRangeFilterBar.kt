@@ -181,6 +181,7 @@ internal fun SingleDatePickerDialog(
         initialSelectedDateMillis = initialDate?.toUtcMillis(),
         selectableDates = remember { PastOrTodayDates(LocalDate.now()) },
     )
+    if (LocalAppLocked.current) return
     DatePickerDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,

@@ -89,6 +89,7 @@ import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.usecase.patients.PatientListItem
 import com.agarthavision.domain.usecase.patients.PatientSort
 import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
@@ -591,7 +592,7 @@ private fun SortDropdownChip(
         }
 
         DropdownMenu(
-            expanded = expanded,
+            expanded = expanded && !LocalAppLocked.current,
             onDismissRequest = { expanded = false },
         ) {
             DropdownMenuItem(
@@ -656,7 +657,6 @@ private fun PatientRow(
     val colors = AgarthaTheme.colors
     val patient = item.patient
     var isRevealed by rememberSaveable { mutableStateOf(false) }
-    var menuExpanded by remember { mutableStateOf(false) }
 
     val sexLabel = when (patient.sex) {
         Sex.MALE -> stringResource(R.string.patients_sex_male)
@@ -785,61 +785,78 @@ private fun PatientRow(
         Spacer(modifier = Modifier.width(4.dp))
 
         // 3 dots menu button at far right, vertically centered in the row
-        Box {
-            IconButton(
-                onClick = { menuExpanded = true },
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = stringResource(R.string.patients_menu_desc),
-                    tint = colors.textSecondary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false },
-            ) {
-                if (!patient.isCodename) {
-                    val revealLabel = if (isRevealed) {
-                        R.string.patients_mask_name_desc
-                    } else {
-                        R.string.patients_reveal_name_desc
-                    }
-                    val revealIcon = if (isRevealed) {
-                        Icons.Outlined.VisibilityOff
-                    } else {
-                        Icons.Outlined.Visibility
-                    }
-                    DropdownMenuItem(
-                        text = { Text(stringResource(revealLabel)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = revealIcon,
-                                contentDescription = null,
-                            )
-                        },
-                        onClick = {
-                            isRevealed = !isRevealed
-                            menuExpanded = false
-                        },
-                    )
+        PatientRowMenu(
+            isCodename = patient.isCodename,
+            isRevealed = isRevealed,
+            onToggleReveal = { isRevealed = !isRevealed },
+            onEdit = onEdit,
+        )
+    }
+}
+
+@Composable
+private fun PatientRowMenu(
+    isCodename: Boolean,
+    isRevealed: Boolean,
+    onToggleReveal: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { menuExpanded = true },
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.MoreVert,
+                contentDescription = stringResource(R.string.patients_menu_desc),
+                tint = colors.textSecondary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = menuExpanded && !LocalAppLocked.current,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+            if (!isCodename) {
+                val revealLabel = if (isRevealed) {
+                    R.string.patients_mask_name_desc
+                } else {
+                    R.string.patients_reveal_name_desc
+                }
+                val revealIcon = if (isRevealed) {
+                    Icons.Outlined.VisibilityOff
+                } else {
+                    Icons.Outlined.Visibility
                 }
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.patients_edit_action)) },
+                    text = { Text(stringResource(revealLabel)) },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Outlined.Edit,
+                            imageVector = revealIcon,
                             contentDescription = null,
                         )
                     },
                     onClick = {
+                        onToggleReveal()
                         menuExpanded = false
-                        onEdit()
                     },
                 )
             }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.patients_edit_action)) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    menuExpanded = false
+                    onEdit()
+                },
+            )
         }
     }
 }

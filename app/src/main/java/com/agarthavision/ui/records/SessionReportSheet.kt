@@ -1,4 +1,4 @@
-@file:Suppress("LongParameterList")
+@file:Suppress("LongParameterList", "CyclomaticComplexMethod")
 
 package com.agarthavision.ui.records
 
@@ -29,7 +29,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Close
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -117,6 +118,7 @@ fun SessionReportSheet(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    if (LocalAppLocked.current) return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -162,14 +164,16 @@ internal fun SessionReportSheetContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    var previewCurrentPage by remember { mutableIntStateOf(1) }
-    var previewTotalPages by remember { mutableIntStateOf(state.estimatedPages) }
+    var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
+    var previewTotalPages by rememberSaveable { mutableIntStateOf(state.estimatedPages) }
+    val scrollState = rememberScrollState()
+    if (LocalAppLocked.current) return
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag(ReportSheetTestTags.SHEET)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 20.dp)
             .padding(bottom = 24.dp),
     ) {

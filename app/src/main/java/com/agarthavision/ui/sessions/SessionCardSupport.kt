@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.components.recordedByText
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -276,7 +277,7 @@ internal fun SessionCard(
                     .wrapContentSize(Alignment.TopEnd),
             ) {
                 DropdownMenu(
-                    expanded = menuExpanded,
+                    expanded = menuExpanded && !LocalAppLocked.current,
                     onDismissRequest = { menuExpanded = false },
                 ) {
                     DropdownMenuItem(

@@ -82,6 +82,7 @@ import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonVariant
 import com.agarthavision.ui.components.AgarthaToastHost
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -126,7 +127,7 @@ fun VerificationSheet(
         }
     }
 
-    BackHandler(onBack = viewModel::onCancel)
+    BackHandler(enabled = !LocalAppLocked.current, onBack = viewModel::onCancel)
 
     Box(
         modifier = Modifier
@@ -548,6 +549,7 @@ private fun DiscardFrameDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
@@ -579,6 +581,7 @@ private fun LeaveUnsavedChangesDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
@@ -1024,6 +1027,7 @@ internal fun CheckQuestion(
  */
 @Composable
 private fun CancelInferenceDialog(actions: VerificationSheetActions) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = actions.onCancelInferenceDismissed,
         shape = DialogShape,

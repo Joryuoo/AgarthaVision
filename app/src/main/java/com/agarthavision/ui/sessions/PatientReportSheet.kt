@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +52,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SingleDatePickerDialog
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Check
@@ -185,6 +187,7 @@ internal fun PatientReportSheet(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    if (LocalAppLocked.current) return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -235,14 +238,16 @@ internal fun PatientReportSheetContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    var previewCurrentPage by remember { mutableIntStateOf(1) }
-    var previewTotalPages by remember { mutableIntStateOf(sheet.estimatedPages) }
+    var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
+    var previewTotalPages by rememberSaveable { mutableIntStateOf(sheet.estimatedPages) }
+    val scrollState = rememberScrollState()
+    if (LocalAppLocked.current) return
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag(PatientReportSheetTestTags.SHEET)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 20.dp)
             .padding(bottom = 24.dp),
     ) {
