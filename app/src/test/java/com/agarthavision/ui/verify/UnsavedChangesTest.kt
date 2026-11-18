@@ -142,8 +142,8 @@ class UnsavedChangesTest {
     fun `an edit changed back is nothing to lose`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = openOnMiddle()
-            vm.onQ2Selected(false)
-            vm.onQ2Selected(true)
+            vm.onUserNoteChanged("scratch")
+            vm.onUserNoteChanged("")
 
             vm.onFrameNext()
             advanceUntilIdle()
