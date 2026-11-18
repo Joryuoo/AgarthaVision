@@ -141,6 +141,8 @@ fun VerificationSheet(
                 onQ1Selected = viewModel::onQ1Selected,
                 onQ2Selected = viewModel::onQ2Selected,
                 onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
+                onConfirmDetection = viewModel::onConfirmDetection,
+                onRejectDetection = viewModel::onRejectDetection,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onStageSelected = viewModel::onStageSelected,
                 onOtherStageChanged = viewModel::onOtherStageChanged,

@@ -221,6 +221,10 @@ data class VerificationUiState(
             }
         }
 
+    /** How many model detections on this frame are still incomplete / unanswered. */
+    val unansweredCount: Int
+        get() = findings.count { it.prediction != null && !it.isComplete }
+
     /** True while a box is being drawn, which is what dims every existing box on the frame. */
     val isDrawing: Boolean
         get() = drawTarget != null
@@ -464,6 +468,39 @@ class VerificationViewModel @Inject constructor(
                 else -> prev.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
             }
             finding.copy(answers = updated)
+        }
+    }
+
+    /**
+     * Fully confirms detection at [index] in a single tap (14zcqntx3un).
+     *
+     * Seeds isEgg = true, isBoxCorrect = true, and confirms the suggested species (if known).
+     */
+    fun onConfirmDetection(index: Int = _state.value.currentDetectionIndex) {
+        updateFindingAt(index) { finding ->
+            val suggested = finding.prediction?.classLabel?.let(EggSpecies::fromClassLabel)
+            finding.copy(
+                answers = finding.answers.copy(
+                    isEgg = true,
+                    isBoxCorrect = true,
+                    speciesConfirmed = if (suggested != null) true else null,
+                    species = suggested,
+                    otherSpeciesText = "",
+                ),
+            )
+        }
+    }
+
+    /**
+     * Rejects detection at [index] as not an egg in a single tap (14zcqntx3un).
+     *
+     * Seeds isEgg = false and clears species.
+     */
+    fun onRejectDetection(index: Int = _state.value.currentDetectionIndex) {
+        updateFindingAt(index) { finding ->
+            finding.copy(
+                answers = finding.answers.clearSpecies().copy(isEgg = false, isBoxCorrect = null),
+            )
         }
     }
 
@@ -1219,7 +1256,10 @@ class VerificationViewModel @Inject constructor(
     }
 
     private fun updateCurrentFinding(transform: (Finding) -> Finding) {
-        val index = _state.value.currentDetectionIndex
+        updateFindingAt(_state.value.currentDetectionIndex, transform)
+    }
+
+    private fun updateFindingAt(index: Int, transform: (Finding) -> Finding) {
         _state.update { current ->
             val updated = current.findings.toMutableList()
             if (index in updated.indices) updated[index] = transform(updated[index])
