@@ -443,12 +443,27 @@ class VerificationViewModel @Inject constructor(
      * the questions come back unticked for real, each with its correction under it.
      */
     fun onQ1Selected(isEgg: Boolean) {
-        updateCurrentAnswer {
-            when {
-                it.isEgg == isEgg -> it
-                isEgg -> it.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
-                else -> it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
+        updateCurrentFinding { finding ->
+            val prev = finding.answers
+            val suggested = finding.prediction?.classLabel?.let(EggSpecies::fromClassLabel)
+            val updated = when {
+                prev.isEgg == isEgg -> prev
+                isEgg -> {
+                    if (prev.isEgg == null) {
+                        prev.copy(
+                            isEgg = true,
+                            isBoxCorrect = true,
+                            speciesConfirmed = if (suggested != null) true else null,
+                            species = suggested,
+                            otherSpeciesText = "",
+                        )
+                    } else {
+                        prev.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
+                    }
+                }
+                else -> prev.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
             }
+            finding.copy(answers = updated)
         }
     }
 
@@ -601,31 +616,18 @@ class VerificationViewModel @Inject constructor(
     /**
      * What the screen opens with, for each of the shapes a frame can take.
      *
-     * **Every answer is pre-filled from model output.** A box the model drew opens as "yes there
-     * is an egg", "yes the box is placed right", and "yes it is the species the model named" —
-     * so a medtech whose model was right submits without tapping anything, and answering is only
-     * required where the model was wrong. That is the whole economics of the screen: ten fields
-     * a smear, most of them the model gets right.
-     *
-     * A model class this app cannot map to an [EggSpecies] seeds **nothing** for the species
-     * question — guessing OTHER would be wrong, because OTHER carries a free-text box only a
-     * human can fill, so the row would look answered while being incomplete. The chain offers
-     * the picker directly instead, and the row stays incomplete until a species is chosen.
+     * Model detections open **unanswered** (14zcqntx3un). Each detected box requires explicit
+     * action from the medtech (such as 1-tap confirmation or rejection) to avoid rubber-stamping AI
+     * predictions. Until answered, `Finding.isComplete` remains false and submission is unavailable.
      *
      * A frame with no boxes — a clean field, or one captured with the container unreachable —
      * opens with nothing. There is no box to ask a question about; what it gets is the Add Egg
      * section, which is always present.
      */
     private fun FlaggedFrame.initialFindings(): List<Finding> = predictions.map { prediction ->
-        val suggested = EggSpecies.fromClassLabel(prediction.classLabel)
         Finding(
             prediction = prediction,
-            answers = VerificationAnswers(
-                isEgg = true,
-                isBoxCorrect = true,
-                speciesConfirmed = if (suggested != null) true else null,
-                species = suggested,
-            ),
+            answers = VerificationAnswers(),
         )
     }
 
