@@ -202,8 +202,11 @@
     <string name="verify_action_save_changes">Save changes</string>
     <string name="verify_action_submit">Submit</string>
     <string name="verify_action_submit_clean_field">Submit (No eggs in field)</string>
-    <string name="verify_confirm_detection">Confirm egg</string>
+    <string name="verify_confirm_detection">Confirm detection</string>
     <string name="verify_confirm_as_species">Confirm: %1$s</string>
+    <string name="verify_suggested_species_label">AI suggestion:</string>
+    <string name="verify_detection_species_subtitle">Model: %1$s</string>
+    <string name="verify_action_change_species">Different species</string>
     <string name="verify_not_an_egg">Not an egg</string>
     <string name="verify_unanswered_badge">UNANSWERED</string>
     <string name="verify_marked_not_egg_note">Marked as not an egg (False positive)</string>

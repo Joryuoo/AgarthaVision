@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -476,13 +477,23 @@ private fun VerificationCurrentDetection(
             .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
             .padding(16.dp),
     ) {
+        val currentSpeciesName = when {
+            currentAnswers?.isEgg == false -> stringResource(R.string.verify_marked_not_egg_note)
+            currentAnswers?.species != null -> currentAnswers.species.displayName
+            currentPrediction != null ->
+                EggSpecies.fromClassLabel(currentPrediction.classLabel)?.displayName
+                    ?: currentPrediction.classLabel
+            else -> null
+        }
         CycleRow(
             indicator = stringResource(
                 R.string.verify_detection_counter,
                 state.currentDetectionIndex + 1,
                 boxCount,
             ),
-            subtitle = stringResource(R.string.verify_detection_subtitle),
+            subtitle = currentSpeciesName?.let {
+                stringResource(R.string.verify_detection_species_subtitle, it)
+            } ?: stringResource(R.string.verify_detection_subtitle),
             prevDescription = stringResource(R.string.verify_prev_egg),
             nextDescription = stringResource(R.string.verify_next_egg),
             prevTag = VerifyTestTags.DETECTION_PREV,
@@ -740,6 +751,141 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
  *   answer is latched until the replacement is removed.
  */
 @Composable
+private fun UnansweredDetectionCard(
+    suggestedSpecies: EggSpecies?,
+    detectionIndex: Int,
+    actions: VerificationSheetActions,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .testTag(VerifyTestTags.QUESTION_Q1)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AgarthaTheme.colors.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, AgarthaTheme.colors.borderStrong, RoundedCornerShape(12.dp))
+            .clickable {
+                actions.onConfirmDetection(detectionIndex)
+                actions.onQ1Selected(true)
+            }
+            .padding(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.verify_unanswered_badge),
+                color = AgarthaTheme.colors.accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .background(AgarthaTheme.colors.accentTint2, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.verify_q1),
+                color = AgarthaTheme.colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (suggestedSpecies != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 10.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_suggested_species_label),
+                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = suggestedSpecies.displayName,
+                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = FontStyle.Italic,
+                )
+            }
+        } else {
+            Spacer(Modifier.height(4.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = {
+                    actions.onConfirmDetection(detectionIndex)
+                    actions.onQ1Selected(true)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(VerifyTestTags.CONFIRM_DETECTION),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AgarthaTheme.colors.accent,
+                    contentColor = AgarthaTheme.colors.onAccent,
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_confirm_detection),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
+            OutlinedButton(
+                onClick = {
+                    actions.onRejectDetection(detectionIndex)
+                    actions.onQ1Selected(false)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(VerifyTestTags.REJECT_DETECTION),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, AgarthaTheme.colors.borderStrong),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = AgarthaTheme.colors.textPrimary,
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_not_an_egg),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
+        }
+        if (suggestedSpecies != null) {
+            TextButton(
+                onClick = {
+                    actions.onConfirmDetection(detectionIndex)
+                    actions.onSpeciesConfirmed(false)
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .testTag(VerifyTestTags.CHANGE_SPECIES)
+                    .padding(top = 2.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_action_change_species),
+                    color = AgarthaTheme.colors.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun BoxQuestionChain(
     answers: VerificationAnswers?,
     suggestedSpecies: EggSpecies?,
@@ -748,96 +894,11 @@ private fun BoxQuestionChain(
     suggestions: List<String> = emptyList(),
 ) {
     if (answers?.isEgg == null) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-                .testTag(VerifyTestTags.QUESTION_Q1)
-                .clip(RoundedCornerShape(12.dp))
-                .background(AgarthaTheme.colors.surfaceVariant.copy(alpha = 0.5f))
-                .border(1.dp, AgarthaTheme.colors.borderStrong, RoundedCornerShape(12.dp))
-                .clickable {
-                    actions.onConfirmDetection(detectionIndex)
-                    actions.onQ1Selected(true)
-                }
-                .padding(12.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.verify_unanswered_badge),
-                    color = AgarthaTheme.colors.accent,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .background(AgarthaTheme.colors.accentTint2, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.verify_q1),
-                    color = AgarthaTheme.colors.textPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = {
-                        actions.onConfirmDetection(detectionIndex)
-                        actions.onQ1Selected(true)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.CONFIRM_DETECTION),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AgarthaTheme.colors.accent,
-                        contentColor = AgarthaTheme.colors.onAccent,
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = if (suggestedSpecies != null) {
-                            stringResource(R.string.verify_confirm_as_species, suggestedSpecies.displayName)
-                        } else {
-                            stringResource(R.string.verify_confirm_detection)
-                        },
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                OutlinedButton(
-                    onClick = {
-                        actions.onRejectDetection(detectionIndex)
-                        actions.onQ1Selected(false)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.REJECT_DETECTION),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, AgarthaTheme.colors.borderStrong),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = AgarthaTheme.colors.textPrimary,
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.verify_not_an_egg),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
+        UnansweredDetectionCard(
+            suggestedSpecies = suggestedSpecies,
+            detectionIndex = detectionIndex,
+            actions = actions,
+        )
         return
     }
 

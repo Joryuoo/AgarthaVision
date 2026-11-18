@@ -77,6 +77,9 @@ internal object VerifyTestTags {
     /** 1-tap rejection button ("Not an egg") for an unanswered detection (14zcqntx3un). */
     const val REJECT_DETECTION = "reject_detection"
 
+    /** Quick action to choose a different species from the unanswered card. */
+    const val CHANGE_SPECIES = "change_species"
+
     /** Remaining unanswered detections note in footer (14zcqntx3un). */
     const val UNANSWERED_DETECTIONS_NOTE = "unanswered_detections_note"
 
