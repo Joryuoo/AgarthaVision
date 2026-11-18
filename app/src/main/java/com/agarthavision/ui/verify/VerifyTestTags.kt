@@ -71,6 +71,15 @@ internal object VerifyTestTags {
     const val QUESTION_Q1 = "q1"
     const val QUESTION_Q2 = "q2"
 
+    /** 1-tap confirmation button for an unanswered detection (14zcqntx3un). */
+    const val CONFIRM_DETECTION = "confirm_detection"
+
+    /** 1-tap rejection button ("Not an egg") for an unanswered detection (14zcqntx3un). */
+    const val REJECT_DETECTION = "reject_detection"
+
+    /** Remaining unanswered detections note in footer (14zcqntx3un). */
+    const val UNANSWERED_DETECTIONS_NOTE = "unanswered_detections_note"
+
     /** "This egg is <suggested species>" — shown only when the model's class is a known species. */
     const val QUESTION_Q3 = "q3"
 

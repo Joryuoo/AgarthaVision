@@ -4,6 +4,7 @@ package com.agarthavision.ui.verify
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.VisibleForTesting
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,6 +14,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,9 +34,12 @@ import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
@@ -54,6 +60,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -530,11 +537,30 @@ private fun VerificationSheetFooter(
             )
         }
 
+        if (!state.canSubmit && state.unansweredCount > 0) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.verify_unanswered_remaining,
+                    state.unansweredCount,
+                    state.unansweredCount,
+                ),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.UNANSWERED_DETECTIONS_NOTE)
+                    .padding(bottom = 8.dp),
+            )
+        }
+
+        val primaryLabel = when {
+            isEditing -> stringResource(R.string.verify_action_save_changes)
+            state.isCleanField -> stringResource(R.string.verify_action_submit_clean_field)
+            else -> stringResource(R.string.verify_action_submit)
+        }
+
         SheetActionRow(
             SheetActionRowState(
-                primaryLabel = stringResource(
-                    if (isEditing) R.string.verify_action_save_changes else R.string.verify_action_submit,
-                ),
+                primaryLabel = primaryLabel,
                 secondaryLabel = stringResource(R.string.verify_action_discard),
                 onPrimaryClick = onSubmit,
                 onSecondaryClick = onDiscard,
@@ -721,13 +747,115 @@ private fun BoxQuestionChain(
     actions: VerificationSheetActions,
     suggestions: List<String> = emptyList(),
 ) {
+    if (answers?.isEgg == null) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .testTag(VerifyTestTags.QUESTION_Q1)
+                .clip(RoundedCornerShape(12.dp))
+                .background(AgarthaTheme.colors.surfaceVariant.copy(alpha = 0.5f))
+                .border(1.dp, AgarthaTheme.colors.borderStrong, RoundedCornerShape(12.dp))
+                .clickable {
+                    actions.onConfirmDetection(detectionIndex)
+                    actions.onQ1Selected(true)
+                }
+                .padding(12.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_unanswered_badge),
+                    color = AgarthaTheme.colors.accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .background(AgarthaTheme.colors.accentTint2, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.verify_q1),
+                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = {
+                        actions.onConfirmDetection(detectionIndex)
+                        actions.onQ1Selected(true)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.CONFIRM_DETECTION),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AgarthaTheme.colors.accent,
+                        contentColor = AgarthaTheme.colors.onAccent,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = if (suggestedSpecies != null) {
+                            stringResource(R.string.verify_confirm_as_species, suggestedSpecies.displayName)
+                        } else {
+                            stringResource(R.string.verify_confirm_detection)
+                        },
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                OutlinedButton(
+                    onClick = {
+                        actions.onRejectDetection(detectionIndex)
+                        actions.onQ1Selected(false)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.REJECT_DETECTION),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, AgarthaTheme.colors.borderStrong),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = AgarthaTheme.colors.textPrimary,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.verify_not_an_egg),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        return
+    }
+
     CheckQuestion(
         title = stringResource(R.string.verify_q1),
         tag = VerifyTestTags.QUESTION_Q1,
-        checked = answers?.isEgg == true,
-        onToggle = { actions.onQ1Selected(answers?.isEgg != true) },
+        checked = answers.isEgg == true,
+        onToggle = { actions.onQ1Selected(answers.isEgg != true) },
     )
-    if (answers?.isEgg != true) return
+    if (answers.isEgg == false) {
+        Text(
+            text = stringResource(R.string.verify_marked_not_egg_note),
+            color = AgarthaTheme.colors.textTertiary,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        return
+    }
 
     CheckQuestion(
         title = stringResource(R.string.verify_q2),
