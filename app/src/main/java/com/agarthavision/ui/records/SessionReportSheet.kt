@@ -69,10 +69,16 @@ data class SessionReportSheetState(
     val isPatientCodename: Boolean = false,
     val initialConfig: ReportConfig = ReportConfig(),
     val showDiscardConfirm: Boolean = false,
+    val unverifiedSampleCount: Int = 0,
+    val isUnverifiedWarningAcknowledged: Boolean = false,
 ) {
     val hasUnsavedChanges: Boolean get() = config != initialConfig
     val requiresWarningAck: Boolean get() = verifiedSampleCount < RECOMMENDED_MIN_SAMPLES
-    val canGeneratePdf: Boolean get() = !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
+    val requiresUnverifiedWarningAck: Boolean get() = unverifiedSampleCount > 0
+    val canGeneratePdf: Boolean
+        get() = !isGenerating &&
+            (!requiresWarningAck || isWarningAcknowledged) &&
+            (!requiresUnverifiedWarningAck || isUnverifiedWarningAcknowledged)
     val estimatedPages: Int get() = if (config.includeSampleImages && verifiedSampleCount > 0) {
         1 + ((verifiedSampleCount + 3) / 4)
     } else {
@@ -95,6 +101,8 @@ data class SessionReportSheetState(
         if (isPatientCodename != other.isPatientCodename) return false
         if (initialConfig != other.initialConfig) return false
         if (showDiscardConfirm != other.showDiscardConfirm) return false
+        if (unverifiedSampleCount != other.unverifiedSampleCount) return false
+        if (isUnverifiedWarningAcknowledged != other.isUnverifiedWarningAcknowledged) return false
         return true
     }
 
@@ -112,6 +120,8 @@ data class SessionReportSheetState(
         result = 31 * result + isPatientCodename.hashCode()
         result = 31 * result + initialConfig.hashCode()
         result = 31 * result + showDiscardConfirm.hashCode()
+        result = 31 * result + unverifiedSampleCount
+        result = 31 * result + isUnverifiedWarningAcknowledged.hashCode()
         return result
     }
 }
@@ -131,6 +141,7 @@ fun SessionReportSheet(
     modifier: Modifier = Modifier,
     onRequestDismiss: () -> Unit = {},
     onDismissDiscard: () -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var localShowDiscardConfirm by remember { mutableStateOf(false) }
@@ -185,6 +196,7 @@ fun SessionReportSheet(
             onDismiss = onDismiss,
             onConfigChange = onConfigChange,
             onAcknowledgeWarning = onAcknowledgeWarning,
+            onAcknowledgeUnverifiedWarning = onAcknowledgeUnverifiedWarning,
             onPreview = onPreview,
             onBackToConfig = onBackToConfig,
             onGeneratePdf = onGeneratePdf,
@@ -212,6 +224,7 @@ internal fun SessionReportSheetContent(
     onDismissDiscard: () -> Unit = {},
     externalShowDiscardConfirm: Boolean = false,
     onExternalShowDiscardConfirmChange: (Boolean) -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
@@ -278,6 +291,11 @@ internal fun SessionReportSheetContent(
                 if (state.requiresWarningAck) {
                     Spacer(Modifier.height(12.dp))
                     SampleCountWarningBanner(sampleCount = state.verifiedSampleCount)
+                }
+
+                if (state.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(sampleCount = state.unverifiedSampleCount)
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -401,6 +419,15 @@ internal fun SessionReportSheetContent(
                         sampleCount = state.verifiedSampleCount,
                         acknowledged = state.isWarningAcknowledged,
                         onAcknowledgedChange = onAcknowledgeWarning,
+                    )
+                }
+
+                if (state.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(
+                        sampleCount = state.unverifiedSampleCount,
+                        acknowledged = state.isUnverifiedWarningAcknowledged,
+                        onAcknowledgedChange = onAcknowledgeUnverifiedWarning,
                     )
                 }
 

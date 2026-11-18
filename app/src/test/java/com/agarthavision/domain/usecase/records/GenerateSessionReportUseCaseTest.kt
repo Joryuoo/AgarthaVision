@@ -288,6 +288,39 @@ class GenerateSessionReportUseCaseTest {
     }
 
     @Test
+    fun `requires the current excluded field count before writing the session report`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val fileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val flagged = listOf(
+            reportSample(id = "pending-1", sessionId = "session-1", userId = "user-1"),
+            reportSample(id = "pending-2", sessionId = "session-1", userId = "user-1"),
+        ).map { it.copy(status = SampleStatus.FLAGGED) }
+        val useCase = standardUseCase(
+            reportRepository = reportRepository,
+            reportFileStore = fileStore,
+            renderer = renderer,
+            flagged = flagged,
+        )
+
+        val missing = useCase("session-1").exceptionOrNull() as UnverifiedReportFieldsException
+        val stale = useCase("session-1", acknowledgedUnverifiedCount = 1)
+            .exceptionOrNull() as UnverifiedReportFieldsException
+
+        assertEquals(2, missing.count)
+        assertEquals(2, stale.count)
+        assertNull(reportRepository.lastInserted)
+        assertNull(fileStore.lastPdfReportId)
+        assertEquals(0, renderer.renderCallCount)
+
+        val report = useCase("session-1", acknowledgedUnverifiedCount = 2).getOrThrow()
+
+        assertEquals(2, report.totalSamples)
+        assertEquals(3, report.totalEggsConfirmed)
+        assertEquals(report.id, fileStore.lastPdfReportId)
+    }
+
+    @Test
     fun `config patientNameOption formats patient name on report and pdf`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
@@ -441,6 +474,7 @@ class GenerateSessionReportUseCaseTest {
         patient: Patient = patient(),
         barangay: PsgcBarangay? = barangay(),
         identity: LocalIdentity? = LocalIdentity(userId = "user-1", email = "medtech@example.com"),
+        flagged: List<Sample> = emptyList(),
     ): GenerateSessionReportUseCase {
         val findings = listOf(
             SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2),
@@ -454,6 +488,7 @@ class GenerateSessionReportUseCaseTest {
                     reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1"),
                     reportSample(id = "sample-2", sessionId = "session-1", userId = "user-1"),
                 ),
+                flagged = flagged,
             ),
             detectionRepository = ReportDetectionRepository(
                 detectionsBySample = mapOf(
@@ -573,6 +608,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
 private class ReportSampleRepository(
     private val samples: List<Sample>,
+    private val flagged: List<Sample> = emptyList(),
 ) : SampleRepository {
     override suspend fun saveSample(sample: Sample) = Unit
     override fun observeLatestSample(userId: String): Flow<Sample?> = flowOf(null)
@@ -587,7 +623,7 @@ private class ReportSampleRepository(
     override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
 
     override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
-        flowOf(emptyList())
+        flowOf(flagged.filter { it.sessionId == sessionId && isVisible(it.userId, userId) })
 }
 
 private class ReportDetectionRepository(

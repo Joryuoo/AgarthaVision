@@ -24,6 +24,7 @@ import com.agarthavision.domain.usecase.records.PreviewPatientReportUseCase
 import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
 import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
+import com.agarthavision.domain.usecase.records.UnverifiedReportFieldsException
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.repository.PsgcRepository
@@ -48,6 +49,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import kotlinx.coroutines.CompletableDeferred
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.argumentCaptor
@@ -1682,14 +1684,14 @@ class SessionsViewModelTest {
                 cancelAndIgnoreRemainingEvents()
             }
             // The use case is never reached — there is nothing left to hand it.
-            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any(), any())
+            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any(), any(), anyOrNull())
         }
 
     @Test
     fun `dismissing the report sheet clears it`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(emptyList())
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(emptyList())
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -1714,7 +1716,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s2", "u1").session, verifiedSampleCount = 2),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -1748,7 +1750,7 @@ class SessionsViewModelTest {
             )
             val candidates = listOf(inRangeEligible, zeroVerified, outOfRange)
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -1785,12 +1787,12 @@ class SessionsViewModelTest {
     fun `generating successfully closes the sheet and emits a PatientReportGenerated event`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(
                     listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
+                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.success(
                     fakePatientReport(),
                 )
             }
@@ -1818,12 +1820,12 @@ class SessionsViewModelTest {
     fun `a failed generation keeps the sheet open with an error, not generating`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(
                     listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any()) } doReturn Result.failure(
+                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.failure(
                     IllegalStateException("boom"),
                 )
             }
@@ -1846,15 +1848,117 @@ class SessionsViewModelTest {
         }
 
     @Test
+    fun `changed patient report count clears the preview acknowledgment and requires a new one`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(
+                    makeSession("s1", "u1").session,
+                    verifiedSampleCount = 10,
+                    unverifiedSampleCount = 1,
+                ),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
+            }
+            val previewUseCase = mock<PreviewPatientReportUseCase> {
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(byteArrayOf(1, 2, 3))
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase>()
+            whenever(generateUseCase.invoke(any(), any(), any(), eq(1)))
+                .thenReturn(Result.failure(UnverifiedReportFieldsException(2)))
+            whenever(generateUseCase.invoke(any(), any(), any(), eq(2)))
+                .thenReturn(Result.success(fakePatientReport()))
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                previewUseCase = previewUseCase,
+                generateUseCase = generateUseCase,
+            )
+
+            vm.events.test {
+                vm.state.test {
+                    advanceUntilIdle()
+                    vm.onOpenGenerateReport()
+                    advanceUntilIdle()
+                    vm.onPreviewPatientReport()
+                    advanceUntilIdle()
+                    assertEquals(1, expectMostRecentItem().reportSheet?.unverifiedSampleCount)
+
+                    vm.onAcknowledgeUnverifiedReportWarning(true)
+                    vm.onGeneratePatientReport()
+                    advanceUntilIdle()
+
+                    val sheet = requireNotNull(expectMostRecentItem().reportSheet)
+                    assertEquals(ReportSheetStep.PREVIEW, sheet.step)
+                    assertEquals(2, sheet.unverifiedSampleCount)
+                    assertFalse(sheet.isUnverifiedWarningAcknowledged)
+                    assertFalse(sheet.isGenerating)
+
+                    vm.onGeneratePatientReport()
+                    advanceUntilIdle()
+                    verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any(), any(), eq(2))
+
+                    vm.onAcknowledgeUnverifiedReportWarning(true)
+                    vm.onGeneratePatientReport()
+                    advanceUntilIdle()
+                    assertNull(expectMostRecentItem().reportSheet)
+                }
+                assertEquals(SessionsEvent.PatientReportGenerated(fakePatientReport().pdfFilePath), awaitItem())
+            }
+            verify(generateUseCase).invoke(any(), any(), any(), eq(1))
+            verify(generateUseCase).invoke(any(), any(), any(), eq(2))
+        }
+
+    @Test
+    fun `changing selected smears clears acknowledgment and updates the unverified count`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, 10, 1),
+                PatientReportCandidate(makeSession("s2", "u1").session, 10, 2),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
+            }
+            val previewUseCase = mock<PreviewPatientReportUseCase> {
+                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(byteArrayOf(1, 2, 3))
+            }
+            val vm = viewModelForReportSheet(
+                candidatesUseCase = candidatesUseCase,
+                previewUseCase = previewUseCase,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+                vm.onPreviewPatientReport()
+                advanceUntilIdle()
+                assertEquals(3, expectMostRecentItem().reportSheet?.unverifiedSampleCount)
+
+                vm.onAcknowledgeUnverifiedReportWarning(true)
+                advanceUntilIdle()
+                assertTrue(requireNotNull(expectMostRecentItem().reportSheet).isUnverifiedWarningAcknowledged)
+
+                vm.onToggleReportSession("s1")
+                advanceUntilIdle()
+
+                val sheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertEquals(setOf("s2"), sheet.effectiveSelectedIds)
+                assertEquals(2, sheet.unverifiedSampleCount)
+                assertFalse(sheet.isUnverifiedWarningAcknowledged)
+                assertNull(sheet.previewPdfBytes)
+            }
+        }
+
+    @Test
     fun `a second generate call while one is in flight is ignored (double-tap guard)`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(
                     listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
                 )
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
+                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.success(
                     fakePatientReport(),
                 )
             }
@@ -1869,7 +1973,7 @@ class SessionsViewModelTest {
             vm.onGeneratePatientReport()
             advanceUntilIdle()
 
-            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any(), any())
+            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any(), any(), anyOrNull())
         }
 
     @Test
@@ -1879,7 +1983,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -1910,7 +2014,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val fakePdfBytes = byteArrayOf(0x25, 0x50, 0x44, 0x46)
             val previewUseCase = mock<PreviewPatientReportUseCase> {
@@ -1946,7 +2050,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val previewUseCase = mock<PreviewPatientReportUseCase> {
                 onBlocking { invoke(any(), any(), any()) } doReturn Result.failure(
@@ -1982,7 +2086,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val previewUseCase = mock<PreviewPatientReportUseCase> {
                 onBlocking { invoke(any(), any(), any()) } doReturn Result.success(byteArrayOf(1, 2, 3))
@@ -2015,7 +2119,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -2043,7 +2147,7 @@ class SessionsViewModelTest {
             for (change in listOf("config", "scope", "reopen")) {
                 val pending = CompletableDeferred<Result<ByteArray>>()
                 val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                    onBlocking { invoke(any()) } doReturn Result.success(listOf(
+                    onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(listOf(
                         PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
                     ))
                 }
@@ -2086,14 +2190,14 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val fakePdfBytes = byteArrayOf(9, 8, 7)
             val previewUseCase = mock<PreviewPatientReportUseCase> {
                 onBlocking { invoke(any(), any(), any()) } doReturn Result.success(fakePdfBytes)
             }
             val generateUseCase = mock<GeneratePatientReportUseCase> {
-                onBlocking { invoke(any(), any(), any()) } doReturn Result.success(
+                onBlocking { invoke(any(), any(), any(), anyOrNull()) } doReturn Result.success(
                     fakePatientReport(),
                 )
             }
@@ -2131,6 +2235,7 @@ class SessionsViewModelTest {
                         ),
                     ),
                     config = eq(customConfig),
+                    acknowledgedUnverifiedCount = anyOrNull(),
                 )
                 assertNull(expectMostRecentItem().reportSheet)
                 cancelAndIgnoreRemainingEvents()
@@ -2144,7 +2249,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -2173,7 +2278,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s2", "u1").session, verifiedSampleCount = 2),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -2220,7 +2325,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -2259,7 +2364,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
 
@@ -2307,7 +2412,7 @@ class SessionsViewModelTest {
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
-                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+                onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
             }
             val previewUseCase = mock<PreviewPatientReportUseCase> {
                 onBlocking {

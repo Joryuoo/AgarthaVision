@@ -72,6 +72,7 @@ import com.agarthavision.ui.records.ReportSheetStep
 import com.agarthavision.ui.records.ReportSheetTestTags
 import com.agarthavision.ui.records.SampleCountAcknowledgmentCard
 import com.agarthavision.ui.records.SampleCountWarningBanner
+import com.agarthavision.ui.records.UnverifiedSampleWarning
 import com.agarthavision.ui.theme.AgarthaTheme
 import java.time.LocalDate
 import java.time.ZoneId
@@ -106,6 +107,8 @@ data class PatientReportSheetState(
     val initialSelectedIds: Set<String>? = null,
     val initialConfig: ReportConfig = ReportConfig(),
     val showDiscardConfirm: Boolean = false,
+    val unverifiedSampleCount: Int = 0,
+    val isUnverifiedWarningAcknowledged: Boolean = false,
 ) {
     val effectiveSelectedIds: Set<String>
         get() = if (selectedIds.isNotEmpty()) selectedIds else selectedSessionIds
@@ -130,8 +133,13 @@ data class PatientReportSheetState(
     val requiresWarningAck: Boolean
         get() = includedSampleCount in 1 until RECOMMENDED_MIN_SAMPLES
 
+    val requiresUnverifiedWarningAck: Boolean
+        get() = unverifiedSampleCount > 0
+
     val canGeneratePdf: Boolean
-        get() = includedSessionCount > 0 && !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
+        get() = includedSessionCount > 0 && !isGenerating &&
+            (!requiresWarningAck || isWarningAcknowledged) &&
+            (!requiresUnverifiedWarningAck || isUnverifiedWarningAcknowledged)
 
     val estimatedPages: Int
         get() = if (config.includeSampleImages && includedSampleCount > 0) {
@@ -164,6 +172,8 @@ data class PatientReportSheetState(
         if (initialSelectedIds != other.initialSelectedIds) return false
         if (initialConfig != other.initialConfig) return false
         if (showDiscardConfirm != other.showDiscardConfirm) return false
+        if (unverifiedSampleCount != other.unverifiedSampleCount) return false
+        if (isUnverifiedWarningAcknowledged != other.isUnverifiedWarningAcknowledged) return false
         return true
     }
 
@@ -189,6 +199,8 @@ data class PatientReportSheetState(
         result = 31 * result + (initialSelectedIds?.hashCode() ?: 0)
         result = 31 * result + initialConfig.hashCode()
         result = 31 * result + showDiscardConfirm.hashCode()
+        result = 31 * result + unverifiedSampleCount
+        result = 31 * result + isUnverifiedWarningAcknowledged.hashCode()
         return result
     }
 }
@@ -218,6 +230,7 @@ internal fun PatientReportSheet(
     modifier: Modifier = Modifier,
     onRequestDismiss: () -> Unit = {},
     onDismissDiscard: () -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var localShowDiscardConfirm by remember { mutableStateOf(false) }
@@ -276,6 +289,7 @@ internal fun PatientReportSheet(
             onGenerate = onGenerate,
             onConfigChange = onConfigChange,
             onAcknowledgeWarning = onAcknowledgeWarning,
+            onAcknowledgeUnverifiedWarning = onAcknowledgeUnverifiedWarning,
             onPreview = onPreview,
             onBackToConfig = onBackToConfig,
             onRequestDismiss = onRequestDismiss,
@@ -304,6 +318,7 @@ internal fun PatientReportSheetContent(
     onDismissDiscard: () -> Unit = {},
     externalShowDiscardConfirm: Boolean = false,
     onExternalShowDiscardConfirmChange: (Boolean) -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
@@ -426,6 +441,11 @@ internal fun PatientReportSheetContent(
                     SampleCountWarningBanner(sampleCount = sheet.includedSampleCount)
                 }
 
+                if (sheet.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(sampleCount = sheet.unverifiedSampleCount)
+                }
+
                 sheet.error?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
@@ -496,6 +516,15 @@ internal fun PatientReportSheetContent(
                         sampleCount = sheet.includedSampleCount,
                         acknowledged = sheet.isWarningAcknowledged,
                         onAcknowledgedChange = onAcknowledgeWarning,
+                    )
+                }
+
+                if (sheet.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(
+                        sampleCount = sheet.unverifiedSampleCount,
+                        acknowledged = sheet.isUnverifiedWarningAcknowledged,
+                        onAcknowledgedChange = onAcknowledgeUnverifiedWarning,
                     )
                 }
 
@@ -1075,7 +1104,8 @@ private fun PatientReportSummaryText(sheet: PatientReportSheetState) {
 @Composable
 private fun PatientReportGenerateButton(sheet: PatientReportSheetState, onGenerate: () -> Unit) {
     val colors = AgarthaTheme.colors
-    val isEnabled = sheet.effectiveSelectedIds.isNotEmpty() && !sheet.isGenerating
+    val isEnabled = sheet.effectiveSelectedIds.isNotEmpty() && !sheet.isGenerating &&
+        !sheet.requiresUnverifiedWarningAck
     Button(
         onClick = onGenerate,
         enabled = isEnabled,

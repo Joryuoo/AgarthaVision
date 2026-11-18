@@ -11,6 +11,12 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/unverified-report-warning — reports warn about unverified fields · 2026-11-18
+
+- Session and patient report previews show how many captured fields will be excluded and
+  require an acknowledgment before generating the PDF (14zcqntx3up). The count includes
+  fields awaiting inference and skips deleted fields. The PDF still uses verified fields.
+
 ## fix/login-deactivated-laboratory-message — sign-in explains a deactivated laboratory · 2026-11-10
 
 ### Replace "User is banned" with a plain message at sign-in · `14zcqnttvpa`

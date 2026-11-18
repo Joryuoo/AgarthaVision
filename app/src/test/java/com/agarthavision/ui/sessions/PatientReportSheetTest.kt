@@ -661,6 +661,77 @@ class PatientReportSheetTest {
     }
 
     @Test
+    fun `configuration directs reports with unverified fields to preview`() {
+        val sheetState = PatientReportSheetState(
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+            unverifiedSampleCount = 1,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheetContent(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("1 unverified field will be excluded from the report")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_ACK_CHECKBOX).assertDoesNotExist()
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.GENERATE_BUTTON).assertIsNotEnabled()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON).assertIsEnabled()
+    }
+
+    @Test
+    fun `preview requires unverified fields acknowledgment even with enough verified fields`() {
+        var sheetState by mutableStateOf(
+            PatientReportSheetState(
+                step = ReportSheetStep.PREVIEW,
+                candidates = listOf(
+                    makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10),
+                    makeCandidate("s2", "MEIK-M21-S02", verifiedCount = 10),
+                ),
+                selectedSessionIds = setOf("s1", "s2"),
+                unverifiedSampleCount = 3,
+            ),
+        )
+        var generated = false
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheetContent(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = { generated = true },
+                    onAcknowledgeUnverifiedWarning = {
+                        sheetState = sheetState.copy(isUnverifiedWarningAcknowledged = it)
+                    },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertDoesNotExist()
+        composeRule.onNodeWithText("3 unverified fields will be excluded from the report")
+            .performScrollTo()
+            .assertIsDisplayed()
+        val generateButton = composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+        generateButton.assertIsNotEnabled()
+        composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_ACK_CHECKBOX).performScrollTo().performClick()
+        generateButton.performScrollTo().assertIsEnabled().performClick()
+        assertTrue(generated)
+    }
+
+    @Test
     fun `preview step tapping acknowledgment checkbox invokes onAcknowledgeWarning`() {
         var acknowledged = false
         val sheetState = PatientReportSheetState(
@@ -741,6 +812,7 @@ class PatientReportSheetTest {
         }
 
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_WARNING).assertDoesNotExist()
         composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
             .assertIsEnabled()
             .performClick()

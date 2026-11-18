@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
@@ -688,6 +689,50 @@ class SessionReportSheetTest {
     }
 
     @Test
+    fun `preview requires both acknowledgments when verified and unverified fields are present`() {
+        var state by mutableStateOf(
+            SessionReportSheetState(
+                step = ReportSheetStep.PREVIEW,
+                verifiedSampleCount = 5,
+                unverifiedSampleCount = 2,
+            ),
+        )
+        var generated = false
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SessionReportSheetContent(
+                    state = state,
+                    sessionLabel = "Session #1",
+                    sessionDate = "Oct 24, 2026",
+                    onDismiss = {},
+                    onConfigChange = {},
+                    onAcknowledgeWarning = { state = state.copy(isWarningAcknowledged = it) },
+                    onPreview = {},
+                    onBackToConfig = {},
+                    onGeneratePdf = { generated = true },
+                    onAcknowledgeUnverifiedWarning = {
+                        state = state.copy(isUnverifiedWarningAcknowledged = it)
+                    },
+                )
+            }
+        }
+
+        val generateButton = composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+        val sampleCheckbox = composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CHECKBOX)
+        val unverifiedCheckbox = composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_ACK_CHECKBOX)
+        composeRule.onNodeWithText("2 unverified fields will be excluded from the report")
+            .performScrollTo()
+            .assertIsDisplayed()
+        generateButton.assertIsNotEnabled()
+        sampleCheckbox.performScrollTo().performClick()
+        generateButton.assertIsNotEnabled()
+        unverifiedCheckbox.performScrollTo().performClick()
+        generateButton.performScrollTo().assertIsEnabled().performClick()
+        assertTrue(generated)
+    }
+
+    @Test
     fun `preview step acknowledgment card shows single sample subtitle for 1 sample`() {
         val state = SessionReportSheetState(
             step = ReportSheetStep.PREVIEW,
@@ -800,6 +845,7 @@ class SessionReportSheetTest {
         }
 
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_WARNING).assertDoesNotExist()
         composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
             .assertIsEnabled()
             .performClick()
