@@ -1,8 +1,11 @@
 package com.agarthavision.ui.verify
 
 import com.agarthavision.domain.inference.InferenceState
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -38,6 +41,19 @@ class PendingInferenceStateTest {
     @Test
     fun `a ready frame with no detections still is one`() {
         assertTrue(VerificationUiState(frame = frame(InferenceState.READY)).isCleanField)
+    }
+
+    @Test
+    fun `a clean field with an added species is not a clean field`() {
+        val state = VerificationUiState(
+            frame = frame(InferenceState.READY),
+            findings = listOf(
+                Finding(
+                    answers = VerificationAnswers(species = EggSpecies.ASCARIS),
+                ),
+            ),
+        )
+        assertFalse(state.isCleanField)
     }
 
     @Test

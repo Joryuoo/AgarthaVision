@@ -477,13 +477,8 @@ private fun VerificationCurrentDetection(
             .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
             .padding(16.dp),
     ) {
-        val currentSpeciesName = when {
-            currentAnswers?.isEgg == false -> stringResource(R.string.verify_marked_not_egg_note)
-            currentAnswers?.species != null -> currentAnswers.species.displayName
-            currentPrediction != null ->
-                EggSpecies.fromClassLabel(currentPrediction.classLabel)?.displayName
-                    ?: currentPrediction.classLabel
-            else -> null
+        val modelPredictionName = currentPrediction?.let { pred ->
+            EggSpecies.fromClassLabel(pred.classLabel)?.displayName ?: pred.classLabel
         }
         CycleRow(
             indicator = stringResource(
@@ -491,7 +486,7 @@ private fun VerificationCurrentDetection(
                 state.currentDetectionIndex + 1,
                 boxCount,
             ),
-            subtitle = currentSpeciesName?.let {
+            subtitle = modelPredictionName?.let {
                 stringResource(R.string.verify_detection_species_subtitle, it)
             } ?: stringResource(R.string.verify_detection_subtitle),
             prevDescription = stringResource(R.string.verify_prev_egg),
@@ -727,29 +722,6 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
     }
 }
 
-/**
- * The per-box statements: there is an egg → the box is placed right → it is the species the model
- * named. All three arrive pre-filled from model output, so a frame the model got right is
- * submitted without a tap, and unchecking is how the medtech disagrees. A ticked Q1 shows Q2 and
- * Q3 together; an unticked one hides both, since neither means anything without an egg.
- *
- * **Unticked always carries its correction**: the redraw action under Q2, the picker under Q3.
- *
- * The species step is a confirmation before a picker: the common answer is agreement, and
- * agreeing should not cost a pick from a list the medtech has just agreed with. Only unchecking
- * opens [SpeciesDropdown]. A model class the app cannot map to an [EggSpecies]
- * ([suggestedSpecies] null) has nothing to confirm, so the picker is offered directly.
- *
- * Q2 has three states worth naming, because the middle one is the whole point of the redraw
- * affordance and the last is what the checkbox made newly visible:
- *
- * - **Checked** — nothing under it. There is nothing to correct while the box is agreed to be
- *   right, which is why redrawing is not offered here.
- * - **Unchecked** — "Redraw the box", and it stays optional: unchecked with no redraw is a
- *   complete answer that records a localisation error on its own.
- * - **Unchecked, box replaced** — redraw and remove, and the checkbox is disabled, because the
- *   answer is latched until the replacement is removed.
- */
 @Composable
 private fun UnansweredDetectionCard(
     suggestedSpecies: EggSpecies?,
@@ -764,10 +736,6 @@ private fun UnansweredDetectionCard(
             .clip(RoundedCornerShape(12.dp))
             .background(AgarthaTheme.colors.surfaceVariant.copy(alpha = 0.5f))
             .border(1.dp, AgarthaTheme.colors.borderStrong, RoundedCornerShape(12.dp))
-            .clickable {
-                actions.onConfirmDetection(detectionIndex)
-                actions.onQ1Selected(true)
-            }
             .padding(12.dp),
     ) {
         Row(
@@ -818,10 +786,7 @@ private fun UnansweredDetectionCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(
-                onClick = {
-                    actions.onConfirmDetection(detectionIndex)
-                    actions.onQ1Selected(true)
-                },
+                onClick = { actions.onConfirmDetection(detectionIndex) },
                 modifier = Modifier
                     .weight(1f)
                     .testTag(VerifyTestTags.CONFIRM_DETECTION),
@@ -840,10 +805,7 @@ private fun UnansweredDetectionCard(
                 )
             }
             OutlinedButton(
-                onClick = {
-                    actions.onRejectDetection(detectionIndex)
-                    actions.onQ1Selected(false)
-                },
+                onClick = { actions.onRejectDetection(detectionIndex) },
                 modifier = Modifier
                     .weight(1f)
                     .testTag(VerifyTestTags.REJECT_DETECTION),
@@ -885,6 +847,29 @@ private fun UnansweredDetectionCard(
     }
 }
 
+/**
+ * Once a detection is confirmed as an egg or when reviewing a previously verified sample, the
+ * per-box statements show: there is an egg → the box is placed right → it is the species the model
+ * named. A ticked Q1 shows Q2 and Q3 together; an unticked one hides both, since neither means
+ * anything without an egg.
+ *
+ * **Unticked always carries its correction**: the redraw action under Q2, the picker under Q3.
+ *
+ * The species step is a confirmation before a picker: the common answer is agreement, and
+ * agreeing should not cost a pick from a list the medtech has just agreed with. Only unchecking
+ * opens [SpeciesDropdown]. A model class the app cannot map to an [EggSpecies]
+ * ([suggestedSpecies] null) has nothing to confirm, so the picker is offered directly.
+ *
+ * Q2 has three states worth naming, because the middle one is the whole point of the redraw
+ * affordance and the last is what the checkbox made newly visible:
+ *
+ * - **Checked** — nothing under it. There is nothing to correct while the box is agreed to be
+ *   right, which is why redrawing is not offered here.
+ * - **Unchecked** — "Redraw the box", and it stays optional: unchecked with no redraw is a
+ *   complete answer that records a localisation error on its own.
+ * - **Unchecked, box replaced** — redraw and remove, and the checkbox is disabled, because the
+ *   answer is latched until the replacement is removed.
+ */
 @Composable
 private fun BoxQuestionChain(
     answers: VerificationAnswers?,

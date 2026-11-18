@@ -189,17 +189,16 @@ data class VerificationUiState(
     val isCleanField: Boolean
         get() = frame?.source == FrameSource.MODEL &&
             frame.inferenceState == InferenceState.READY &&
-            frame.predictions.isEmpty()
+            frame.predictions.isEmpty() &&
+            findings.isEmpty()
 
     /**
      * Submit unlocks when every row the medtech is asserting is finished.
      *
      * **An empty list qualifies, and that is the point.** A clean field the medtech agrees with,
      * and a No-Model-Output field where they saw nothing, are both real results with nothing to
-     * fill in; the screen's governing principle is that a medtech whose model was right submits
-     * without tapping anything. The gate this replaced demanded a missed-egg answer on a clean
-     * field and an explicit no-detection assertion on a manual one, both of which were a tap
-     * asking the medtech to restate the absence of work.
+     * fill in. While clean fields submit without extra taps, model detections open unanswered and
+     * require explicit confirmation or rejection before submission unlocks (14zcqntx3un).
      *
      * The one thing it does hold for is a contradiction: an added species whose typed total is
      * lower than the eggs the frame already accounts for — the boxes kept, plus the boxes the

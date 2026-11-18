@@ -246,7 +246,7 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.CONFIRM_DETECTION).performClick()
 
         assertEquals(listOf(0), r.confirmedDetections)
-        assertEquals(listOf(true), r.q1)
+        assertTrue(r.q1.isEmpty())
     }
 
     @Test
@@ -256,7 +256,17 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.REJECT_DETECTION).performClick()
 
         assertEquals(listOf(0), r.rejectedDetections)
-        assertEquals(listOf(false), r.q1)
+        assertTrue(r.q1.isEmpty())
+    }
+
+    @Test
+    fun `tapping unanswered detection card outside buttons does not confirm`() {
+        val r = setContent(state())
+
+        question(VerifyTestTags.QUESTION_Q1).performClick()
+
+        assertTrue(r.confirmedDetections.isEmpty())
+        assertTrue(r.q1.isEmpty())
     }
 
     @Test
@@ -542,7 +552,7 @@ class VerificationSheetContentTest {
 
     @Test
     fun `answering the first question reports the choice`() {
-        val r = setContent(state())
+        val r = setContent(state(answers = listOf(answered(isEgg = false))))
 
         question(VerifyTestTags.QUESTION_Q1).performClick()
 
@@ -1241,7 +1251,7 @@ class VerificationSheetContentTest {
         // A failed save leaves the sheet open with its error, and the medtech must be able to
         // correct and retry from there.
         val r = Recorder()
-        val current = mutableStateOf(state().copy(isSubmitting = true))
+        val current = mutableStateOf(state(answers = listOf(answered(isEgg = false))).copy(isSubmitting = true))
         composeRule.setContent {
             AgarthaVisionTheme {
                 VerificationSheetContent(state = current.value, actions = actionsFor(r))
