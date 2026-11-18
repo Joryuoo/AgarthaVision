@@ -113,11 +113,15 @@ class VerificationSheetContentTest {
         val removedReplacements = mutableListOf<Int>()
         var confirmedLeaves = 0
         var dismissedLeaves = 0
+        val confirmedDetections = mutableListOf<Int>()
+        val rejectedDetections = mutableListOf<Int>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
         onQ1Selected = { r.q1 += it },
         onQ2Selected = { r.q2 += it },
+        onConfirmDetection = { r.confirmedDetections += it },
+        onRejectDetection = { r.rejectedDetections += it },
         onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
         onOtherSpeciesChanged = { r.otherSpecies += it },
@@ -225,6 +229,41 @@ class VerificationSheetContentTest {
             VerifyTestTags.QUESTION_Q2,
         ).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
+    }
+
+    @Test
+    fun `an unanswered detection displays 1-tap confirm and reject buttons`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.CONFIRM_DETECTION).assertIsDisplayed()
+        sheetNode(VerifyTestTags.REJECT_DETECTION).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping 1-tap confirm button reports confirmation`() {
+        val r = setContent(state())
+
+        sheetNode(VerifyTestTags.CONFIRM_DETECTION).performClick()
+
+        assertEquals(listOf(0), r.confirmedDetections)
+        assertEquals(listOf(true), r.q1)
+    }
+
+    @Test
+    fun `tapping 1-tap reject button reports rejection`() {
+        val r = setContent(state())
+
+        sheetNode(VerifyTestTags.REJECT_DETECTION).performClick()
+
+        assertEquals(listOf(0), r.rejectedDetections)
+        assertEquals(listOf(false), r.q1)
+    }
+
+    @Test
+    fun `unanswered count is displayed in footer when detections remain`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.UNANSWERED_DETECTIONS_NOTE).assertIsDisplayed()
     }
 
     @Test
