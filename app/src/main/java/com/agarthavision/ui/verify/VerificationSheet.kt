@@ -234,7 +234,8 @@ internal fun VerificationSheetContent(
                 onBack = actions.onCancel,
             )
 
-            // Pinned Frame Section: Image preview and sample cycle row stay in view while scrolling.
+            // 2. Frame section: image preview and sample cycle row.
+            //    Pinned at top with the top bar so the sample remains in view while answering findings.
             VerificationFrameSection(state, actions, frame)
 
             VerificationFindingsColumn(

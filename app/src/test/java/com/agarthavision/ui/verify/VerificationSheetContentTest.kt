@@ -875,13 +875,27 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `the frame preview remains visible when scrolling down to remarks`() {
-        setContent(state())
+    fun `the frame preview remains pinned at the top when scrolling down to remarks`() {
+        val r = setContent(state(frameIndexInQueue = 2, queueSize = 3))
+        val initialFrameBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
+        val initialNextBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).getBoundsInRoot()
 
         sheetNode(VerifyTestTags.NOTE_FIELD).assertIsDisplayed()
+
+        val scrolledFrameBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
+        val scrolledNextBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).getBoundsInRoot()
+
+        assertEquals(initialFrameBounds, scrolledFrameBounds)
+        assertEquals(initialNextBounds, scrolledNextBounds)
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertIsDisplayed()
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).assertIsDisplayed()
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).assertIsDisplayed()
+
+        // Reachable without scrolling back to the top
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).performClick()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).performClick()
+        assertEquals(1, r.framePrev)
+        assertEquals(1, r.frameNext)
     }
 
     // Discard flow
