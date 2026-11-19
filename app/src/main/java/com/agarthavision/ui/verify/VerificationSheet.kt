@@ -234,6 +234,9 @@ internal fun VerificationSheetContent(
                 onBack = actions.onCancel,
             )
 
+            // Pinned Frame Section: Image preview and sample cycle row stay in view while scrolling.
+            VerificationFrameSection(state, actions, frame)
+
             VerificationFindingsColumn(
                 state = state,
                 actions = actions,
@@ -326,8 +329,6 @@ private fun VerificationFindingsColumn(
             )
             .verticalScroll(scrollState),
     ) {
-        VerificationFrameSection(state, actions, frame)
-
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             // 3. Model output: what the container said, or that it said nothing, or that it has
             //    not answered yet. Always present, never collapsed to two states.
