@@ -308,6 +308,10 @@ internal fun VerificationSheetContent(
     }
 }
 
+/**
+ * Scrollable verification findings containing model output, current detection questions,
+ * added findings, and remarks. The frame preview sits pinned above this column.
+ */
 @Composable
 private fun VerificationFindingsColumn(
     state: VerificationUiState,
@@ -400,6 +404,10 @@ private fun VerificationFindingsColumn(
     }
 }
 
+/**
+ * Pinned frame section: the sample image preview and sample cycle row stay anchored
+ * in view while the medtech answers questions in the scrollable findings column below.
+ */
 @Composable
 private fun VerificationFrameSection(
     state: VerificationUiState,
