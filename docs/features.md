@@ -150,8 +150,8 @@ as working.
   `ui/verify/VerificationQueueViewModel.kt`). Supports batch hard-deletion of unverified frames.
 - **Bounding box overlay and redraw.** `ui/verify/FrameWithBoxes.kt` renders the boxes;
   `ui/verify/DrawMode.kt` draws a replacement box, or a box for an added egg.
-- **Verification layout and actions.** The sample image frame scrolls with the content column; the
-  pinned footer shows any save error above the action row
+- **Verification layout and actions.** The sample image frame preview and sample navigation are
+  pinned at the top while findings scroll below; the pinned footer shows any save error above the action row
   (`ui/verify/VerificationSheet.kt::VerificationSheetFooter`). The actions are "Discard" / "Save changes"
   in edit mode and "Discard" / "Submit" in initial verification mode.
 - **Tombstoning duplicates.** A duplicate verified sample is tombstoned via `samples.deleted_at`
