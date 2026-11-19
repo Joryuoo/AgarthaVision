@@ -91,7 +91,7 @@ class GetSessionSamplesUseCase @Inject constructor(
     /** The viewer, or the colleague who wrote it — the second is read-only (14zcqntjph6). */
     private suspend fun authorOf(authorId: String?, userId: String?): RecordAuthor =
         if (authorId != null && isColleagueRecord(authorId, userId)) {
-            RecordAuthor.Colleague(name = colleagueRepository.nameOf(authorId))
+            RecordAuthor.Colleague(name = colleagueRepository.nameOf(authorId) ?: "Medtech")
         } else {
             RecordAuthor.Viewer
         }

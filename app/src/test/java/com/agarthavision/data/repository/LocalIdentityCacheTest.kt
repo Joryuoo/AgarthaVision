@@ -46,16 +46,17 @@ class LocalIdentityCacheTest {
         val identity = fakeDataStore.data
             .map { prefs ->
                 prefs[USER_ID_KEY]?.let { id ->
+                    val email = prefs[EMAIL_KEY].orEmpty()
                     LocalIdentity(
                         userId = id,
-                        email = prefs[EMAIL_KEY].orEmpty(),
-                        displayName = prefs[DISPLAY_NAME_KEY],
+                        email = email,
+                        displayName = prefs[DISPLAY_NAME_KEY] ?: email.substringBefore('@'),
                     )
                 }
             }
             .first()
 
-        assertEquals(LocalIdentity(userId = "user-123", email = "medtech@citu.edu", displayName = null), identity)
+        assertEquals(LocalIdentity(userId = "user-123", email = "medtech@citu.edu", displayName = "medtech"), identity)
     }
 
     private companion object {

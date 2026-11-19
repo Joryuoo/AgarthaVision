@@ -42,10 +42,15 @@ class SupabaseAuthRepository @Inject constructor(
     override fun observeLocalIdentity(): Flow<LocalIdentity?> =
         dataStore.data.map { preferences ->
             val userId = preferences[USER_ID_KEY] ?: return@map null
+            val email = preferences[EMAIL_KEY].orEmpty()
+            val displayName = preferences[DISPLAY_NAME_KEY]
+                ?.takeIf { it.isNotBlank() }
+                ?: email.substringBefore('@').takeIf { it.isNotBlank() }
+                ?: "Medtech"
             LocalIdentity(
                 userId = userId,
-                email = preferences[EMAIL_KEY].orEmpty(),
-                displayName = preferences[DISPLAY_NAME_KEY],
+                email = email,
+                displayName = displayName,
             )
         }
 
