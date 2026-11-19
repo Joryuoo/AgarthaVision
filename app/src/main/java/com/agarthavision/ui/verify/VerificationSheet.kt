@@ -414,8 +414,8 @@ private fun VerificationFrameSection(
     ) {
         val imageModel = rememberFrameImageModel(frame, state.imageSource)
         val frameModifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
+            .heightIn(max = 220.dp)
+            .aspectRatio(frame.previewAspectRatio(), matchHeightConstraintsFirst = true)
             .clip(RoundedCornerShape(16.dp))
             .background(AgarthaTheme.colors.surfaceVariant)
             .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
