@@ -11,6 +11,17 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/require-medtech-name — a medtech's name must be required, so no profile can exist without one · 2026-11-19
+
+### Require non-empty full_name across database, Room schema, and authorship notes · `14zcqntx3v6`
+
+- **Database migration `0019_require_profile_full_name.sql`.** Backfills null or blank `full_name` fields on existing profiles, sets `profiles.full_name` to `NOT NULL` with a `CHECK (trim(full_name) <> '')` constraint, and updates `handle_new_user()` to extract `full_name` from auth metadata and raise a clear exception (`A full name is required for every medtech profile.`) if missing or blank.
+- **Room migration `MIGRATION_25_26` & `ColleagueEntity`.** Rebuilds the `colleagues` table with `full_name TEXT NOT NULL`, bumps Room database version to 26, and exports schema `26.json`.
+- **Domain & use-case guarantees.** Guarantees non-null `displayName` in `LocalIdentity` and `RecordAuthor.Colleague(name: String)`, removing obsolete "Recorded by another medtech" fallbacks across UI screens, author notes, and strings.
+- **Documentation & test coverage.** Documents constraints in `docs/map/objects/Profile.md`, adds `Migration25To26Test`, and updates schema test assertions.
+
+---
+
 ## fix/login-deactivated-laboratory-message — sign-in explains a deactivated laboratory · 2026-11-10
 
 ### Replace "User is banned" with a plain message at sign-in · `14zcqnttvpa`
