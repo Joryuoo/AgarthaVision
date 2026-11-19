@@ -39,6 +39,7 @@ import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -879,11 +880,13 @@ class VerificationSheetContentTest {
         val r = setContent(state(frameIndexInQueue = 2, queueSize = 3))
         val initialFrameBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
         val initialNextBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).getBoundsInRoot()
+        val initialQ1Bounds = composeRule.onNodeWithTag(VerifyTestTags.QUESTION_Q1).getBoundsInRoot()
 
         sheetNode(VerifyTestTags.NOTE_FIELD).assertIsDisplayed()
 
         val scrolledFrameBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
         val scrolledNextBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).getBoundsInRoot()
+        val scrolledQ1Bounds = composeRule.onNodeWithTag(VerifyTestTags.QUESTION_Q1).getBoundsInRoot()
 
         assertEquals(initialFrameBounds, scrolledFrameBounds)
         assertEquals(initialNextBounds, scrolledNextBounds)
@@ -891,11 +894,45 @@ class VerificationSheetContentTest {
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).assertIsDisplayed()
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).assertIsDisplayed()
 
+        // Content in the scroll column moved upward
+        assertNotEquals(initialQ1Bounds, scrolledQ1Bounds)
+        assertTrue(
+            "Q1 must move up when scrolling down to remarks",
+            scrolledQ1Bounds.top < initialQ1Bounds.top,
+        )
+
         // Reachable without scrolling back to the top
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).performClick()
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).performClick()
         assertEquals(1, r.framePrev)
         assertEquals(1, r.frameNext)
+    }
+
+    @Test
+    fun `tapping the frame preview opens the enlarged image overlay`() {
+        setContent(state())
+
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertDoesNotExist()
+
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).performClick()
+
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_FRAME_PREVIEW).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping outside the enlarged image closes the overlay and restores view`() {
+        setContent(state())
+
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).performClick()
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertIsDisplayed()
+
+        // Tapping the outer dimmed background (away from the centered image) dismisses
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_SCRIM).performTouchInput {
+            click(Offset(20f, 20f))
+        }
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertIsDisplayed()
     }
 
     // Discard flow
