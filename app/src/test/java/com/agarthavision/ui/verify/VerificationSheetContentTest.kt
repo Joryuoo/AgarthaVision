@@ -864,6 +864,26 @@ class VerificationSheetContentTest {
         assertEquals(1, r.frameNext)
     }
 
+    @Test
+    fun `the frame preview and cycle navigation remain visible while viewing detection questions`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.QUESTION_Q1).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the frame preview remains visible when scrolling down to remarks`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.NOTE_FIELD).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).assertIsDisplayed()
+    }
+
     // Discard flow
 
     @Test
