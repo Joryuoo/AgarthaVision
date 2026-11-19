@@ -189,17 +189,16 @@ data class VerificationUiState(
     val isCleanField: Boolean
         get() = frame?.source == FrameSource.MODEL &&
             frame.inferenceState == InferenceState.READY &&
-            frame.predictions.isEmpty()
+            frame.predictions.isEmpty() &&
+            findings.isEmpty()
 
     /**
      * Submit unlocks when every row the medtech is asserting is finished.
      *
      * **An empty list qualifies, and that is the point.** A clean field the medtech agrees with,
      * and a No-Model-Output field where they saw nothing, are both real results with nothing to
-     * fill in; the screen's governing principle is that a medtech whose model was right submits
-     * without tapping anything. The gate this replaced demanded a missed-egg answer on a clean
-     * field and an explicit no-detection assertion on a manual one, both of which were a tap
-     * asking the medtech to restate the absence of work.
+     * fill in. While clean fields submit without extra taps, model detections open unanswered and
+     * require explicit confirmation or rejection before submission unlocks (14zcqntx3un).
      *
      * The one thing it does hold for is a contradiction: an added species whose typed total is
      * lower than the eggs the frame already accounts for — the boxes kept, plus the boxes the
@@ -220,6 +219,10 @@ data class VerificationUiState(
                 findings.all { it.isComplete } && consolidated.totalsAreConsistent()
             }
         }
+
+    /** How many model detections on this frame are still incomplete / unanswered. */
+    val unansweredCount: Int
+        get() = findings.count { it.prediction != null && !it.isComplete }
 
     /** True while a box is being drawn, which is what dims every existing box on the frame. */
     val isDrawing: Boolean
@@ -443,12 +446,60 @@ class VerificationViewModel @Inject constructor(
      * the questions come back unticked for real, each with its correction under it.
      */
     fun onQ1Selected(isEgg: Boolean) {
-        updateCurrentAnswer {
-            when {
-                it.isEgg == isEgg -> it
-                isEgg -> it.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
-                else -> it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
+        updateCurrentFinding { finding ->
+            val prev = finding.answers
+            val suggested = finding.prediction?.classLabel?.let(EggSpecies::fromClassLabel)
+            val updated = when {
+                prev.isEgg == isEgg -> prev
+                isEgg -> {
+                    if (prev.isEgg == null) {
+                        prev.copy(
+                            isEgg = true,
+                            isBoxCorrect = true,
+                            speciesConfirmed = if (suggested != null) true else null,
+                            species = suggested,
+                            otherSpeciesText = "",
+                        )
+                    } else {
+                        prev.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
+                    }
+                }
+                else -> prev.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
             }
+            finding.copy(answers = updated)
+        }
+    }
+
+    /**
+     * Fully confirms detection at [index] in a single tap (14zcqntx3un).
+     *
+     * Seeds isEgg = true, isBoxCorrect = true, and confirms the suggested species (if known).
+     */
+    fun onConfirmDetection(index: Int = _state.value.currentDetectionIndex) {
+        updateFindingAt(index) { finding ->
+            val suggested = finding.prediction?.classLabel?.let(EggSpecies::fromClassLabel)
+            finding.copy(
+                answers = finding.answers.copy(
+                    isEgg = true,
+                    isBoxCorrect = true,
+                    speciesConfirmed = if (suggested != null) true else null,
+                    species = suggested,
+                    otherSpeciesText = "",
+                ),
+            )
+        }
+    }
+
+    /**
+     * Rejects detection at [index] as not an egg in a single tap (14zcqntx3un).
+     *
+     * Seeds isEgg = false and clears species.
+     */
+    fun onRejectDetection(index: Int = _state.value.currentDetectionIndex) {
+        updateFindingAt(index) { finding ->
+            finding.copy(
+                answers = finding.answers.clearSpecies().copy(isEgg = false, isBoxCorrect = null),
+            )
         }
     }
 
@@ -601,31 +652,18 @@ class VerificationViewModel @Inject constructor(
     /**
      * What the screen opens with, for each of the shapes a frame can take.
      *
-     * **Every answer is pre-filled from model output.** A box the model drew opens as "yes there
-     * is an egg", "yes the box is placed right", and "yes it is the species the model named" —
-     * so a medtech whose model was right submits without tapping anything, and answering is only
-     * required where the model was wrong. That is the whole economics of the screen: ten fields
-     * a smear, most of them the model gets right.
-     *
-     * A model class this app cannot map to an [EggSpecies] seeds **nothing** for the species
-     * question — guessing OTHER would be wrong, because OTHER carries a free-text box only a
-     * human can fill, so the row would look answered while being incomplete. The chain offers
-     * the picker directly instead, and the row stays incomplete until a species is chosen.
+     * Model detections open **unanswered** (14zcqntx3un). Each detected box requires explicit
+     * action from the medtech (such as 1-tap confirmation or rejection) to avoid rubber-stamping AI
+     * predictions. Until answered, `Finding.isComplete` remains false and submission is unavailable.
      *
      * A frame with no boxes — a clean field, or one captured with the container unreachable —
      * opens with nothing. There is no box to ask a question about; what it gets is the Add Egg
      * section, which is always present.
      */
     private fun FlaggedFrame.initialFindings(): List<Finding> = predictions.map { prediction ->
-        val suggested = EggSpecies.fromClassLabel(prediction.classLabel)
         Finding(
             prediction = prediction,
-            answers = VerificationAnswers(
-                isEgg = true,
-                isBoxCorrect = true,
-                speciesConfirmed = if (suggested != null) true else null,
-                species = suggested,
-            ),
+            answers = VerificationAnswers(),
         )
     }
 
@@ -1217,7 +1255,10 @@ class VerificationViewModel @Inject constructor(
     }
 
     private fun updateCurrentFinding(transform: (Finding) -> Finding) {
-        val index = _state.value.currentDetectionIndex
+        updateFindingAt(_state.value.currentDetectionIndex, transform)
+    }
+
+    private fun updateFindingAt(index: Int, transform: (Finding) -> Finding) {
         _state.update { current ->
             val updated = current.findings.toMutableList()
             if (index in updated.indices) updated[index] = transform(updated[index])

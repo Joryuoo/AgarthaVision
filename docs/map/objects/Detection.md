@@ -74,8 +74,8 @@ not only when they also say the box is correctly placed. The verdict precedence 
 meant to separate "a human confirmed this" from "a human did not object" on a pre-filled row,
 but it recorded taps: a medtech who read a row and agreed submitted it untouched. Everything it
 marked for a real reason is carried elsewhere — `WRONG_CLASS` for a picked species, a null
-`prediction_id` for an added egg — and box provenance is the table above. Submitting a
-pre-filled row is the medtech's confirmation of it.
+`prediction_id` for an added egg — and box provenance is the table above. (With `14zcqntx3un`,
+detections open unanswered by default and require explicit confirmation or rejection before submit).
 
 Index on `verdict` for retraining queries (`0001_init.sql:256`).
 `verified_by_user` was **dropped** from Postgres in legacy-dev migration 0002, and from Room at

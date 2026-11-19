@@ -30,13 +30,17 @@ sync attempt.
    Output shows "Frame is in inference" and Add species, remarks and Submit are locked
    (`ui/verify/InferencePending.kt`). "Cancel inference" asks first, then makes it a manual
    capture (`CancelInferenceUseCase`). The result replaces the spinner in place when it lands.
-3. **Review each model box — three pre-checked statements.** Q1 "There is a parasitic egg in
+3. **Review each model box — unanswered by default.** On first verification, each model detection
+   opens unanswered (`answers.isEgg == null`), requiring explicit medtech interaction before
+   submitting. Detections provide 1-tap confirmation ("Confirm detection") or rejection ("Not an
+   egg"). Once confirmed as an egg, three statements display: Q1 "There is a parasitic egg in
    this box", Q2 "The bounding box is correctly placed", Q3 "This egg is <species>"
-   (`VerificationSheet.kt::CheckQuestion`). All three are pre-filled from the model, so an
-   untouched box is the medtech's confirmation of it. Unchecking Q1 hides the rest. Unchecking Q2
-   keeps Q3 visible — a misplaced box still holds a countable egg — and offers **Redraw the box**
-   (`ui/verify/DrawMode.kt`). Once a box is redrawn, Q2 is latched unchecked and disabled.
-   Unchecking Q3 opens the species dropdown, and a stage dropdown where the species has stages.
+   (`VerificationSheet.kt::CheckQuestion`). Unchecking Q1 hides the rest and marks the detection
+   as not an egg. Unchecking Q2 keeps Q3 visible — a misplaced box still holds a countable egg — and
+   offers **Redraw the box** (`ui/verify/DrawMode.kt`). Once a box is redrawn, Q2 is latched
+   unchecked and disabled. Unchecking Q3 opens the species dropdown, and a stage dropdown where the
+   species has stages. Submit is held until all detections are answered. Reopening a previously
+   verified sample loads saved medtech answers.
 4. **Add species, counted per field.** "+ Add species" opens one card per species (and stage):
    the medtech enters the field's **total** eggs of that species, floored at what the model
    already boxed (`VerificationViewModel::onFieldTotalChanged`, `VerificationAnswers.fieldTotal`).

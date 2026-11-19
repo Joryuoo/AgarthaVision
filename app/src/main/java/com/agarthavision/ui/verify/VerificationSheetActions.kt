@@ -15,6 +15,10 @@ data class VerificationSheetActions(
     val onQ1Selected: (Boolean) -> Unit = {},
     val onQ2Selected: (Boolean) -> Unit = {},
     val onSpeciesConfirmed: (Boolean) -> Unit = {},
+    /** Confirms detection at index in 1 tap (seeds isEgg=true, isBoxCorrect=true, speciesConfirmed=true). */
+    val onConfirmDetection: (Int) -> Unit = {},
+    /** Rejects detection at index in 1 tap (seeds isEgg=false). */
+    val onRejectDetection: (Int) -> Unit = {},
     val onSpeciesSelected: (EggSpecies) -> Unit = {},
     val onStageSelected: (EggStage) -> Unit = {},
     val onOtherStageChanged: (String) -> Unit = {},

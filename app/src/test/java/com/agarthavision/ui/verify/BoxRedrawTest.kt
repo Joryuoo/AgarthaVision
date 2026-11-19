@@ -122,17 +122,18 @@ class BoxRedrawTest {
         }
 
     /**
-     * Redrawing sets Q2 on the medtech's behalf, so it works even from a pre-filled "Yes".
+     * Redrawing sets Q2 on the medtech's behalf, so it works even from a confirmed "Yes".
      *
      * The chain only offers the affordance after a "No", but the action must not depend on the
      * order the two happened in — a caller reaching it another way still has to end up with a
      * localisation error recorded, not a correct box holding someone else's coordinates.
      */
     @Test
-    fun `a redraw from a pre-filled Yes still records the localisation error`() =
+    fun `a redraw from a confirmed Yes still records the localisation error`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             assertEquals(true, vm.state.value.findings[0].answers.isBoxCorrect)
 
             vm.onBeginDraw(0, null)
@@ -152,6 +153,7 @@ class BoxRedrawTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
 
@@ -179,6 +181,7 @@ class BoxRedrawTest {
             val second = ImageBox(x = 40f, y = 40f, width = 10f, height = 10f)
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             vm.onFieldTotalChanged(1, "2")
@@ -202,6 +205,7 @@ class BoxRedrawTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             vm.onFieldTotalChanged(1, "2")
@@ -229,6 +233,7 @@ class BoxRedrawTest {
             val second = ImageBox(x = 40f, y = 40f, width = 10f, height = 10f)
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             vm.onFieldTotalChanged(1, "3")
@@ -250,6 +255,7 @@ class BoxRedrawTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             vm.onFieldTotalChanged(1, "3")
@@ -287,6 +293,7 @@ class BoxRedrawTest {
             // write geometry the mapper never emits a row for.
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
 
@@ -301,6 +308,7 @@ class BoxRedrawTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             advanceUntilIdle()
@@ -377,6 +385,7 @@ class BoxRedrawTest {
 
     private fun replaced() = viewModel().also {
         it.setFrame(frame())
+        it.onConfirmDetection(0)
         it.onQ2Selected(false)
         it.onBeginDraw(0, null)
         it.onBoxDrawn(drawn)

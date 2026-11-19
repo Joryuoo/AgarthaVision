@@ -4,6 +4,7 @@ package com.agarthavision.ui.verify
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.VisibleForTesting
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,6 +14,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,9 +34,12 @@ import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
@@ -54,6 +60,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -62,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,6 +149,8 @@ fun VerificationSheet(
                 onQ1Selected = viewModel::onQ1Selected,
                 onQ2Selected = viewModel::onQ2Selected,
                 onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
+                onConfirmDetection = viewModel::onConfirmDetection,
+                onRejectDetection = viewModel::onRejectDetection,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onStageSelected = viewModel::onStageSelected,
                 onOtherStageChanged = viewModel::onOtherStageChanged,
@@ -467,13 +477,18 @@ private fun VerificationCurrentDetection(
             .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
             .padding(16.dp),
     ) {
+        val modelPredictionName = currentPrediction?.let { pred ->
+            EggSpecies.fromClassLabel(pred.classLabel)?.displayName ?: pred.classLabel
+        }
         CycleRow(
             indicator = stringResource(
                 R.string.verify_detection_counter,
                 state.currentDetectionIndex + 1,
                 boxCount,
             ),
-            subtitle = stringResource(R.string.verify_detection_subtitle),
+            subtitle = modelPredictionName?.let {
+                stringResource(R.string.verify_detection_species_subtitle, it)
+            } ?: stringResource(R.string.verify_detection_subtitle),
             prevDescription = stringResource(R.string.verify_prev_egg),
             nextDescription = stringResource(R.string.verify_next_egg),
             prevTag = VerifyTestTags.DETECTION_PREV,
@@ -528,11 +543,30 @@ private fun VerificationSheetFooter(
             )
         }
 
+        if (!state.canSubmit && state.unansweredCount > 0) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.verify_unanswered_remaining,
+                    state.unansweredCount,
+                    state.unansweredCount,
+                ),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.UNANSWERED_DETECTIONS_NOTE)
+                    .padding(bottom = 8.dp),
+            )
+        }
+
+        val primaryLabel = when {
+            isEditing -> stringResource(R.string.verify_action_save_changes)
+            state.isCleanField -> stringResource(R.string.verify_action_submit_clean_field)
+            else -> stringResource(R.string.verify_action_submit)
+        }
+
         SheetActionRow(
             SheetActionRowState(
-                primaryLabel = stringResource(
-                    if (isEditing) R.string.verify_action_save_changes else R.string.verify_action_submit,
-                ),
+                primaryLabel = primaryLabel,
                 secondaryLabel = stringResource(R.string.verify_action_discard),
                 onPrimaryClick = onSubmit,
                 onSecondaryClick = onDiscard,
@@ -688,11 +722,136 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
     }
 }
 
+@Composable
+private fun UnansweredDetectionCard(
+    suggestedSpecies: EggSpecies?,
+    detectionIndex: Int,
+    actions: VerificationSheetActions,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .testTag(VerifyTestTags.QUESTION_Q1)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AgarthaTheme.colors.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, AgarthaTheme.colors.borderStrong, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.verify_unanswered_badge),
+                color = AgarthaTheme.colors.accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .background(AgarthaTheme.colors.accentTint2, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.verify_q1),
+                color = AgarthaTheme.colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (suggestedSpecies != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 10.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_suggested_species_label),
+                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = suggestedSpecies.displayName,
+                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = FontStyle.Italic,
+                )
+            }
+        } else {
+            Spacer(Modifier.height(4.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = { actions.onConfirmDetection(detectionIndex) },
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(VerifyTestTags.CONFIRM_DETECTION),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AgarthaTheme.colors.accent,
+                    contentColor = AgarthaTheme.colors.onAccent,
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_confirm_detection),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
+            OutlinedButton(
+                onClick = { actions.onRejectDetection(detectionIndex) },
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(VerifyTestTags.REJECT_DETECTION),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, AgarthaTheme.colors.borderStrong),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = AgarthaTheme.colors.textPrimary,
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_not_an_egg),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
+        }
+        if (suggestedSpecies != null) {
+            TextButton(
+                onClick = {
+                    actions.onConfirmDetection(detectionIndex)
+                    actions.onSpeciesConfirmed(false)
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .testTag(VerifyTestTags.CHANGE_SPECIES)
+                    .padding(top = 2.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_action_change_species),
+                    color = AgarthaTheme.colors.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
 /**
- * The per-box statements: there is an egg → the box is placed right → it is the species the model
- * named. All three arrive pre-filled from model output, so a frame the model got right is
- * submitted without a tap, and unchecking is how the medtech disagrees. A ticked Q1 shows Q2 and
- * Q3 together; an unticked one hides both, since neither means anything without an egg.
+ * Once a detection is confirmed as an egg or when reviewing a previously verified sample, the
+ * per-box statements show: there is an egg → the box is placed right → it is the species the model
+ * named. A ticked Q1 shows Q2 and Q3 together; an unticked one hides both, since neither means
+ * anything without an egg.
  *
  * **Unticked always carries its correction**: the redraw action under Q2, the picker under Q3.
  *
@@ -719,13 +878,30 @@ private fun BoxQuestionChain(
     actions: VerificationSheetActions,
     suggestions: List<String> = emptyList(),
 ) {
+    if (answers?.isEgg == null) {
+        UnansweredDetectionCard(
+            suggestedSpecies = suggestedSpecies,
+            detectionIndex = detectionIndex,
+            actions = actions,
+        )
+        return
+    }
+
     CheckQuestion(
         title = stringResource(R.string.verify_q1),
         tag = VerifyTestTags.QUESTION_Q1,
-        checked = answers?.isEgg == true,
-        onToggle = { actions.onQ1Selected(answers?.isEgg != true) },
+        checked = answers.isEgg == true,
+        onToggle = { actions.onQ1Selected(answers.isEgg != true) },
     )
-    if (answers?.isEgg != true) return
+    if (answers.isEgg == false) {
+        Text(
+            text = stringResource(R.string.verify_marked_not_egg_note),
+            color = AgarthaTheme.colors.textTertiary,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        return
+    }
 
     CheckQuestion(
         title = stringResource(R.string.verify_q2),

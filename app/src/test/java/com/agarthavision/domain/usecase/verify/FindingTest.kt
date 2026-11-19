@@ -24,6 +24,13 @@ class FindingTest {
     // ── completeness ────────────────────────────────────────────────────────
 
     @Test
+    fun `an unanswered detection is not complete`() {
+        val unanswered = Finding(prediction(), VerificationAnswers())
+        assertFalse("Unanswered detection cannot be complete", unanswered.isComplete)
+        assertFalse(unanswered.countsAsEgg)
+    }
+
+    @Test
     fun `a rejected box is complete with nothing else answered`() {
         // Saying "not an egg" ends the questions: there is no species to name.
         assertTrue(Finding(prediction(), VerificationAnswers(isEgg = false)).isComplete)
