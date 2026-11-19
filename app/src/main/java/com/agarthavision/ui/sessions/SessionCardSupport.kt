@@ -209,7 +209,7 @@ internal fun SessionCard(
     val session = sessionData.session
     val date = formatDate(session.startedAt)
     val time = formatTime(session.startedAt)
-    val recordedBy = recordedByText(colleagueAuthor)
+    val recordedBy = colleagueAuthor?.let { recordedByText(it) }
     val meta = sessionMeta(date, time, recordedBy.takeIf { isColleagueSession })
 
     val (bgColor, borderColor) = if (isActive) {
