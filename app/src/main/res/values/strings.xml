@@ -201,6 +201,18 @@
     <string name="verify_action_discard">Discard</string>
     <string name="verify_action_save_changes">Save changes</string>
     <string name="verify_action_submit">Submit</string>
+    <string name="verify_action_submit_clean_field">Submit (No eggs in field)</string>
+    <string name="verify_confirm_detection">Confirm detection</string>
+    <string name="verify_suggested_species_label">AI suggestion:</string>
+    <string name="verify_detection_species_subtitle">Model: %1$s</string>
+    <string name="verify_action_change_species">Different species</string>
+    <string name="verify_not_an_egg">Not an egg</string>
+    <string name="verify_unanswered_badge">UNANSWERED</string>
+    <string name="verify_marked_not_egg_note">Marked as not an egg (False positive)</string>
+    <plurals name="verify_unanswered_remaining">
+        <item quantity="one">%1$d detection needs an answer</item>
+        <item quantity="other">%1$d detections need an answer</item>
+    </plurals>
     <string name="verify_field_total_label">Egg count</string>
     <string name="verify_eggs_of_this_species">Eggs of this species</string>
     <string name="verify_seen_in_this_sample">Seen in this sample</string>

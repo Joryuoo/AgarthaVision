@@ -3,10 +3,15 @@ package com.agarthavision.ui.verify
 import app.cash.turbine.test
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.inference.Prediction
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.usecase.inference.CancelInferenceUseCase
+import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,6 +68,28 @@ class UnsavedChangesTest {
 
     /** Opened on the middle sample, so both cycle buttons have somewhere to go. */
     private fun openOnMiddle() = viewModel().also { it.setFrame(frames[1]) }
+
+    /** Opened on the middle sample with its finding already confirmed, as when reopening a verified sample. */
+    private fun openConfirmedOnMiddle(): VerificationViewModel {
+        val priorTarget = VerificationTarget(
+            frame = frames[1],
+            imageSource = SampleImageSource.Local("path"),
+            findings = listOf(
+                Finding(
+                    prediction = frames[1].predictions[0],
+                    answers = VerificationAnswers(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        speciesConfirmed = true,
+                        species = EggSpecies.ASCARIS,
+                    ),
+                ),
+            ),
+            missedEgg = null,
+            userNote = "",
+        )
+        return viewModel().also { it.setFrame(frames[1], prior = priorTarget) }
+    }
 
     @Test
     fun `a sample only looked at pages without asking`() =
@@ -141,7 +168,7 @@ class UnsavedChangesTest {
     @Test
     fun `an edit changed back is nothing to lose`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = openOnMiddle()
+            val vm = openConfirmedOnMiddle()
             vm.onQ2Selected(false)
             vm.onQ2Selected(true)
 
@@ -181,7 +208,7 @@ class UnsavedChangesTest {
     fun `editing an already verified sample without changes exits without prompting`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            val priorTarget = com.agarthavision.domain.usecase.verify.VerificationTarget(
+            val priorTarget = VerificationTarget(
                 frame = frames[1],
                 imageSource = com.agarthavision.domain.usecase.records.SampleImageSource.Local("path"),
                 findings = emptyList(),
@@ -203,7 +230,7 @@ class UnsavedChangesTest {
     fun `editing an already verified sample with new changes asks before leaving`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            val priorTarget = com.agarthavision.domain.usecase.verify.VerificationTarget(
+            val priorTarget = VerificationTarget(
                 frame = frames[1],
                 imageSource = com.agarthavision.domain.usecase.records.SampleImageSource.Local("path"),
                 findings = emptyList(),

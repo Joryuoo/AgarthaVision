@@ -93,6 +93,7 @@ class QuestionChainResetTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
+            vm.onConfirmDetection(0)
 
             vm.onQ2Selected(false)
             advanceUntilIdle()

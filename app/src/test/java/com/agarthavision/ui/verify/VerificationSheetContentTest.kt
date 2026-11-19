@@ -113,11 +113,15 @@ class VerificationSheetContentTest {
         val removedReplacements = mutableListOf<Int>()
         var confirmedLeaves = 0
         var dismissedLeaves = 0
+        val confirmedDetections = mutableListOf<Int>()
+        val rejectedDetections = mutableListOf<Int>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
         onQ1Selected = { r.q1 += it },
         onQ2Selected = { r.q2 += it },
+        onConfirmDetection = { r.confirmedDetections += it },
+        onRejectDetection = { r.rejectedDetections += it },
         onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
         onOtherSpeciesChanged = { r.otherSpecies += it },
@@ -225,6 +229,51 @@ class VerificationSheetContentTest {
             VerifyTestTags.QUESTION_Q2,
         ).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
+    }
+
+    @Test
+    fun `an unanswered detection displays 1-tap confirm and reject buttons`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.CONFIRM_DETECTION).assertIsDisplayed()
+        sheetNode(VerifyTestTags.REJECT_DETECTION).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping 1-tap confirm button reports confirmation`() {
+        val r = setContent(state())
+
+        sheetNode(VerifyTestTags.CONFIRM_DETECTION).performClick()
+
+        assertEquals(listOf(0), r.confirmedDetections)
+        assertTrue(r.q1.isEmpty())
+    }
+
+    @Test
+    fun `tapping 1-tap reject button reports rejection`() {
+        val r = setContent(state())
+
+        sheetNode(VerifyTestTags.REJECT_DETECTION).performClick()
+
+        assertEquals(listOf(0), r.rejectedDetections)
+        assertTrue(r.q1.isEmpty())
+    }
+
+    @Test
+    fun `tapping unanswered detection card outside buttons does not confirm`() {
+        val r = setContent(state())
+
+        question(VerifyTestTags.QUESTION_Q1).performClick()
+
+        assertTrue(r.confirmedDetections.isEmpty())
+        assertTrue(r.q1.isEmpty())
+    }
+
+    @Test
+    fun `unanswered count is displayed in footer when detections remain`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.UNANSWERED_DETECTIONS_NOTE).assertIsDisplayed()
     }
 
     @Test
@@ -503,7 +552,7 @@ class VerificationSheetContentTest {
 
     @Test
     fun `answering the first question reports the choice`() {
-        val r = setContent(state())
+        val r = setContent(state(answers = listOf(answered(isEgg = false))))
 
         question(VerifyTestTags.QUESTION_Q1).performClick()
 
@@ -1202,7 +1251,7 @@ class VerificationSheetContentTest {
         // A failed save leaves the sheet open with its error, and the medtech must be able to
         // correct and retry from there.
         val r = Recorder()
-        val current = mutableStateOf(state().copy(isSubmitting = true))
+        val current = mutableStateOf(state(answers = listOf(answered(isEgg = false))).copy(isSubmitting = true))
         composeRule.setContent {
             AgarthaVisionTheme {
                 VerificationSheetContent(state = current.value, actions = actionsFor(r))
