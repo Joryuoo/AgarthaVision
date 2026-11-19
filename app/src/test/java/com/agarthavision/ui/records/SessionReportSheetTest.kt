@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
+import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.ui.components.BiometricLockHost
@@ -367,7 +368,7 @@ class SessionReportSheetTest {
         }
 
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_WARNING_BANNER).assertIsDisplayed()
-        composeRule.onNodeWithText("Only 5 of 10 recommended samples selected").assertIsDisplayed()
+        composeRule.onNodeWithText("Only 5 of 10 recommended fields selected").assertIsDisplayed()
         composeRule.onNodeWithText("You can still preview and continue.").assertIsDisplayed()
     }
 
@@ -395,7 +396,7 @@ class SessionReportSheetTest {
         }
 
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_WARNING_BANNER).assertIsDisplayed()
-        composeRule.onNodeWithText("Only 1 of 10 recommended sample selected").assertIsDisplayed()
+        composeRule.onNodeWithText("Only 1 of 10 recommended fields selected").assertIsDisplayed()
     }
 
     @Test
@@ -684,7 +685,7 @@ class SessionReportSheetTest {
 
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertIsDisplayed()
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CHECKBOX).assertIsDisplayed()
-        composeRule.onNodeWithText("You can continue with these samples.").assertIsDisplayed()
+        composeRule.onNodeWithText("You can continue with these fields.").assertIsDisplayed()
         composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertIsNotEnabled()
     }
 
@@ -756,7 +757,7 @@ class SessionReportSheetTest {
             }
         }
 
-        composeRule.onNodeWithText("You can continue with this sample.").assertIsDisplayed()
+        composeRule.onNodeWithText("You can continue with this field.").assertIsDisplayed()
     }
 
     @Test
@@ -932,6 +933,34 @@ class SessionReportSheetTest {
         }
 
         composeRule.onNodeWithText("Unable to connect to printer service").assertIsDisplayed()
+    }
+
+    @Test
+    fun `configuration step displays localized unverified count change error`() {
+        val state = SessionReportSheetState(
+            verifiedSampleCount = 10,
+            errorRes = R.string.report_warning_unverified_fields_changed,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SessionReportSheetContent(
+                    state = state,
+                    sessionLabel = "Session #1",
+                    sessionDate = "Oct 24, 2026",
+                    onDismiss = {},
+                    onConfigChange = {},
+                    onAcknowledgeWarning = {},
+                    onPreview = {},
+                    onBackToConfig = {},
+                    onGeneratePdf = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("The number of unverified fields changed. Confirm again.")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     // -------------------------------------------------------------------------

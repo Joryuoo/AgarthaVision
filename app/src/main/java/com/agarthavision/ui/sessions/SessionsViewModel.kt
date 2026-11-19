@@ -3,6 +3,7 @@ package com.agarthavision.ui.sessions
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.R
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
@@ -593,6 +594,7 @@ class SessionsViewModel @Inject constructor(
             isLoadingPreview = false,
             unverifiedSampleCount = countUnverifiedFields(candidates, ids),
             isUnverifiedWarningAcknowledged = false,
+            errorRes = null,
         ).syncDiscardConfirm()
 
     private fun countUnverifiedFields(candidates: List<PatientReportCandidate>, ids: Set<String>): Int =
@@ -682,6 +684,7 @@ class SessionsViewModel @Inject constructor(
                     previewPdfBytes = null,
                     isLoadingPreview = false,
                     isUnverifiedWarningAcknowledged = false,
+                    errorRes = null,
                 ).syncDiscardConfirm(),
             )
         }
@@ -698,7 +701,12 @@ class SessionsViewModel @Inject constructor(
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
             if (sheet.step != ReportSheetStep.PREVIEW || sheet.isGenerating) return@update state
-            state.copy(reportSheet = sheet.copy(isUnverifiedWarningAcknowledged = acknowledged))
+            state.copy(
+                reportSheet = sheet.copy(
+                    isUnverifiedWarningAcknowledged = acknowledged,
+                    errorRes = if (acknowledged) null else sheet.errorRes,
+                ),
+            )
         }
     }
 
@@ -715,7 +723,7 @@ class SessionsViewModel @Inject constructor(
             if (requestId != previewRequestId) return@launch
             internalState.update { state ->
                 val current = state.reportSheet ?: return@update state
-                state.copy(reportSheet = current.copy(isLoadingPreview = true, error = null))
+                state.copy(reportSheet = current.copy(isLoadingPreview = true, error = null, errorRes = null))
             }
             runCatching {
                 val candidates = getPatientReportCandidatesUseCase(patient, sheet.effectiveSelectedIds).getOrThrow()
@@ -765,7 +773,9 @@ class SessionsViewModel @Inject constructor(
                 reportSheet = sheet.copy(
                     step = ReportSheetStep.CONFIGURATION,
                     isLoadingPreview = false,
+                    isWarningAcknowledged = false,
                     isUnverifiedWarningAcknowledged = false,
+                    errorRes = null,
                 ),
             )
         }
@@ -790,7 +800,7 @@ class SessionsViewModel @Inject constructor(
         previewRequestId++
         val acknowledgedCount = sheet.unverifiedSampleCount
             .takeIf { sheet.step == ReportSheetStep.PREVIEW && sheet.isUnverifiedWarningAcknowledged }
-        internalState.update { it.copy(reportSheet = sheet.copy(isGenerating = true, error = null)) }
+        internalState.update { it.copy(reportSheet = sheet.copy(isGenerating = true, error = null, errorRes = null)) }
         viewModelScope.launch {
             val scope = PatientReportScope(
                 startDate = sheet.startDate,
@@ -815,6 +825,7 @@ class SessionsViewModel @Inject constructor(
                                 isGenerating = false,
                                 unverifiedSampleCount = error.count,
                                 isUnverifiedWarningAcknowledged = false,
+                                errorRes = R.string.report_warning_unverified_fields_changed,
                             )
                         } else {
                             current.copy(

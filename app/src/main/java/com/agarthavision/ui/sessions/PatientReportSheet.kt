@@ -3,6 +3,7 @@
 package com.agarthavision.ui.sessions
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -109,6 +110,7 @@ data class PatientReportSheetState(
     val showDiscardConfirm: Boolean = false,
     val unverifiedSampleCount: Int = 0,
     val isUnverifiedWarningAcknowledged: Boolean = false,
+    @StringRes val errorRes: Int? = null,
 ) {
     val effectiveSelectedIds: Set<String>
         get() = if (selectedIds.isNotEmpty()) selectedIds else selectedSessionIds
@@ -166,6 +168,7 @@ data class PatientReportSheetState(
         if (isGenerating != other.isGenerating) return false
         if (isLoadingCandidates != other.isLoadingCandidates) return false
         if (error != other.error) return false
+        if (errorRes != other.errorRes) return false
         if (isPatientCodename != other.isPatientCodename) return false
         if (initialStartDate != other.initialStartDate) return false
         if (initialEndDate != other.initialEndDate) return false
@@ -193,6 +196,7 @@ data class PatientReportSheetState(
         result = 31 * result + isGenerating.hashCode()
         result = 31 * result + isLoadingCandidates.hashCode()
         result = 31 * result + (error?.hashCode() ?: 0)
+        result = 31 * result + (errorRes ?: 0)
         result = 31 * result + isPatientCodename.hashCode()
         result = 31 * result + (initialStartDate?.hashCode() ?: 0)
         result = 31 * result + (initialEndDate?.hashCode() ?: 0)
@@ -446,7 +450,8 @@ internal fun PatientReportSheetContent(
                     UnverifiedSampleWarning(sampleCount = sheet.unverifiedSampleCount)
                 }
 
-                sheet.error?.let { error ->
+                val errorMessage = sheet.errorRes?.let { stringResource(it) } ?: sheet.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }
@@ -528,7 +533,8 @@ internal fun PatientReportSheetContent(
                     )
                 }
 
-                sheet.error?.let { error ->
+                val errorMessage = sheet.errorRes?.let { stringResource(it) } ?: sheet.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }

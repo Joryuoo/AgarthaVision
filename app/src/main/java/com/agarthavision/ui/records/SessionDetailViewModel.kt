@@ -1,8 +1,10 @@
 package com.agarthavision.ui.records
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.R
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.supabase.RestoreReportFilesUseCase
@@ -251,7 +253,7 @@ class SessionDetailViewModel @Inject constructor(
 
     fun onOpenGenerateReport() = openReportSheet(state.value.pendingFlagged)
 
-    private fun openReportSheet(unverifiedCount: Int) {
+    private fun openReportSheet(unverifiedCount: Int, @StringRes errorRes: Int? = null) {
         val requestId = ++previewRequestId
         val currentSession = state.value.session ?: return
         val verifiedCount = currentSession.samples.size
@@ -263,6 +265,7 @@ class SessionDetailViewModel @Inject constructor(
                 config = ReportConfig(),
                 verifiedSampleCount = verifiedCount,
                 unverifiedSampleCount = unverifiedCount,
+                errorRes = errorRes,
                 patientDisplayName = patient?.displayName.orEmpty(),
                 patientMaskedName = patient?.maskedDisplayName.orEmpty(),
                 isPatientCodename = patient?.isCodename == true,
@@ -306,6 +309,7 @@ class SessionDetailViewModel @Inject constructor(
                 previewPdfBytes = null,
                 isLoadingPreview = false,
                 isUnverifiedWarningAcknowledged = false,
+                errorRes = null,
                 showDiscardConfirm = if (hasChanges) current.showDiscardConfirm else false,
             )
         }
@@ -322,7 +326,10 @@ class SessionDetailViewModel @Inject constructor(
             if (sheet?.step != ReportSheetStep.PREVIEW || sheet.isGenerating) {
                 sheet
             } else {
-                sheet.copy(isUnverifiedWarningAcknowledged = acknowledged)
+                sheet.copy(
+                    isUnverifiedWarningAcknowledged = acknowledged,
+                    errorRes = if (acknowledged) null else sheet.errorRes,
+                )
             }
         }
     }
@@ -332,7 +339,7 @@ class SessionDetailViewModel @Inject constructor(
         val requestId = ++previewRequestId
         viewModelScope.launch {
             if (requestId != previewRequestId) return@launch
-            reportSheetState.update { it?.copy(isLoadingPreview = true, error = null) }
+            reportSheetState.update { it?.copy(isLoadingPreview = true, error = null, errorRes = null) }
             runCatching {
                 val unverifiedCount = sessionPendingCount.first()
                 val pdfBytes = previewSessionReportUseCase(sessionId, currentSheet.config).getOrThrow()
@@ -371,7 +378,9 @@ class SessionDetailViewModel @Inject constructor(
             current?.copy(
                 step = ReportSheetStep.CONFIGURATION,
                 isLoadingPreview = false,
+                isWarningAcknowledged = false,
                 isUnverifiedWarningAcknowledged = false,
+                errorRes = null,
             )
         }
     }
@@ -385,7 +394,7 @@ class SessionDetailViewModel @Inject constructor(
         val acknowledgedCount = currentSheet
             ?.takeIf { it.step == ReportSheetStep.PREVIEW && it.isUnverifiedWarningAcknowledged }
             ?.unverifiedSampleCount
-        reportSheetState.update { it?.copy(isGenerating = true, error = null) }
+        reportSheetState.update { it?.copy(isGenerating = true, error = null, errorRes = null) }
         generationState.value = GenerationState(isGenerating = true)
         viewModelScope.launch {
             generateSessionReportUseCase(sessionId, config, acknowledgedCount).fold(
@@ -399,13 +408,14 @@ class SessionDetailViewModel @Inject constructor(
                     if (error is UnverifiedReportFieldsException) {
                         generationState.value = GenerationState()
                         if (reportSheetState.value == null) {
-                            openReportSheet(error.count)
+                            openReportSheet(error.count, R.string.report_warning_unverified_fields_changed)
                         } else {
                             reportSheetState.update {
                                 it?.copy(
                                     isGenerating = false,
                                     unverifiedSampleCount = error.count,
                                     isUnverifiedWarningAcknowledged = false,
+                                    errorRes = R.string.report_warning_unverified_fields_changed,
                                 )
                             }
                         }

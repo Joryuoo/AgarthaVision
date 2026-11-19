@@ -2,6 +2,7 @@ package com.agarthavision.ui.records
 
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
+import com.agarthavision.R
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.supabase.RestoreReportFilesUseCase
@@ -294,11 +295,11 @@ class SessionDetailViewModelReportSheetTest {
         }
 
     @Test
-    fun `onBackToReportConfig transitions step back to CONFIGURATION`() =
+    fun `returning to report config resets both warning acknowledgments`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val patient = makePatient(PATIENT_ID, "Santos", "Maria")
             val fakePdf = byteArrayOf(9, 8, 7)
-            val (vm, harness) = createViewModel(patient = patient, sampleCount = 10)
+            val (vm, harness) = createViewModel(patient = patient, sampleCount = 4, unverifiedCount = 1)
             whenever(harness.previewUseCase.invoke(eq(SESSION_ID), any()))
                 .thenReturn(Result.success(fakePdf))
 
@@ -310,9 +311,26 @@ class SessionDetailViewModelReportSheetTest {
                 advanceUntilIdle()
                 assertEquals(ReportSheetStep.PREVIEW, expectMostRecentItem().reportSheet?.step)
 
+                vm.onAcknowledgeReportWarning(true)
+                vm.onAcknowledgeUnverifiedReportWarning(true)
+                advanceUntilIdle()
+                val acknowledgedSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertTrue(acknowledgedSheet.isWarningAcknowledged)
+                assertTrue(acknowledgedSheet.isUnverifiedWarningAcknowledged)
+
                 vm.onBackToReportConfig()
                 advanceUntilIdle()
-                assertEquals(ReportSheetStep.CONFIGURATION, expectMostRecentItem().reportSheet?.step)
+                val configSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertEquals(ReportSheetStep.CONFIGURATION, configSheet.step)
+                assertFalse(configSheet.isWarningAcknowledged)
+                assertFalse(configSheet.isUnverifiedWarningAcknowledged)
+
+                vm.onPreviewSessionReport()
+                advanceUntilIdle()
+                val previewSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertFalse(previewSheet.isWarningAcknowledged)
+                assertFalse(previewSheet.isUnverifiedWarningAcknowledged)
+                assertFalse(previewSheet.canGeneratePdf)
             }
         }
 
@@ -407,12 +425,25 @@ class SessionDetailViewModelReportSheetTest {
                     assertEquals(2, sheet.unverifiedSampleCount)
                     assertFalse(sheet.isUnverifiedWarningAcknowledged)
                     assertFalse(sheet.isGenerating)
+                    assertEquals(R.string.report_warning_unverified_fields_changed, sheet.errorRes)
 
                     vm.onFinalizeSessionReport()
                     advanceUntilIdle()
                     verify(harness.generateUseCase, org.mockito.kotlin.never()).invoke(eq(SESSION_ID), any(), eq(2))
 
+                    vm.onAcknowledgeUnverifiedReportWarning(false)
+                    advanceUntilIdle()
+                    assertEquals(
+                        R.string.report_warning_unverified_fields_changed,
+                        vm.state.value.reportSheet?.errorRes,
+                    )
+
                     vm.onAcknowledgeUnverifiedReportWarning(true)
+                    advanceUntilIdle()
+                    val acknowledgedSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                    assertTrue(acknowledgedSheet.isUnverifiedWarningAcknowledged)
+                    assertNull(acknowledgedSheet.errorRes)
+
                     vm.onFinalizeSessionReport()
                     advanceUntilIdle()
                     assertNull(expectMostRecentItem().reportSheet)

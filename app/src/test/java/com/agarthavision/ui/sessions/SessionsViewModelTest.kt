@@ -2,6 +2,7 @@ package com.agarthavision.ui.sessions
 
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
+import com.agarthavision.R
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.LocalIdentity
@@ -1892,12 +1893,25 @@ class SessionsViewModelTest {
                     assertEquals(2, sheet.unverifiedSampleCount)
                     assertFalse(sheet.isUnverifiedWarningAcknowledged)
                     assertFalse(sheet.isGenerating)
+                    assertEquals(R.string.report_warning_unverified_fields_changed, sheet.errorRes)
 
                     vm.onGeneratePatientReport()
                     advanceUntilIdle()
                     verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any(), any(), eq(2))
 
+                    vm.onAcknowledgeUnverifiedReportWarning(false)
+                    advanceUntilIdle()
+                    assertEquals(
+                        R.string.report_warning_unverified_fields_changed,
+                        vm.state.value.reportSheet?.errorRes,
+                    )
+
                     vm.onAcknowledgeUnverifiedReportWarning(true)
+                    advanceUntilIdle()
+                    val acknowledgedSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                    assertTrue(acknowledgedSheet.isUnverifiedWarningAcknowledged)
+                    assertNull(acknowledgedSheet.errorRes)
+
                     vm.onGeneratePatientReport()
                     advanceUntilIdle()
                     assertNull(expectMostRecentItem().reportSheet)
@@ -2080,10 +2094,14 @@ class SessionsViewModelTest {
         }
 
     @Test
-    fun `navigating back to patient report config resets step to CONFIGURATION`() =
+    fun `returning to patient report config resets both warning acknowledgments`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidates = listOf(
-                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                PatientReportCandidate(
+                    makeSession("s1", "u1").session,
+                    verifiedSampleCount = 3,
+                    unverifiedSampleCount = 1,
+                ),
             )
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
                 onBlocking { invoke(any(), anyOrNull()) } doReturn Result.success(candidates)
@@ -2105,9 +2123,26 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 assertEquals(ReportSheetStep.PREVIEW, expectMostRecentItem().reportSheet?.step)
 
+                vm.onAcknowledgePatientReportWarning(true)
+                vm.onAcknowledgeUnverifiedReportWarning(true)
+                advanceUntilIdle()
+                val acknowledgedSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertTrue(acknowledgedSheet.isWarningAcknowledged)
+                assertTrue(acknowledgedSheet.isUnverifiedWarningAcknowledged)
+
                 vm.onBackToPatientReportConfig()
                 advanceUntilIdle()
-                assertEquals(ReportSheetStep.CONFIGURATION, expectMostRecentItem().reportSheet?.step)
+                val configSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertEquals(ReportSheetStep.CONFIGURATION, configSheet.step)
+                assertFalse(configSheet.isWarningAcknowledged)
+                assertFalse(configSheet.isUnverifiedWarningAcknowledged)
+
+                vm.onPreviewPatientReport()
+                advanceUntilIdle()
+                val previewSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertFalse(previewSheet.isWarningAcknowledged)
+                assertFalse(previewSheet.isUnverifiedWarningAcknowledged)
+                assertFalse(previewSheet.canGeneratePdf)
                 cancelAndIgnoreRemainingEvents()
             }
         }

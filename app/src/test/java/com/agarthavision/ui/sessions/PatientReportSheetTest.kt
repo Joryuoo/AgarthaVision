@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
+import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.Session
@@ -510,7 +511,7 @@ class PatientReportSheetTest {
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_WARNING_BANNER)
             .performScrollTo()
             .assertIsDisplayed()
-        composeRule.onNodeWithText("Only 7 of 10 recommended samples selected")
+        composeRule.onNodeWithText("Only 7 of 10 recommended fields selected")
             .performScrollTo()
             .assertIsDisplayed()
     }
@@ -844,6 +845,33 @@ class PatientReportSheetTest {
 
         composeRule.onNodeWithTag(ReportSheetTestTags.EDIT_OPTIONS_BUTTON).performClick()
         assertTrue(backCalled)
+    }
+
+    @Test
+    fun `preview step displays localized unverified count change error`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+            errorRes = R.string.report_warning_unverified_fields_changed,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("The number of unverified fields changed. Confirm again.")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test

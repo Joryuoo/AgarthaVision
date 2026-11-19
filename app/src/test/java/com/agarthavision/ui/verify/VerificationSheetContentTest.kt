@@ -1855,19 +1855,19 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `edit mode shows Save changes, Discard, and Editing title`() {
+    fun `edit mode shows Save changes, Cancel, and Editing title`() {
         setContentWithEditMode(state(), isEditing = true)
 
         composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
             .assertTextContains("Save changes")
         composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
-            .assertTextContains("Discard")
+            .assertTextContains("Cancel")
         composeRule.onNodeWithText("Editing sample").assertIsDisplayed()
         composeRule.onNodeWithText("Editing").assertDoesNotExist()
     }
 
     @Test
-    fun `discard in edit mode cancels without a frame deletion dialog`() {
+    fun `cancel in edit mode closes without a frame deletion dialog`() {
         val r = setContentWithEditMode(state(), isEditing = true)
 
         sheetNode(VerifyTestTags.SHEET_SECONDARY_ACTION).performClick()

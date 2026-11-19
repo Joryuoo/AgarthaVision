@@ -533,7 +533,9 @@ private fun VerificationSheetFooter(
                 primaryLabel = stringResource(
                     if (isEditing) R.string.verify_action_save_changes else R.string.verify_action_submit,
                 ),
-                secondaryLabel = stringResource(R.string.verify_action_discard),
+                secondaryLabel = stringResource(
+                    if (isEditing) R.string.verify_cancel else R.string.verify_action_discard,
+                ),
                 onPrimaryClick = onSubmit,
                 onSecondaryClick = onDiscard,
                 primaryLoading = state.isSubmitting,
