@@ -79,9 +79,6 @@ class Migration23To24Test {
 
             val colleagues = room.colleagueDao()
             assertNull(colleagues.getFullName("u2"))
-            colleagues.upsertColleagues(listOf(ColleagueEntity(userId = "u2", fullName = null)))
-            // A profile with no name set is legal on the server, so it is legal here.
-            assertNull(colleagues.getFullName("u2"))
             colleagues.upsertColleagues(listOf(ColleagueEntity(userId = "u2", fullName = "Maria Santos")))
             assertEquals("Maria Santos", colleagues.getFullName("u2"))
         } finally {

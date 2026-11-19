@@ -35,7 +35,7 @@ class ProfileRemoteDataSource @Inject constructor(
     @Serializable
     private data class ColleagueRow(
         @SerialName("id") val id: String,
-        @SerialName("full_name") val fullName: String? = null,
+        @SerialName("full_name") val fullName: String,
     )
 
     private companion object {
