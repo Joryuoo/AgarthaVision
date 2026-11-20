@@ -44,9 +44,9 @@ class SupabaseAuthRepository @Inject constructor(
             val userId = preferences[USER_ID_KEY] ?: return@map null
             val email = preferences[EMAIL_KEY].orEmpty()
             val displayName = preferences[DISPLAY_NAME_KEY]
-                ?.takeIf { it.isNotBlank() }
-                ?: email.substringBefore('@').takeIf { it.isNotBlank() }
-                ?: "Medtech"
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: LocalIdentity.PENDING_PROFILE_PLACEHOLDER
             LocalIdentity(
                 userId = userId,
                 email = email,

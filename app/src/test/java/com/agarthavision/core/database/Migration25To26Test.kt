@@ -58,7 +58,7 @@ class Migration25To26Test {
         try {
             val colleagues = room.colleagueDao()
             assertEquals("Maria Santos", colleagues.getFullName("u1"))
-            assertEquals("Medtech", colleagues.getFullName("u2"))
+            assertEquals("Pending Profile Setup", colleagues.getFullName("u2"))
 
             colleagues.upsertColleagues(listOf(ColleagueEntity(userId = "u3", fullName = "Juan dela Cruz")))
             assertEquals("Juan dela Cruz", colleagues.getFullName("u3"))

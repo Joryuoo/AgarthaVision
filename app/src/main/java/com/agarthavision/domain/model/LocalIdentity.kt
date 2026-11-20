@@ -12,6 +12,10 @@ data class LocalIdentity(
     val userId: String,
     /** Email the user signed in with; shown in the Dashboard account state. */
     val email: String,
-    /** Medtech's required full name (14zcqntx3v6). Defaults to email prefix if not supplied. */
-    val displayName: String = email.substringBefore('@'),
-)
+    /** Medtech's required full name (14zcqntx3v6). Defaults to [PENDING_PROFILE_PLACEHOLDER] if not supplied. */
+    val displayName: String = PENDING_PROFILE_PLACEHOLDER,
+) {
+    companion object {
+        const val PENDING_PROFILE_PLACEHOLDER = "Pending Profile Setup"
+    }
+}

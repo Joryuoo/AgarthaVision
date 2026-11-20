@@ -37,7 +37,7 @@ class LocalIdentityCacheTest {
     }
 
     @Test
-    fun `observeLocalIdentity reflects a cached user id and email`() = runTest {
+    fun `observeLocalIdentity falls back to pending profile placeholder when display name is missing`() = runTest {
         fakeDataStore.state.value = mutablePreferencesOf(
             USER_ID_KEY to "user-123",
             EMAIL_KEY to "medtech@citu.edu",
@@ -47,16 +47,62 @@ class LocalIdentityCacheTest {
             .map { prefs ->
                 prefs[USER_ID_KEY]?.let { id ->
                     val email = prefs[EMAIL_KEY].orEmpty()
+                    val displayName = prefs[DISPLAY_NAME_KEY]
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: LocalIdentity.PENDING_PROFILE_PLACEHOLDER
                     LocalIdentity(
                         userId = id,
                         email = email,
-                        displayName = prefs[DISPLAY_NAME_KEY] ?: email.substringBefore('@'),
+                        displayName = displayName,
                     )
                 }
             }
             .first()
 
-        assertEquals(LocalIdentity(userId = "user-123", email = "medtech@citu.edu", displayName = "medtech"), identity)
+        assertEquals(
+            LocalIdentity(
+                userId = "user-123",
+                email = "medtech@citu.edu",
+                displayName = LocalIdentity.PENDING_PROFILE_PLACEHOLDER,
+            ),
+            identity,
+        )
+    }
+
+    @Test
+    fun `observeLocalIdentity reflects a cached display name when present`() = runTest {
+        fakeDataStore.state.value = mutablePreferencesOf(
+            USER_ID_KEY to "user-123",
+            EMAIL_KEY to "medtech@citu.edu",
+            DISPLAY_NAME_KEY to "Maria Santos",
+        )
+
+        val identity = fakeDataStore.data
+            .map { prefs ->
+                prefs[USER_ID_KEY]?.let { id ->
+                    val email = prefs[EMAIL_KEY].orEmpty()
+                    val displayName = prefs[DISPLAY_NAME_KEY]
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: LocalIdentity.PENDING_PROFILE_PLACEHOLDER
+                    LocalIdentity(
+                        userId = id,
+                        email = email,
+                        displayName = displayName,
+                    )
+                }
+            }
+            .first()
+
+        assertEquals(
+            LocalIdentity(
+                userId = "user-123",
+                email = "medtech@citu.edu",
+                displayName = "Maria Santos",
+            ),
+            identity,
+        )
     }
 
     private companion object {

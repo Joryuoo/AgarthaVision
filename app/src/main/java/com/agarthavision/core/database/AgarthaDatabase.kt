@@ -137,7 +137,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * a patient rather than describing exactly one session. `MIGRATION_24_25` rebuilds the table.
  *
  * Version 26 requires non-null `colleagues.full_name` (14zcqntx3v6, `0019_require_profile_full_name.sql`).
- * `MIGRATION_25_26` rebuilds the table and backfills any null rows to 'Medtech'.
+ * `MIGRATION_25_26` rebuilds the table and backfills any null rows to 'Pending Profile Setup'.
  */
 @Database(
     entities = [
