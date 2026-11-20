@@ -75,7 +75,36 @@ Prior to writing a report row to the database or saving a final PDF file to devi
 Both single-session and multi-session patient PDFs share a redesigned clinical document design:
 - **Chrome & Header:** `PdfChrome.kt::PdfChrome` renders a branded clinical header including an email-derived organization label (`ReportOrganizationUtils.kt::deriveOrganizationFromEmail`, e.g. "DEPARTMENT OF HEALTH" or healthcare facility domain), document title, generation timestamp, and medtech credentials.
 - **Microscopy Results Hero Card:** Rendered with deep maroon brand styling displaying identified species rows, Low Power Field density ranges (`min..max / LPF`), qualitative descriptors, and high-visibility parasite burden level pill badges (`ReportSpeciesRows.kt::buildReportSpeciesRows`, `PdfChrome.kt::PdfChrome`).
+- **Authenticity QR Code:** Rendered parallel to the medtech reviewer sign-off block on the summary page. Encodes a direct verification URL (`ReportVerificationUrlBuilder.kt::ReportVerificationUrlBuilder`) allowing attending physicians to attest document authenticity directly with a phone camera.
 - **Sample Image Appendix:** When `includeSampleImages = true`, verified field images are laid out in a balanced 2×2 grid per appendix page (`ReportOrganizationUtils.kt::buildAppendixSamples`), complete with field IDs, timestamps, and human-verified egg detections (`verdict != DetectionVerdict.FALSE_POSITIVE`, covering `CONFIRMED`, `WRONG_CLASS`, and `BOX_INCORRECT` with species resolved from `expertClass ?: classLabel` to match `DetectionDao.kt::getConfirmedEggCountsForSession`), powered by `AndroidReportPdfRenderer.kt::AndroidReportPdfRenderer` and `AndroidPatientReportPdfRenderer.kt::AndroidPatientReportPdfRenderer`.
+
+## QR Authenticity Verification Flow (Doctor Verification)
+
+Per consultation with Dr. Bayron (86d4a6jzt), because reports are delivered directly to patients without requiring them to physically return to the laboratory, a QR code on the PDF report provides independent authenticity attestation to the attending physician.
+
+### 1. What the QR Code Encodes
+- **Target URL:** An admin web endpoint (`REPORT_VERIFICATION_BASE_URL`, configured via `local.properties` / `BuildConfig`, default `https://agarthavision.vercel.app/verify/report`) resolvable by any smartphone camera.
+- **Payload Shape:**
+  - `id`: The report UUID (`ReportEntity.report_id`).
+  - `session`: The session UUID (`SessionEntity.session_id`, session reports only).
+  - `patient`: The patient UUID (`PatientEntity.patient_id`, patient reports only).
+  - `ts`: The exact generation epoch timestamp (`generated_at`).
+- **Cryptographic & Key Constraint (C10):** The APK never holds a signing secret or private key. Attestation is resolved server-side by the Admin Website verifier (86d43e3vu), which queries Supabase and compares what the physical PDF claims against the authoritative stored database record.
+
+### 2. What the Physician Sees (Scan Flow & Verification States)
+When the doctor scans the QR code with a smartphone camera:
+1. **Verified / Genuine (Green):**
+   - The report ID exists in Supabase, matches the examined session/patient, and the stored results (eggs confirmed, species LPF ranges, examining medtech, facility name, and timestamp) match the PDF.
+   - The doctor confirms the paper/PDF document has not been altered or fabricated between the laboratory and the consultation.
+2. **Tampered / Altered Record (Red Warning):**
+   - The report ID exists, but the physical PDF claims differ from the authoritative record stored in Supabase (e.g. egg counts modified, species changed, or timestamps conflicting).
+   - The verifier displays a prominent fraud alert with the authoritative database values alongside the discrepancy.
+3. **Unknown / Unrecognized Record (Gray Alert):**
+   - The report ID cannot be found in the database.
+   - The verifier informs the physician that the document ID is unrecognized and cannot be authenticated.
+4. **Offline / Pending Sync (Amber Notice):**
+   - When a report was generated on a field device while offline (`supabase_status == 'pending'`) and has not yet completed its background sync (`SyncReportUseCase` / `SyncScheduler`), the record has not yet reached the server.
+   - The verifier explicitly distinguishes this from forgery: it displays a pending synchronization advisory advising the physician to verify with the issuing facility if the smear was recently performed in an offline field clinic.
 
 ## Live LPF, without a report
 
