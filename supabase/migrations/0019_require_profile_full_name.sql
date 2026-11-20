@@ -16,13 +16,15 @@
 --
 -- ── What this does ───────────────────────────────────────────────────────────
 -- 1. Backfills any existing profiles where `full_name` is null or blank using
---    `auth.users.raw_user_meta_data->>'full_name'`, falling back to the email
---    username prefix, and finally 'Medtech' so no existing medtech is locked out.
+--    `auth.users.raw_user_meta_data->>'full_name'`, falling back to a designated
+--    placeholder 'Pending Profile Setup' (never leaking email handles). Profiles needing
+--    real names can be found with `WHERE full_name = 'Pending Profile Setup'`.
 -- 2. Enforces `NOT NULL` on `profiles.full_name` and adds a check constraint
 --    ensuring `trim(full_name) <> ''`.
--- 3. Updates `handle_new_user()` to extract `full_name` from the new user's metadata
---    (`raw_user_meta_data->>'full_name'` or `'name'`), and raises an explicit error
---    ('A full name is required for every medtech profile.') if missing or blank.
+-- 3. Updates `handle_new_user()` to extract `full_name` from `raw_user_meta_data->>'full_name'`
+--    or default to 'Pending Profile Setup' without failing, allowing the profile to exist
+--    briefly during onboarding invitation acceptance (`auth.admin.createUser`) before the accept
+--    RPC (`console_accept_invitation`) updates the profile with the user's entered full_name.
 -- 4. Secures execute privileges on `handle_new_user()` consistent with 0017.
 
 begin;
@@ -31,9 +33,7 @@ begin;
 update public.profiles p
 set full_name = coalesce(
     nullif(trim(u.raw_user_meta_data->>'full_name'), ''),
-    nullif(trim(u.raw_user_meta_data->>'name'), ''),
-    nullif(trim(split_part(u.email, '@', 1)), ''),
-    'Medtech'
+    'Pending Profile Setup'
 )
 from auth.users u
 where p.id = u.id
@@ -41,7 +41,7 @@ where p.id = u.id
 
 -- Fallback for any orphaned profiles without matching auth.users (e.g. deleted logins per 0011)
 update public.profiles
-set full_name = 'Medtech'
+set full_name = 'Pending Profile Setup'
 where full_name is null or trim(full_name) = '';
 
 -- 2. Enforce NOT NULL and non-blank check constraint
@@ -50,23 +50,19 @@ alter table public.profiles
     add constraint profiles_full_name_not_blank check (trim(full_name) <> '');
 
 -- 3. Update handle_new_user trigger function
+-- Inserts a profile for new auth.users rows without raising exceptions so console invitation
+-- acceptance (auth.admin.createUser) and dashboard additions do not abort. If full_name is
+-- absent in raw_user_meta_data, defaults to 'Pending Profile Setup' so the row satisfies NOT NULL
+-- until the accept RPC (console_accept_invitation) updates it with the entered full_name.
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
     v_full_name text;
 begin
-    v_full_name := trim(coalesce(
-        new.raw_user_meta_data->>'full_name',
-        new.raw_user_meta_data->>'name'
-    ));
-
-    if v_full_name is null or v_full_name = '' then
-        raise exception 'A full name is required for every medtech profile.'
-            using errcode = '23502'; -- not_null_violation
-    end if;
+    v_full_name := nullif(trim(new.raw_user_meta_data->>'full_name'), '');
 
     insert into public.profiles (id, account_id, full_name)
-    values (new.id, new.id::text, v_full_name);
+    values (new.id, new.id::text, coalesce(v_full_name, 'Pending Profile Setup'));
 
     return new;
 end;
