@@ -248,6 +248,24 @@ class AndroidReportPdfRendererTest {
         assertValidPdf(bytes, expectedPages = 2)
     }
 
+    @Test
+    fun `render with verificationUrl renders authenticity QR code on summary page`() = runTest {
+        val doc = createDocument(
+            verificationUrl = "https://agarthavision.vercel.app/verify/report?id=rep-1&session=sess-1&ts=1762344000",
+        )
+        val bytes = renderer.render(doc)
+
+        assertValidPdf(bytes, expectedPages = 1)
+    }
+
+    @Test
+    fun `render without verificationUrl renders summary page cleanly`() = runTest {
+        val doc = createDocument(verificationUrl = null)
+        val bytes = renderer.render(doc)
+
+        assertValidPdf(bytes, expectedPages = 1)
+    }
+
     private fun assertValidPdf(bytes: ByteArray, expectedPages: Int) {
         assertNotNull(bytes)
         assertTrue("PDF bytes must not be empty", bytes.isNotEmpty())
@@ -264,6 +282,8 @@ class AndroidReportPdfRendererTest {
         appendixSamples: List<ReportPdfSampleItem> = emptyList(),
         organizationName: String? = "Health Unit",
         generatedByEmail: String? = "medtech@example.com",
+        verificationUrl: String? = "https://agarthavision.vercel.app/verify/report" +
+            "?id=rep-12345678-abcd&session=sess-12345678-efgh&ts=1762344000",
     ): ReportPdfDocument {
         return ReportPdfDocument(
             header = ReportPdfHeader(
@@ -281,6 +301,7 @@ class AndroidReportPdfRendererTest {
                 generatedAt = Instant.parse("2026-11-05T12:00:00Z"),
                 totalEggsConfirmed = speciesRows.sumOf { it.max },
                 positiveSpecies = speciesRows.map { it.speciesDisplayName },
+                verificationUrl = verificationUrl,
             ),
             speciesRows = speciesRows,
             appendixSamples = appendixSamples,
