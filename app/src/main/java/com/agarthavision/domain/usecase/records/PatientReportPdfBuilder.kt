@@ -41,6 +41,11 @@ class PatientReportPdfBuilder @Inject constructor() {
         appendixSamples: List<ReportPdfSampleItem> = emptyList(),
     ): PatientReportPdfDocument {
         val appendixPageCount = if (config.includeSampleImages) appendixPageCount(appendixSamples.size) else 0
+        val verificationUrl = ReportVerificationUrlBuilder.buildPatientReportUrl(
+            reportId = reportId,
+            patientId = null,
+            generatedAt = generatedAt,
+        )
         val header = PatientReportPdfHeader(
             reportId = reportId,
             patientDisplayName = patientDisplayName,
@@ -59,6 +64,7 @@ class PatientReportPdfBuilder @Inject constructor() {
             positiveSpecies = positiveSpecies,
             includeSampleImages = config.includeSampleImages,
             totalPages = 1 + appendixPageCount,
+            verificationUrl = verificationUrl,
         )
         return PatientReportPdfDocument(
             header = header,

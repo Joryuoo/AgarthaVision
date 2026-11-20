@@ -146,6 +146,8 @@ class ReportPdfBuilderTest {
                 generatedAt = generatedAt,
                 totalEggsConfirmed = TOTAL_EGGS_CONFIRMED,
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
+                verificationUrl = "https://agarthavision.vercel.app/verify/report" +
+                    "?id=report-1&session=session-1&ts=${generatedAt.epochSecond}",
             ),
             speciesRows = listOf(
                 ReportPdfSpeciesRow(

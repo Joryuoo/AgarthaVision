@@ -40,6 +40,11 @@ class ReportPdfBuilder @Inject constructor() {
         } else {
             1
         }
+        val verificationUrl = ReportVerificationUrlBuilder.buildSessionReportUrl(
+            reportId = metadata.reportId,
+            sessionId = metadata.session.id,
+            generatedAt = metadata.generatedAt,
+        )
         val header = ReportPdfHeader(
             reportId = metadata.reportId,
             sessionId = metadata.session.id,
@@ -57,6 +62,7 @@ class ReportPdfBuilder @Inject constructor() {
             positiveSpecies = metadata.positiveSpecies,
             includeSampleImages = config.includeSampleImages,
             totalPages = totalPages,
+            verificationUrl = verificationUrl,
         )
         return ReportPdfDocument(
             header = header,
