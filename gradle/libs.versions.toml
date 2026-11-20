@@ -33,6 +33,7 @@ supabase = "3.0.3"
 ktor = "3.0.3"
 litert = "2.2.0"
 biometric = "1.2.0-alpha05"
+zxing = "3.5.3"
 
 [libraries]
 # Compose
@@ -129,6 +130,7 @@ foundation-layout = { group = "androidx.compose.foundation", name = "foundation-
 # On-device inference (LiteRT, formerly TensorFlow Lite). The CompiledModel API carries the GPU
 # accelerator built in, so no separate gpu artifact is needed.
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
