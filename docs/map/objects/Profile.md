@@ -56,10 +56,13 @@ login no longer reaches one. They are `patient_users.user_id` and the console's
 Auto-creation: `handle_new_user()` inserts a profile on every `auth.users` insert —
 `supabase/migrations/0001_init.sql:42-52` — since 0011 with `account_id = id`
 (`0011_profile_outlives_login.sql:66-73`), since 0014 naming no role, so `role` takes its
-default (`0014_super_admins.sql:142-148`), and since 0019 requiring non-blank `full_name` from
-auth metadata (`raw_user_meta_data->>'full_name'`), raising an exception if missing or blank
-(`0019_require_profile_full_name.sql`, 14zcqntx3v6). `handle_deleted_user()` sets `account_id` to null when
-a login is deleted (`:75-87`).
+default (`0014_super_admins.sql:142-148`), and since 0019 populating `full_name` from
+auth metadata (`raw_user_meta_data->>'full_name'`), defaulting to `'Pending Profile Setup'`
+when metadata is absent (`0019_require_profile_full_name.sql`, 14zcqntx3v6). This ensures
+admin console invitation acceptance (`auth.admin.createUser`) and dashboard user additions succeed
+without trigger exceptions, satisfying `NOT NULL` and non-blank check constraints while the
+invitation accept RPC (`console_accept_invitation`) updates the profile with the user's entered full name.
+`handle_deleted_user()` sets `account_id` to null when a login is deleted (`:75-87`).
 
 **Nothing reads `account_id` yet.** Every policy still compares `auth.uid()` with `profiles.id`
 and the `user_id` columns, which holds while each profile's id equals its login id. Reconnecting
@@ -118,8 +121,11 @@ colleagues, filled by the pull (`data/supabase/ProfileRemoteDataSource.kt::fetch
 the ids `ColleagueDao::getColleagueIdsOnLinkedPatients` reads off the device, so an org admin's
 phone never lists their laboratory's staff) and read through `ColleagueRepository`. It is a
 label, never a permission. With 0019 (`0019_require_profile_full_name.sql`) enforcing non-blank
-names and trigger validation, colleagues have guaranteed names and UI "another medtech" fallbacks
-have been retired (14zcqntx3v6).
+names across profiles with a graceful placeholder fallback ('Pending Profile Setup') and
+`ProfileRemoteDataSource` using nullable DTO decoding (`fullName: String? = null`), colleague
+synchronization remains fault-tolerant regardless of client-migration rollout order, and UI
+"another medtech" fallbacks have been retired (14zcqntx3v6). Profiles awaiting full name completion
+can be audited in Supabase via `WHERE full_name = 'Pending Profile Setup'`.
 
 ## Connected to
 

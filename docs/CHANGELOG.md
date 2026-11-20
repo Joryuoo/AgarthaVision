@@ -15,8 +15,9 @@ Verify any entry with `git log --oneline --reverse`.
 
 ### Require non-empty full_name across database, Room schema, and authorship notes · `14zcqntx3v6`
 
-- **Database migration `0019_require_profile_full_name.sql`.** Backfills null or blank `full_name` fields on existing profiles, sets `profiles.full_name` to `NOT NULL` with a `CHECK (trim(full_name) <> '')` constraint, and updates `handle_new_user()` to extract `full_name` from auth metadata and raise a clear exception (`A full name is required for every medtech profile.`) if missing or blank.
+- **Database migration `0019_require_profile_full_name.sql`.** Backfills null or blank `full_name` fields on existing profiles with `'Pending Profile Setup'` (omitting email prefix derivations), sets `profiles.full_name` to `NOT NULL` with a `CHECK (trim(full_name) <> '')` constraint, and updates `handle_new_user()` to default to `'Pending Profile Setup'` when metadata is missing so Admin Console onboarding invitations and dashboard creations succeed without aborting before accept RPCs run.
 - **Room migration `MIGRATION_25_26` & `ColleagueEntity`.** Rebuilds the `colleagues` table with `full_name TEXT NOT NULL`, bumps Room database version to 26, and exports schema `26.json`.
+- **Fault-tolerant network decoding & identity fallbacks.** Updates `ProfileRemoteDataSource` to decode `fullName: String? = null` at the network boundary, falling back to `LocalIdentity.PENDING_PROFILE_PLACEHOLDER` so colleague sync never crashes if the mobile build is deployed before the manual database migration is applied. Removes email-prefix derivation from `LocalIdentity` and `SupabaseAuthRepository`.
 - **Domain & use-case guarantees.** Guarantees non-null `displayName` in `LocalIdentity` and `RecordAuthor.Colleague(name: String)`, removing obsolete "Recorded by another medtech" fallbacks across UI screens, author notes, and strings.
 - **Documentation & test coverage.** Documents constraints in `docs/map/objects/Profile.md`, adds `Migration25To26Test`, and updates schema test assertions.
 
