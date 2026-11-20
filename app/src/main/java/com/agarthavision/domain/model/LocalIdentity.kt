@@ -14,4 +14,6 @@ data class LocalIdentity(
     val email: String,
     /** Optional display name copied from auth metadata when available. */
     val displayName: String? = null,
+    /** Last known branding for the signed-in medtech's active laboratory. */
+    val laboratory: LaboratoryBranding? = null,
 )

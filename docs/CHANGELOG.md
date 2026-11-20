@@ -11,6 +11,14 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/offline-laboratory-branding · 2026-11-17
+
+The signed-in identity carries its laboratory's name and optional PNG logo after a
+successful sign-in or online sync (14zcqntx3v7). The app fetches only the account's own
+active laboratory and keeps the last successful result for offline use. Signing out or
+switching accounts clears the previous account's branding. The read uses the admin
+repository's migration 0024 (`docs/map/processes/sign-in.md`).
+
 ## fix/login-deactivated-laboratory-message — sign-in explains a deactivated laboratory · 2026-11-10
 
 ### Replace "User is banned" with a plain message at sign-in · `14zcqnttvpa`

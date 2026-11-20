@@ -1,9 +1,7 @@
 package com.agarthavision.data.repository
 
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
+import com.agarthavision.core.util.Logger
+import com.agarthavision.data.supabase.LaboratoryBrandingRemoteDataSource
 import com.agarthavision.domain.model.HumanCheckRejectedException
 import com.agarthavision.domain.model.LaboratoryAccessInactiveException
 import com.agarthavision.domain.model.LocalIdentity
@@ -18,7 +16,7 @@ import io.github.jan.supabase.exceptions.RestException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.io.IOException
@@ -33,24 +31,16 @@ import javax.inject.Inject
  */
 class SupabaseAuthRepository @Inject constructor(
     private val supabaseProvider: dagger.Lazy<SupabaseClient>,
-    private val dataStore: DataStore<Preferences>,
+    private val identityCache: LocalIdentityCache,
     private val sessionLock: AuthSessionLock,
+    private val brandingRemote: LaboratoryBrandingRemoteDataSource,
 ) : AuthRepository {
 
     private val supabase: SupabaseClient get() = supabaseProvider.get()
 
-    override fun observeLocalIdentity(): Flow<LocalIdentity?> =
-        dataStore.data.map { preferences ->
-            val userId = preferences[USER_ID_KEY] ?: return@map null
-            LocalIdentity(
-                userId = userId,
-                email = preferences[EMAIL_KEY].orEmpty(),
-                displayName = preferences[DISPLAY_NAME_KEY],
-            )
-        }
+    override fun observeLocalIdentity(): Flow<LocalIdentity?> = identityCache.observeIdentity()
 
-    override suspend fun currentLocalUserId(): String? =
-        dataStore.data.first()[USER_ID_KEY]
+    override suspend fun currentLocalUserId(): String? = identityCache.currentUserId()
 
     override suspend fun isAuthenticated(): Boolean {
         supabase.auth.awaitInitialization()
@@ -74,7 +64,12 @@ class SupabaseAuthRepository @Inject constructor(
             if (error.isBannedRefusal()) throw LaboratoryAccessInactiveException(error)
             throw error
         }
-        cacheIdentity(email)
+        val user = supabase.auth.currentUserOrNull() ?: return
+        val displayName = user.userMetadata?.get("full_name")?.jsonPrimitive?.contentOrNull
+        identityCache.saveIdentity(user.id, email, displayName)
+        // Give the medtech a chance to leave the clinic with branding already on the device.
+        // The normal sync pass can retry without holding up sign-in on a slow connection.
+        withTimeoutOrNull(SIGN_IN_BRANDING_TIMEOUT_MILLIS) { refreshLaboratoryBranding() }
     }
 
     override suspend fun getCurrentUserId(): String? = supabase.auth.currentUserOrNull()?.id
@@ -117,40 +112,40 @@ class SupabaseAuthRepository @Inject constructor(
     private suspend fun signedInEmail(): String? {
         supabase.auth.awaitInitialization()
         return supabase.auth.currentUserOrNull()?.email?.takeIf { it.isNotBlank() }
-            ?: dataStore.data.first()[EMAIL_KEY]?.takeIf { it.isNotBlank() }
+            ?: identityCache.observeIdentity().first()?.email?.takeIf { it.isNotBlank() }
     }
 
     override suspend fun signOut() {
         // Identity first, then the Supabase session. A cached identity with no Supabase session
         // is what SupabaseAccountAccessRepository reads as "the server refused this account"
         // (14zcqntjph8), so the medtech's own sign-out must never pass through that state.
-        dataStore.edit { preferences ->
-            preferences.remove(USER_ID_KEY)
-            preferences.remove(EMAIL_KEY)
-            preferences.remove(DISPLAY_NAME_KEY)
-        }
+        identityCache.clear()
         runCatching { supabase.auth.signOut() }
     }
 
-    /** Persists the signed-in user's identity for offline attribution. */
-    private suspend fun cacheIdentity(email: String) {
-        val user = supabase.auth.currentUserOrNull() ?: return
-        val displayName = user.userMetadata?.get("full_name")?.jsonPrimitive?.contentOrNull
-        dataStore.edit { preferences ->
-            preferences[USER_ID_KEY] = user.id
-            preferences[EMAIL_KEY] = email
-            if (displayName.isNullOrBlank()) {
-                preferences.remove(DISPLAY_NAME_KEY)
-            } else {
-                preferences[DISPLAY_NAME_KEY] = displayName
+    /** Updates the offline snapshot after sign-in and during online sync. */
+    internal suspend fun refreshLaboratoryBranding() {
+        runCatching {
+            sessionLock.withLock {
+                supabase.auth.awaitInitialization()
+                val session = supabase.auth.currentSessionOrNull() ?: return@withLock
+                val userId = session.user?.id ?: return@withLock
+                if (identityCache.currentUserId() != userId) return@withLock
+
+                val branding = brandingRemote.fetch()
+                identityCache.saveLaboratory(userId, branding) {
+                    supabase.auth.currentSessionOrNull()?.accessToken == session.accessToken
+                }
             }
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            Logger.w(TAG, "Laboratory branding refresh failed (${error.javaClass.simpleName})")
         }
     }
 
     private companion object {
-        val USER_ID_KEY = stringPreferencesKey("local_identity_user_id")
-        val EMAIL_KEY = stringPreferencesKey("local_identity_email")
-        val DISPLAY_NAME_KEY = stringPreferencesKey("local_identity_display_name")
+        const val TAG = "SupabaseAuthRepository"
+        const val SIGN_IN_BRANDING_TIMEOUT_MILLIS = 2_500L
     }
 }
 
