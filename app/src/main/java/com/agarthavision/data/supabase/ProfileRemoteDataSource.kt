@@ -1,6 +1,7 @@
 package com.agarthavision.data.supabase
 
 import com.agarthavision.data.local.entity.ColleagueEntity
+import com.agarthavision.domain.model.LocalIdentity
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
@@ -30,12 +31,18 @@ class ProfileRemoteDataSource @Inject constructor(
     suspend fun fetchColleagues(colleagueIds: List<String>): List<ColleagueEntity> =
         supabase.postgrest[PROFILES_TABLE].select(Columns.list("id", "full_name")) {
             filter { isIn("id", colleagueIds) }
-        }.decodeList<ColleagueRow>().map { ColleagueEntity(userId = it.id, fullName = it.fullName) }
+        }.decodeList<ColleagueRow>().map {
+            ColleagueEntity(
+                userId = it.id,
+                fullName = it.fullName?.trim()?.takeIf { name -> name.isNotEmpty() }
+                    ?: LocalIdentity.PENDING_PROFILE_PLACEHOLDER,
+            )
+        }
 
     @Serializable
-    private data class ColleagueRow(
+    internal data class ColleagueRow(
         @SerialName("id") val id: String,
-        @SerialName("full_name") val fullName: String,
+        @SerialName("full_name") val fullName: String? = null,
     )
 
     private companion object {
