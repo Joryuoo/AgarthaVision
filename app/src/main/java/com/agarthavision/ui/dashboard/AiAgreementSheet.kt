@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.domain.model.AgreementBreakdown
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 
@@ -32,6 +33,7 @@ fun AiAgreementSheet(
     breakdown: AgreementBreakdown,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = AgarthaTheme.colors
 

@@ -204,9 +204,10 @@ class VerificationPendingInferenceTest {
                 ModelOutput.Read(listOf(ModelSpeciesCount("Ascaris lumbricoides", 1)), total = 1),
                 state.frame!!.modelOutput(),
             )
-            // Seeded from the model's box, exactly as a frame opened ready would be.
+            // Detections open unanswered, exactly as a frame opened ready would be.
             assertEquals(1, state.findings.size)
-            assertEquals(EggSpecies.ASCARIS, state.findings[0].answers.species)
+            assertNull(state.findings[0].answers.species)
+            assertNull(state.findings[0].answers.isEgg)
             assertFalse(state.hasUnsavedChanges)
         }
 

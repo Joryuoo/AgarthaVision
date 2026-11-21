@@ -33,6 +33,12 @@ fun formatPatientNameForReport(
 
 /**
  * Builds the per-sample appendix list for PDF reports.
+ *
+ * Includes every human-verified positive detection ([DetectionVerdict.CONFIRMED],
+ * [DetectionVerdict.WRONG_CLASS], and [DetectionVerdict.BOX_INCORRECT]) and excludes rejected
+ * model predictions ([DetectionVerdict.FALSE_POSITIVE]), matching
+ * [com.agarthavision.domain.repository.DetectionRepository.getConfirmedEggCountsForSession] and
+ * Sample Detail's counted findings.
  */
 fun buildAppendixSamples(
     samples: List<Sample>,
@@ -42,14 +48,14 @@ fun buildAppendixSamples(
     noParasitesSummary: String = "No parasites detected",
 ): List<ReportPdfSampleItem> {
     return samples.mapIndexed { index, sample ->
-        val confirmedDetections = detectionsBySample[sample.id].orEmpty()
-            .filter { it.verdict == DetectionVerdict.CONFIRMED }
-        val eggCount = confirmedDetections.size
+        val verifiedDetections = detectionsBySample[sample.id].orEmpty()
+            .filter { it.verdict != DetectionVerdict.FALSE_POSITIVE }
+        val eggCount = verifiedDetections.size
         val findingsSummary = if (eggCount == 0) {
             noParasitesSummary
         } else {
-            confirmedDetections.map { det ->
-                val label = det.expertClass ?: det.classLabel
+            verifiedDetections.map { det ->
+                val label = det.expertClass?.takeIf { it.isNotBlank() } ?: det.classLabel
                 EggSpecies.fromClassLabel(label)?.canonicalClass ?: label
             }.distinct().joinToString(", ")
         }

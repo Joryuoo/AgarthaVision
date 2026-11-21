@@ -2,6 +2,7 @@ package com.agarthavision.ui.records
 
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
+import com.agarthavision.R
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.supabase.RestoreReportFilesUseCase
@@ -25,6 +26,7 @@ import com.agarthavision.domain.usecase.records.PreviewSessionReportUseCase
 import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.SessionSamplesResult
+import com.agarthavision.domain.usecase.records.UnverifiedReportFieldsException
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
 import com.agarthavision.domain.usecase.reports.SessionEggCounts
 import com.agarthavision.util.MainDispatcherRule
@@ -43,6 +45,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -292,11 +295,11 @@ class SessionDetailViewModelReportSheetTest {
         }
 
     @Test
-    fun `onBackToReportConfig transitions step back to CONFIGURATION`() =
+    fun `returning to report config resets both warning acknowledgments`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val patient = makePatient(PATIENT_ID, "Santos", "Maria")
             val fakePdf = byteArrayOf(9, 8, 7)
-            val (vm, harness) = createViewModel(patient = patient, sampleCount = 10)
+            val (vm, harness) = createViewModel(patient = patient, sampleCount = 4, unverifiedCount = 1)
             whenever(harness.previewUseCase.invoke(eq(SESSION_ID), any()))
                 .thenReturn(Result.success(fakePdf))
 
@@ -308,9 +311,26 @@ class SessionDetailViewModelReportSheetTest {
                 advanceUntilIdle()
                 assertEquals(ReportSheetStep.PREVIEW, expectMostRecentItem().reportSheet?.step)
 
+                vm.onAcknowledgeReportWarning(true)
+                vm.onAcknowledgeUnverifiedReportWarning(true)
+                advanceUntilIdle()
+                val acknowledgedSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertTrue(acknowledgedSheet.isWarningAcknowledged)
+                assertTrue(acknowledgedSheet.isUnverifiedWarningAcknowledged)
+
                 vm.onBackToReportConfig()
                 advanceUntilIdle()
-                assertEquals(ReportSheetStep.CONFIGURATION, expectMostRecentItem().reportSheet?.step)
+                val configSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertEquals(ReportSheetStep.CONFIGURATION, configSheet.step)
+                assertFalse(configSheet.isWarningAcknowledged)
+                assertFalse(configSheet.isUnverifiedWarningAcknowledged)
+
+                vm.onPreviewSessionReport()
+                advanceUntilIdle()
+                val previewSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                assertFalse(previewSheet.isWarningAcknowledged)
+                assertFalse(previewSheet.isUnverifiedWarningAcknowledged)
+                assertFalse(previewSheet.canGeneratePdf)
             }
         }
 
@@ -324,7 +344,7 @@ class SessionDetailViewModelReportSheetTest {
 
             whenever(harness.previewUseCase.invoke(eq(SESSION_ID), any()))
                 .thenReturn(Result.success(fakePdf))
-            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any()))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), anyOrNull()))
                 .thenReturn(Result.success(expectedReport))
 
             vm.events.test {
@@ -347,7 +367,7 @@ class SessionDetailViewModelReportSheetTest {
                 assertEquals(SessionDetailEvent.ReportGenerated(pdfPath = PDF_PATH), awaitItem())
             }
 
-            verify(harness.generateUseCase).invoke(eq(SESSION_ID), any())
+            verify(harness.generateUseCase).invoke(eq(SESSION_ID), any(), anyOrNull())
         }
 
     @Test
@@ -356,7 +376,7 @@ class SessionDetailViewModelReportSheetTest {
             val patient = makePatient(PATIENT_ID, "Santos", "Maria")
             val (vm, harness) = createViewModel(patient = patient, sampleCount = 10)
 
-            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any()))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), anyOrNull()))
                 .thenReturn(Result.failure(RuntimeException("Disk full error")))
 
             vm.state.test {
@@ -376,13 +396,72 @@ class SessionDetailViewModelReportSheetTest {
         }
 
     @Test
+    fun `changed unverified count clears the preview acknowledgment and requires a new one`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = makePatient(PATIENT_ID, "Santos", "Maria")
+            val (vm, harness) = createViewModel(patient = patient, sampleCount = 10, unverifiedCount = 1)
+            whenever(harness.previewUseCase.invoke(eq(SESSION_ID), any()))
+                .thenReturn(Result.success(byteArrayOf(1, 2, 3)))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), eq(1)))
+                .thenReturn(Result.failure(UnverifiedReportFieldsException(2)))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), eq(2)))
+                .thenReturn(Result.success(makeReport(SESSION_ID, PDF_PATH)))
+
+            vm.events.test {
+                vm.state.test {
+                    advanceUntilIdle()
+                    vm.onOpenGenerateReport()
+                    advanceUntilIdle()
+                    vm.onPreviewSessionReport()
+                    advanceUntilIdle()
+                    assertEquals(1, expectMostRecentItem().reportSheet?.unverifiedSampleCount)
+
+                    vm.onAcknowledgeUnverifiedReportWarning(true)
+                    vm.onFinalizeSessionReport()
+                    advanceUntilIdle()
+
+                    val sheet = requireNotNull(expectMostRecentItem().reportSheet)
+                    assertEquals(ReportSheetStep.PREVIEW, sheet.step)
+                    assertEquals(2, sheet.unverifiedSampleCount)
+                    assertFalse(sheet.isUnverifiedWarningAcknowledged)
+                    assertFalse(sheet.isGenerating)
+                    assertEquals(R.string.report_warning_unverified_fields_changed, sheet.errorRes)
+
+                    vm.onFinalizeSessionReport()
+                    advanceUntilIdle()
+                    verify(harness.generateUseCase, org.mockito.kotlin.never()).invoke(eq(SESSION_ID), any(), eq(2))
+
+                    vm.onAcknowledgeUnverifiedReportWarning(false)
+                    advanceUntilIdle()
+                    assertEquals(
+                        R.string.report_warning_unverified_fields_changed,
+                        vm.state.value.reportSheet?.errorRes,
+                    )
+
+                    vm.onAcknowledgeUnverifiedReportWarning(true)
+                    advanceUntilIdle()
+                    val acknowledgedSheet = requireNotNull(expectMostRecentItem().reportSheet)
+                    assertTrue(acknowledgedSheet.isUnverifiedWarningAcknowledged)
+                    assertNull(acknowledgedSheet.errorRes)
+
+                    vm.onFinalizeSessionReport()
+                    advanceUntilIdle()
+                    assertNull(expectMostRecentItem().reportSheet)
+                }
+                assertEquals(SessionDetailEvent.ReportGenerated(pdfPath = PDF_PATH), awaitItem())
+            }
+            verify(harness.generateUseCase).invoke(eq(SESSION_ID), any(), eq(1))
+            verify(harness.generateUseCase).invoke(eq(SESSION_ID), any(), eq(2))
+        }
+
+    @Test
     fun `generateReport delegates to onFinalizeSessionReport`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val patient = makePatient(PATIENT_ID, "Santos", "Maria")
             val expectedReport = makeReport(SESSION_ID, PDF_PATH)
             val (vm, harness) = createViewModel(patient = patient, sampleCount = 10)
 
-            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any()))
+            whenever(harness.generateUseCase.invoke(eq(SESSION_ID), any(), anyOrNull()))
                 .thenReturn(Result.success(expectedReport))
 
             vm.events.test {
@@ -432,6 +511,88 @@ class SessionDetailViewModelReportSheetTest {
             }
         }
 
+    @Test
+    fun `onDismissReportSheet with changed config requests discard confirmation and preserves settings`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = makePatient(PATIENT_ID, "Santos", "Maria")
+            val (vm, _) = createViewModel(patient = patient, sampleCount = 6)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val changedConfig = ReportConfig(
+                    includeSampleImages = true,
+                    patientNameOption = PatientNameOption.CENSOR,
+                )
+                vm.onUpdateReportConfig(changedConfig)
+                advanceUntilIdle()
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                val sheetAfterDismissAttempt = expectMostRecentItem().reportSheet
+                assertNotNull(sheetAfterDismissAttempt)
+                assertTrue(sheetAfterDismissAttempt?.showDiscardConfirm ?: false)
+                assertEquals(changedConfig, sheetAfterDismissAttempt?.config)
+                assertEquals(ReportSheetStep.CONFIGURATION, sheetAfterDismissAttempt?.step)
+
+                // Keeping the wizard open clears only the dialog and retains all selections
+                vm.onCancelDiscardReportSheet()
+                advanceUntilIdle()
+
+                val sheetAfterKeep = expectMostRecentItem().reportSheet
+                assertNotNull(sheetAfterKeep)
+                assertFalse(sheetAfterKeep?.showDiscardConfirm ?: true)
+                assertEquals(changedConfig, sheetAfterKeep?.config)
+
+                // Confirming discard closes the wizard, and reopening uses initial configuration
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+                assertTrue(expectMostRecentItem().reportSheet?.showDiscardConfirm ?: false)
+
+                vm.onConfirmDiscardReportSheet()
+                advanceUntilIdle()
+                assertNull(expectMostRecentItem().reportSheet)
+
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+                val reopened = expectMostRecentItem().reportSheet
+                assertNotNull(reopened)
+                assertEquals(ReportConfig(), reopened?.config)
+                assertFalse(reopened?.hasUnsavedChanges ?: true)
+                assertFalse(reopened?.showDiscardConfirm ?: true)
+            }
+        }
+
+    @Test
+    fun `returning session report config to initial values removes discard prompt requirement`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = makePatient(PATIENT_ID, "Santos", "Maria")
+            val (vm, _) = createViewModel(patient = patient, sampleCount = 6)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onUpdateReportConfig(ReportConfig(includeSampleImages = true))
+                advanceUntilIdle()
+                assertTrue(expectMostRecentItem().reportSheet?.hasUnsavedChanges ?: false)
+
+                // Revert back to initial values
+                vm.onUpdateReportConfig(ReportConfig())
+                advanceUntilIdle()
+                assertFalse(expectMostRecentItem().reportSheet?.hasUnsavedChanges ?: true)
+
+                // Now dismissing closes immediately without showing confirmation
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+                assertNull(expectMostRecentItem().reportSheet)
+            }
+        }
+
     // -------------------------------------------------------------------------
     // Test helpers & fixtures
     // -------------------------------------------------------------------------
@@ -454,6 +615,7 @@ class SessionDetailViewModelReportSheetTest {
         patient: Patient?,
         sampleCount: Int = 1,
         sessionResult: SessionSamplesResult? = null,
+        unverifiedCount: Int = 0,
     ): Pair<SessionDetailViewModel, MocksHarness> {
         val harness = MocksHarness()
 
@@ -495,7 +657,7 @@ class SessionDetailViewModelReportSheetTest {
         whenever(harness.observeReportCountUseCase.invoke(SESSION_ID))
             .thenReturn(flowOf(0))
         whenever(harness.observePendingCountUseCase.invoke(SESSION_ID))
-            .thenReturn(flowOf(0))
+            .thenReturn(flowOf(unverifiedCount))
         whenever(harness.sessionEggCountUseCase.invoke(any()))
             .thenReturn(Result.success(SessionEggCounts.empty()))
         whenever(harness.sessionManager.state)

@@ -84,17 +84,9 @@ class OpenVerificationTargetUseCase @Inject constructor(
             Finding(
                 prediction = prediction,
                 // The fallback covers an ordinal with no stored row — a sample opened before
-                // it was ever submitted. It seeds the same way `initialFindings` does rather
-                // than leaving the booleans null, because the questions are checkboxes now and
-                // a checkbox has no way to draw "unanswered": a null would render unchecked,
-                // which reads as "not an egg" — an answer nobody gave.
-                answers = stored?.toAnswers(prediction) ?: VerificationAnswers(
-                    isEgg = true,
-                    isBoxCorrect = true,
-                    speciesConfirmed = EggSpecies.fromClassLabel(prediction.classLabel)
-                        ?.let { true },
-                    species = EggSpecies.fromClassLabel(prediction.classLabel),
-                ),
+                // it was ever submitted. It seeds unanswered (empty VerificationAnswers) rather
+                // than pre-filling confirmation, requiring explicit action on each detection (14zcqntx3un).
+                answers = stored?.toAnswers(prediction) ?: VerificationAnswers(),
             )
         }
 

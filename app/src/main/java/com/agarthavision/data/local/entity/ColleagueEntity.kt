@@ -12,8 +12,7 @@ import androidx.room.PrimaryKey
  * session or report on a patient this medtech is assigned to. It exists so a read-only record
  * can say whose it is offline (14zcqntjph6); nothing here grants or checks access.
  *
- * [fullName] is nullable because `profiles.full_name` is: the profile trigger writes only the id
- * and role, so a colleague whose name was never set shows as "another medtech".
+ * [fullName] is required because `profiles.full_name` is non-null since 0019 (14zcqntx3v6).
  */
 @Entity(tableName = "colleagues")
 data class ColleagueEntity(
@@ -22,5 +21,5 @@ data class ColleagueEntity(
     val userId: String,
 
     @ColumnInfo(name = "full_name")
-    val fullName: String?,
+    val fullName: String,
 )

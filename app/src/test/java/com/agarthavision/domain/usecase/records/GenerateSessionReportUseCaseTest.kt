@@ -288,6 +288,39 @@ class GenerateSessionReportUseCaseTest {
     }
 
     @Test
+    fun `requires the current excluded field count before writing the session report`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val fileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val flagged = listOf(
+            reportSample(id = "pending-1", sessionId = "session-1", userId = "user-1"),
+            reportSample(id = "pending-2", sessionId = "session-1", userId = "user-1"),
+        ).map { it.copy(status = SampleStatus.FLAGGED) }
+        val useCase = standardUseCase(
+            reportRepository = reportRepository,
+            reportFileStore = fileStore,
+            renderer = renderer,
+            flagged = flagged,
+        )
+
+        val missing = useCase("session-1").exceptionOrNull() as UnverifiedReportFieldsException
+        val stale = useCase("session-1", acknowledgedUnverifiedCount = 1)
+            .exceptionOrNull() as UnverifiedReportFieldsException
+
+        assertEquals(2, missing.count)
+        assertEquals(2, stale.count)
+        assertNull(reportRepository.lastInserted)
+        assertNull(fileStore.lastPdfReportId)
+        assertEquals(0, renderer.renderCallCount)
+
+        val report = useCase("session-1", acknowledgedUnverifiedCount = 2).getOrThrow()
+
+        assertEquals(2, report.totalSamples)
+        assertEquals(3, report.totalEggsConfirmed)
+        assertEquals(report.id, fileStore.lastPdfReportId)
+    }
+
+    @Test
     fun `config patientNameOption formats patient name on report and pdf`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
@@ -341,6 +374,68 @@ class GenerateSessionReportUseCaseTest {
     }
 
     @Test
+    fun `appendix agrees with session findings after editing model species or box`() = runTest {
+        val renderer = FakeReportPdfRenderer()
+        val editedSample = reportSample(id = "sample-edited", sessionId = "session-1", userId = "user-1")
+        val negativeSample = reportSample(id = "sample-neg", sessionId = "session-1", userId = "user-1")
+        val detectionsBySample = mapOf(
+            "sample-edited" to listOf(
+                reportDetection(
+                    sampleId = "sample-edited",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.92f,
+                    verdict = DetectionVerdict.WRONG_CLASS,
+                    expertClass = "Trichuris trichiura",
+                ),
+            ),
+            "sample-neg" to listOf(
+                reportDetection(
+                    sampleId = "sample-neg",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.65f,
+                    verdict = DetectionVerdict.FALSE_POSITIVE,
+                ),
+            ),
+        )
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "sample-edited", "Trichuris trichiura", null, 1),
+        )
+        val useCase = GenerateSessionReportUseCase(
+            authRepository = ReportAuthRepository(userId = "user-1"),
+            sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
+            sampleRepository = ReportSampleRepository(samples = listOf(editedSample, negativeSample)),
+            detectionRepository = ReportDetectionRepository(
+                detectionsBySample = detectionsBySample,
+                eggCounts = listOf(EggCount("Trichuris trichiura", 1)),
+            ),
+            findingDao = mockFindingDao(findings),
+            patientRepository = FakePatientRepository(patient = patient()),
+            psgcRepository = FakePsgcRepository(barangay = barangay()),
+            reportRepository = FakeReportRepository(),
+            reportFileStore = FakeReportFileStore(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = renderer,
+            syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
+        )
+
+        val result = useCase("session-1", config = ReportConfig(includeSampleImages = true))
+
+        assertTrue(result.isSuccess)
+        val report = result.getOrThrow()
+        assertEquals(1, report.totalEggsConfirmed)
+        assertEquals(listOf("Trichuris trichiura"), report.positiveSpecies)
+
+        val doc = renderer.lastDocument!!
+        assertEquals(listOf("Trichuris trichiura"), doc.speciesRows.map { it.speciesDisplayName })
+        assertEquals(2, doc.appendixSamples.size)
+        assertEquals(1, doc.appendixSamples[0].eggCount)
+        assertEquals("Trichuris trichiura", doc.appendixSamples[0].findingsSummary)
+        assertEquals(0, doc.appendixSamples[1].eggCount)
+        assertEquals("No parasites detected", doc.appendixSamples[1].findingsSummary)
+    }
+
+    @Test
     fun `final pdf identity and data match persisted report`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
@@ -379,6 +474,7 @@ class GenerateSessionReportUseCaseTest {
         patient: Patient = patient(),
         barangay: PsgcBarangay? = barangay(),
         identity: LocalIdentity? = LocalIdentity(userId = "user-1", email = "medtech@example.com"),
+        flagged: List<Sample> = emptyList(),
     ): GenerateSessionReportUseCase {
         val findings = listOf(
             SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2),
@@ -392,6 +488,7 @@ class GenerateSessionReportUseCaseTest {
                     reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1"),
                     reportSample(id = "sample-2", sessionId = "session-1", userId = "user-1"),
                 ),
+                flagged = flagged,
             ),
             detectionRepository = ReportDetectionRepository(
                 detectionsBySample = mapOf(
@@ -511,6 +608,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
 private class ReportSampleRepository(
     private val samples: List<Sample>,
+    private val flagged: List<Sample> = emptyList(),
 ) : SampleRepository {
     override suspend fun saveSample(sample: Sample) = Unit
     override fun observeLatestSample(userId: String): Flow<Sample?> = flowOf(null)
@@ -525,7 +623,7 @@ private class ReportSampleRepository(
     override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
 
     override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
-        flowOf(emptyList())
+        flowOf(flagged.filter { it.sessionId == sessionId && isVisible(it.userId, userId) })
 }
 
 private class ReportDetectionRepository(
@@ -737,6 +835,7 @@ private fun reportDetection(
     sampleId: String,
     classLabel: String,
     confidence: Float,
+    verdict: DetectionVerdict = DetectionVerdict.CONFIRMED,
     expertClass: String? = null,
 ): Detection =
     Detection(
@@ -748,7 +847,7 @@ private fun reportDetection(
         bboxY = 0.2f,
         bboxW = 0.3f,
         bboxH = 0.4f,
-        verdict = DetectionVerdict.CONFIRMED,
+        verdict = verdict,
         expertClass = expertClass,
     )
 

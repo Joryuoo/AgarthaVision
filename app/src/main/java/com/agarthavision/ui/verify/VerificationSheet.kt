@@ -4,15 +4,20 @@ package com.agarthavision.ui.verify
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.VisibleForTesting
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -20,9 +25,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,9 +38,12 @@ import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
@@ -43,25 +53,30 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,11 +97,12 @@ import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonVariant
 import com.agarthavision.ui.components.AgarthaToastHost
+import com.agarthavision.ui.components.LocalAppLocked
+import com.agarthavision.ui.components.ResizeForKeyboard
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
-import kotlinx.coroutines.launch
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -126,7 +142,7 @@ fun VerificationSheet(
         }
     }
 
-    BackHandler(onBack = viewModel::onCancel)
+    BackHandler(enabled = !LocalAppLocked.current, onBack = viewModel::onCancel)
 
     Box(
         modifier = Modifier
@@ -140,6 +156,8 @@ fun VerificationSheet(
                 onQ1Selected = viewModel::onQ1Selected,
                 onQ2Selected = viewModel::onQ2Selected,
                 onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
+                onConfirmDetection = viewModel::onConfirmDetection,
+                onRejectDetection = viewModel::onRejectDetection,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onStageSelected = viewModel::onStageSelected,
                 onOtherStageChanged = viewModel::onOtherStageChanged,
@@ -194,11 +212,14 @@ internal fun VerificationSheetContent(
 ) {
     val frame = state.frame ?: return
 
+    ResizeForKeyboard()
+
     // Hoisted above the draw screen and kept for the sheet's whole life, so cancelling a draw
     // lands the medtech on the exact scroll they left rather than back at the top.
     val scrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
     val showDiscardConfirm = remember { mutableStateOf(false) }
+    val showEnlargedImage = remember { mutableStateOf(false) }
+    val imageModel = rememberFrameImageModel(frame, state.imageSource)
     // The sample's label is the moment it was captured. The same label the queue row carries,
     // so the row the medtech tapped names the screen they land on.
     val capturedAtLabel = remember(frame.capturedAt) {
@@ -209,7 +230,9 @@ internal fun VerificationSheetContent(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
                 // Saving too: TalkBack activates a node through its semantics, not a touch, so the
                 // input blocker over the sheet would not stop it.
                 .then(
@@ -221,6 +244,16 @@ internal fun VerificationSheetContent(
                 title = if (isEditing) stringResource(R.string.verify_editing_title) else capturedAtLabel,
                 metaText = if (isEditing) stringResource(R.string.verify_captured_at, capturedAtLabel) else "",
                 onBack = actions.onCancel,
+            )
+
+            // 2. Frame section: image preview and sample cycle row.
+            //    Pinned at top with the top bar so the sample remains in view while answering findings.
+            VerificationFrameSection(
+                state = state,
+                actions = actions,
+                frame = frame,
+                imageModel = imageModel,
+                onEnlarge = { showEnlargedImage.value = true },
             )
 
             VerificationFindingsColumn(
@@ -283,17 +316,28 @@ internal fun VerificationSheetContent(
             DrawModeScreen(
                 state = state,
                 actions = actions,
-                // Back to the top on a save, where the frame is, so the box just drawn is the first
-                // thing the medtech sees. A cancel has nothing new to show, and leaves them in place.
-                onSaved = { box ->
-                    actions.onBoxDrawn(box)
-                    scope.launch { scrollState.scrollTo(0) }
-                },
+                // The frame preview is permanently pinned at the top (14zcqnthuab), so the box just
+                // drawn is immediately visible without scrolling. Saving leaves the medtech at the
+                // finding they were editing.
+                onSaved = actions.onBoxDrawn,
+            )
+        }
+
+        if (showEnlargedImage.value && imageModel != null) {
+            EnlargedImageOverlay(
+                frame = frame,
+                imageModel = imageModel,
+                state = state,
+                onDismiss = { showEnlargedImage.value = false },
             )
         }
     }
 }
 
+/**
+ * Scrollable verification findings containing model output, current detection questions,
+ * added findings, and remarks. The frame preview sits pinned above this column.
+ */
 @Composable
 private fun VerificationFindingsColumn(
     state: VerificationUiState,
@@ -315,8 +359,6 @@ private fun VerificationFindingsColumn(
             )
             .verticalScroll(scrollState),
     ) {
-        VerificationFrameSection(state, actions, frame)
-
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             // 3. Model output: what the container said, or that it said nothing, or that it has
             //    not answered yet. Always present, never collapsed to two states.
@@ -388,11 +430,18 @@ private fun VerificationFindingsColumn(
     }
 }
 
+/**
+ * Pinned frame section: the sample image preview and sample cycle row stay anchored
+ * in view while the medtech answers questions in the scrollable findings column below.
+ * Tapping the preview opens the enlarged overlay (14zcqnthuab).
+ */
 @Composable
 private fun VerificationFrameSection(
     state: VerificationUiState,
     actions: VerificationSheetActions,
     frame: FlaggedFrame,
+    imageModel: Any?,
+    onEnlarge: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -400,10 +449,9 @@ private fun VerificationFrameSection(
             .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val imageModel = rememberFrameImageModel(frame, state.imageSource)
         val frameModifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
+            .heightIn(max = 220.dp)
+            .aspectRatio(frame.previewAspectRatio(), matchHeightConstraintsFirst = true)
             .clip(RoundedCornerShape(16.dp))
             .background(AgarthaTheme.colors.surfaceVariant)
             .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
@@ -422,7 +470,12 @@ private fun VerificationFrameSection(
                 showBoxes = state.showBoundingBoxes,
                 inferenceImageWidth = frame.imageWidth,
                 inferenceImageHeight = frame.imageHeight,
-                modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
+                modifier = frameModifier
+                    .testTag(VerifyTestTags.FRAME_PREVIEW)
+                    .clickable(
+                        onClickLabel = stringResource(R.string.verify_enlarge_image),
+                        onClick = onEnlarge,
+                    ),
             )
         }
 
@@ -450,6 +503,81 @@ private fun VerificationFrameSection(
     }
 }
 
+/**
+ * Full-width enlarged image overlay with dimmed background (14zcqnthuab).
+ * Allows the medtech to inspect egg morphology at maximum screen width without
+ * losing their questionnaire scroll position. Supports pinch-to-zoom.
+ */
+@Composable
+private fun EnlargedImageOverlay(
+    frame: FlaggedFrame,
+    imageModel: Any,
+    state: VerificationUiState,
+    onDismiss: () -> Unit,
+) {
+    BackHandler(onBack = onDismiss)
+
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        scale = (scale * zoomChange).coerceIn(1f, 5f)
+        if (scale == 1f) {
+            offset = Offset.Zero
+        } else {
+            offset += panChange
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Scrim: tapping the dimmed background outside the image dismisses the overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.82f))
+                .testTag(VerifyTestTags.ENLARGED_IMAGE_SCRIM)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+                .aspectRatio(frame.previewAspectRatio())
+                .clip(RoundedCornerShape(12.dp))
+                .background(AgarthaTheme.colors.surfaceVariant),
+        ) {
+            FrameWithBoxes(
+                imageModel = imageModel,
+                boxes = state.findings.frameBoxes(
+                    active = DrawTarget(state.currentDetectionIndex),
+                ),
+                showBoxes = state.showBoundingBoxes,
+                inferenceImageWidth = frame.imageWidth,
+                inferenceImageHeight = frame.imageHeight,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(VerifyTestTags.ENLARGED_FRAME_PREVIEW)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    }
+                    .transformable(state = transformableState),
+            )
+        }
+    }
+}
+
 @Composable
 private fun VerificationCurrentDetection(
     state: VerificationUiState,
@@ -466,13 +594,18 @@ private fun VerificationCurrentDetection(
             .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
             .padding(16.dp),
     ) {
+        val modelPredictionName = currentPrediction?.let { pred ->
+            EggSpecies.fromClassLabel(pred.classLabel)?.displayName ?: pred.classLabel
+        }
         CycleRow(
             indicator = stringResource(
                 R.string.verify_detection_counter,
                 state.currentDetectionIndex + 1,
                 boxCount,
             ),
-            subtitle = stringResource(R.string.verify_detection_subtitle),
+            subtitle = modelPredictionName?.let {
+                stringResource(R.string.verify_detection_species_subtitle, it)
+            } ?: stringResource(R.string.verify_detection_subtitle),
             prevDescription = stringResource(R.string.verify_prev_egg),
             nextDescription = stringResource(R.string.verify_next_egg),
             prevTag = VerifyTestTags.DETECTION_PREV,
@@ -527,12 +660,33 @@ private fun VerificationSheetFooter(
             )
         }
 
+        if (!state.canSubmit && state.unansweredCount > 0) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.verify_unanswered_remaining,
+                    state.unansweredCount,
+                    state.unansweredCount,
+                ),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.UNANSWERED_DETECTIONS_NOTE)
+                    .padding(bottom = 8.dp),
+            )
+        }
+
+        val primaryLabel = if (isEditing) {
+            stringResource(R.string.verify_action_save_changes)
+        } else {
+            stringResource(R.string.verify_action_submit)
+        }
+
         SheetActionRow(
             SheetActionRowState(
-                primaryLabel = stringResource(
-                    if (isEditing) R.string.verify_action_save_changes else R.string.verify_action_submit,
+                primaryLabel = primaryLabel,
+                secondaryLabel = stringResource(
+                    if (isEditing) R.string.verify_cancel else R.string.verify_action_discard,
                 ),
-                secondaryLabel = stringResource(R.string.verify_action_discard),
                 onPrimaryClick = onSubmit,
                 onSecondaryClick = onDiscard,
                 primaryLoading = state.isSubmitting,
@@ -548,6 +702,7 @@ private fun DiscardFrameDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
@@ -579,6 +734,7 @@ private fun LeaveUnsavedChangesDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
@@ -685,11 +841,136 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
     }
 }
 
+@Composable
+private fun UnansweredDetectionCard(
+    suggestedSpecies: EggSpecies?,
+    detectionIndex: Int,
+    actions: VerificationSheetActions,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .testTag(VerifyTestTags.QUESTION_Q1)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AgarthaTheme.colors.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, AgarthaTheme.colors.borderStrong, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 6.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.verify_unanswered_badge),
+                color = AgarthaTheme.colors.accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .background(AgarthaTheme.colors.accentTint2, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.verify_q1),
+                color = AgarthaTheme.colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (suggestedSpecies != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 10.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_suggested_species_label),
+                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = suggestedSpecies.displayName,
+                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = FontStyle.Italic,
+                )
+            }
+        } else {
+            Spacer(Modifier.height(4.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = { actions.onConfirmDetection(detectionIndex) },
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(VerifyTestTags.CONFIRM_DETECTION),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AgarthaTheme.colors.accent,
+                    contentColor = AgarthaTheme.colors.onAccent,
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_confirm_detection),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
+            OutlinedButton(
+                onClick = { actions.onRejectDetection(detectionIndex) },
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(VerifyTestTags.REJECT_DETECTION),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, AgarthaTheme.colors.borderStrong),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = AgarthaTheme.colors.textPrimary,
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_not_an_egg),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
+        }
+        if (suggestedSpecies != null) {
+            TextButton(
+                onClick = {
+                    actions.onConfirmDetection(detectionIndex)
+                    actions.onSpeciesConfirmed(false)
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .testTag(VerifyTestTags.CHANGE_SPECIES)
+                    .padding(top = 2.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_action_change_species),
+                    color = AgarthaTheme.colors.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
 /**
- * The per-box statements: there is an egg → the box is placed right → it is the species the model
- * named. All three arrive pre-filled from model output, so a frame the model got right is
- * submitted without a tap, and unchecking is how the medtech disagrees. A ticked Q1 shows Q2 and
- * Q3 together; an unticked one hides both, since neither means anything without an egg.
+ * Once a detection is confirmed as an egg or when reviewing a previously verified sample, the
+ * per-box statements show: there is an egg → the box is placed right → it is the species the model
+ * named. A ticked Q1 shows Q2 and Q3 together; an unticked one hides both, since neither means
+ * anything without an egg.
  *
  * **Unticked always carries its correction**: the redraw action under Q2, the picker under Q3.
  *
@@ -716,13 +997,30 @@ private fun BoxQuestionChain(
     actions: VerificationSheetActions,
     suggestions: List<String> = emptyList(),
 ) {
+    if (answers?.isEgg == null) {
+        UnansweredDetectionCard(
+            suggestedSpecies = suggestedSpecies,
+            detectionIndex = detectionIndex,
+            actions = actions,
+        )
+        return
+    }
+
     CheckQuestion(
         title = stringResource(R.string.verify_q1),
         tag = VerifyTestTags.QUESTION_Q1,
-        checked = answers?.isEgg == true,
-        onToggle = { actions.onQ1Selected(answers?.isEgg != true) },
+        checked = answers.isEgg == true,
+        onToggle = { actions.onQ1Selected(answers.isEgg != true) },
     )
-    if (answers?.isEgg != true) return
+    if (answers.isEgg == false) {
+        Text(
+            text = stringResource(R.string.verify_marked_not_egg_note),
+            color = AgarthaTheme.colors.textTertiary,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        return
+    }
 
     CheckQuestion(
         title = stringResource(R.string.verify_q2),
@@ -1024,6 +1322,7 @@ internal fun CheckQuestion(
  */
 @Composable
 private fun CancelInferenceDialog(actions: VerificationSheetActions) {
+    if (LocalAppLocked.current) return
     AlertDialog(
         onDismissRequest = actions.onCancelInferenceDismissed,
         shape = DialogShape,

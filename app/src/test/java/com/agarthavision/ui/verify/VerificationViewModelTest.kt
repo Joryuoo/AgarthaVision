@@ -175,20 +175,56 @@ class VerificationViewModelTest {
         }
 
     /**
-     * The governing principle of the screen, stated as a test.
-     *
-     * Every answer opens pre-filled from model output, so a medtech whose model was right
-     * submits without typing or tapping anything. Ten fields a smear, most of them correct: the
-     * taps this saves are the whole economics of the change.
+     * Model detections open unanswered: submit is disabled until all detections are answered (14zcqntx3un).
      */
     @Test
-    fun `a frame the model got right submits with zero taps`() =
+    fun `a frame with model detections opens unanswered and cannot submit until confirmed`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 3))
             advanceUntilIdle()
 
+            assertFalse(vm.state.value.canSubmit)
+            assertEquals(3, vm.state.value.unansweredCount)
+            assertNull(vm.state.value.findings[0].answers.isEgg)
+            assertNull(vm.state.value.findings[1].answers.isEgg)
+            assertNull(vm.state.value.findings[2].answers.isEgg)
+        }
+
+    @Test
+    fun `confirmDetection confirms detection in one tap`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.canSubmit)
+            assertEquals(1, vm.state.value.unansweredCount)
+
+            vm.onConfirmDetection(0)
+            advanceUntilIdle()
+
             assertTrue(vm.state.value.canSubmit)
+            assertEquals(0, vm.state.value.unansweredCount)
+            assertEquals(true, vm.state.value.findings[0].answers.isEgg)
+            assertEquals(true, vm.state.value.findings[0].answers.isBoxCorrect)
+            assertEquals(true, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, vm.state.value.findings[0].answers.species)
+        }
+
+    @Test
+    fun `rejectDetection marks detection as not an egg in one tap`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            advanceUntilIdle()
+
+            vm.onRejectDetection(0)
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.canSubmit)
+            assertEquals(0, vm.state.value.unansweredCount)
+            assertEquals(false, vm.state.value.findings[0].answers.isEgg)
         }
 
     @Test
@@ -718,6 +754,8 @@ class VerificationViewModelTest {
             // on the wrong number. Submit holds instead, and says why.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 2))
+            vm.onConfirmDetection(0)
+            vm.onConfirmDetection(1)
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(2, EggSpecies.ASCARIS)
 
@@ -775,19 +813,19 @@ class VerificationViewModelTest {
 
     // Where the species comes from (86d4ab4tq / 86d4auj84)
 
-    /** A box opens fully pre-filled, which is what lets a correct model cost zero taps. */
+    /** Detections open unanswered, requiring an explicit medtech answer. */
     @Test
-    fun `a box opens pre-filled from the model`() =
+    fun `a box opens unanswered from the model`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
-            assertEquals(true, answers.isEgg)
-            assertEquals(true, answers.isBoxCorrect)
-            assertEquals(true, answers.speciesConfirmed)
-            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertNull(answers.isEgg)
+            assertNull(answers.isBoxCorrect)
+            assertNull(answers.speciesConfirmed)
+            assertNull(answers.species)
         }
 
     @Test
@@ -823,13 +861,12 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `an unrecognised model class pre-fills no species, but still pre-fills the box`() =
+    fun `an unrecognised model class offers no species to confirm when answered`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Guessing OTHER would be wrong: OTHER carries a free-text box only a human can
-            // fill, so it would look answered while being incomplete. The box questions are
-            // still pre-filled - the model did draw a box, whatever it called what is in it.
             val vm = viewModel()
             vm.setFrame(unmappableFrame())
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
@@ -858,6 +895,7 @@ class VerificationViewModelTest {
             // agree, so nothing was missed - the row exists but claims no unboxed egg.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
+            vm.onConfirmDetection(0)
 
             vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)

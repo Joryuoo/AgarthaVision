@@ -10,10 +10,10 @@ package com.agarthavision.ui.verify
  */
 @Suppress("TooManyFunctions")
 internal object VerifyTestTags {
-    /** [SheetActionRow]'s confirm button — "Submit" at both sheet call sites. */
+    /** [SheetActionRow]'s confirm button — "Submit" or "Save changes" in edit mode. */
     const val SHEET_PRIMARY_ACTION = "sheet_primary_action"
 
-    /** [SheetActionRow]'s destructive button — "Discard" at both sheet call sites. */
+    /** [SheetActionRow]'s secondary button — "Discard" or "Cancel" in edit mode. */
     const val SHEET_SECONDARY_ACTION = "sheet_secondary_action"
 
     /** Frame-level queue navigation. */
@@ -22,6 +22,11 @@ internal object VerifyTestTags {
 
     /** The JPEG preview. Present whether or not the image itself decodes. */
     const val FRAME_PREVIEW = "frame_preview"
+
+    /** Enlarged image overlay for detailed egg inspection (14zcqnthuab). */
+    const val ENLARGED_IMAGE_OVERLAY = "enlarged_image_overlay"
+    const val ENLARGED_IMAGE_SCRIM = "enlarged_image_scrim"
+    const val ENLARGED_FRAME_PREVIEW = "enlarged_frame_preview"
 
     /**
      * Shown in the preview's place when there is no image to load at all — neither local bytes,
@@ -70,6 +75,18 @@ internal object VerifyTestTags {
      */
     const val QUESTION_Q1 = "q1"
     const val QUESTION_Q2 = "q2"
+
+    /** 1-tap confirmation button for an unanswered detection (14zcqntx3un). */
+    const val CONFIRM_DETECTION = "confirm_detection"
+
+    /** 1-tap rejection button ("Not an egg") for an unanswered detection (14zcqntx3un). */
+    const val REJECT_DETECTION = "reject_detection"
+
+    /** Quick action to choose a different species from the unanswered card. */
+    const val CHANGE_SPECIES = "change_species"
+
+    /** Remaining unanswered detections note in footer (14zcqntx3un). */
+    const val UNANSWERED_DETECTIONS_NOTE = "unanswered_detections_note"
 
     /** "This egg is <suggested species>" — shown only when the model's class is a known species. */
     const val QUESTION_Q3 = "q3"

@@ -104,6 +104,63 @@ class PreviewSessionReportUseCaseTest {
     }
 
     @Test
+    fun `preview appendix reflects species-corrected WRONG_CLASS and excludes FALSE_POSITIVE`() = runTest {
+        val renderer = PsFakeReportPdfRenderer()
+        val samples = listOf(
+            psSample("sample-1", "session-1", "user-1"),
+            psSample("sample-2", "session-1", "user-1"),
+        )
+        val detectionsBySample = mapOf(
+            "sample-1" to listOf(
+                psReportDetection(
+                    sampleId = "sample-1",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.91f,
+                    verdict = DetectionVerdict.WRONG_CLASS,
+                    expertClass = "Trichuris trichiura",
+                ),
+            ),
+            "sample-2" to listOf(
+                psReportDetection(
+                    sampleId = "sample-2",
+                    classLabel = "Ascaris lumbricoides",
+                    confidence = 0.55f,
+                    verdict = DetectionVerdict.FALSE_POSITIVE,
+                ),
+            ),
+        )
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "sample-1", "Trichuris trichiura", null, 1),
+        )
+        val useCase = PreviewSessionReportUseCase(
+            authRepository = PsReportAuthRepository(userId = "user-1"),
+            sessionRepository = PsReportSessionRepository(session = psSession("session-1", "user-1")),
+            sampleRepository = PsReportSampleRepository(samples = samples),
+            detectionRepository = PsReportDetectionRepository(
+                detectionsBySample = detectionsBySample,
+                eggCounts = listOf(EggCount("Trichuris trichiura", 1)),
+            ),
+            findingDao = mockFindingDao(findings),
+            patientRepository = PsFakePatientRepository(patient = psPatient()),
+            psgcRepository = PsFakePsgcRepository(barangay = psBarangay()),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = renderer,
+        )
+
+        val result = useCase("session-1", config = ReportConfig(includeSampleImages = true))
+
+        assertTrue(result.isSuccess)
+        val doc = renderer.lastDocument!!
+        assertEquals(1, doc.header.totalEggsConfirmed)
+        assertEquals(listOf("Trichuris trichiura"), doc.speciesRows.map { it.speciesDisplayName })
+        assertEquals(2, doc.appendixSamples.size)
+        assertEquals(1, doc.appendixSamples[0].eggCount)
+        assertEquals("Trichuris trichiura", doc.appendixSamples[0].findingsSummary)
+        assertEquals(0, doc.appendixSamples[1].eggCount)
+        assertEquals("No parasites detected", doc.appendixSamples[1].findingsSummary)
+    }
+
+    @Test
     fun `fails when user is not signed in`() = runTest {
         val useCase = standardUseCase(userId = null)
 
@@ -430,6 +487,7 @@ private fun psReportDetection(
     sampleId: String,
     classLabel: String,
     confidence: Float,
+    verdict: DetectionVerdict = DetectionVerdict.CONFIRMED,
     expertClass: String? = null,
 ): Detection =
     Detection(
@@ -441,6 +499,6 @@ private fun psReportDetection(
         bboxY = 0.2f,
         bboxW = 0.3f,
         bboxH = 0.4f,
-        verdict = DetectionVerdict.CONFIRMED,
+        verdict = verdict,
         expertClass = expertClass,
     )

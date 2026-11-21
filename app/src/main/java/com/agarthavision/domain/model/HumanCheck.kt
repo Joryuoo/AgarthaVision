@@ -19,3 +19,11 @@ data class HumanCheckConfig(val siteKey: String, val hostname: String) {
  */
 class HumanCheckRejectedException(cause: Throwable? = null) :
     Exception("The security check was refused.", cause)
+
+/**
+ * The auth provider refused a sign-in because the account is banned, which is how deactivating a
+ * laboratory in the Admin Console shows up (14zcqnttvpa). The account's laboratory access is not
+ * active; nothing about the email or password is wrong.
+ */
+class LaboratoryAccessInactiveException(cause: Throwable? = null) :
+    Exception("The account's laboratory access is not active.", cause)

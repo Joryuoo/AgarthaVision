@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -50,14 +51,19 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonVariant
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Description
 import com.agarthavision.ui.icons.Warning
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.DialogShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -80,11 +86,70 @@ object ReportSheetTestTags {
     const val SAMPLE_WARNING_BANNER = "report_sample_warning_banner"
     const val SAMPLE_ACK_CARD = "report_sample_acknowledgment_card"
     const val SAMPLE_ACK_CHECKBOX = "report_sample_acknowledgment_checkbox"
+    const val UNVERIFIED_WARNING = "report_unverified_warning"
+    const val UNVERIFIED_ACK_CHECKBOX = "report_unverified_acknowledgment_checkbox"
     const val PREVIEW_BUTTON = "report_action_preview_button"
     const val GENERATE_PDF_BUTTON = "report_action_generate_pdf_button"
     const val EDIT_OPTIONS_BUTTON = "report_action_edit_options_button"
     const val CANCEL_BUTTON = "report_action_cancel_button"
     const val PREVIEW_VIEWPORT = "report_preview_viewport"
+    const val HEADER_CLOSE_BUTTON = "report_sheet_close_button"
+    const val DISCARD_DIALOG = "report_discard_confirm_dialog"
+    const val DISCARD_DIALOG_CONFIRM = "report_discard_confirm_button"
+    const val DISCARD_DIALOG_DISMISS = "report_discard_dismiss_button"
+}
+
+@Composable
+fun ReportDiscardConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (LocalAppLocked.current) return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = DialogShape,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
+        titleContentColor = AgarthaTheme.colors.textPrimary,
+        textContentColor = AgarthaTheme.colors.textPrimary,
+        title = { Text(stringResource(R.string.report_discard_title)) },
+        text = { Text(stringResource(R.string.report_discard_body)) },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AgarthaButton(
+                    onClick = onDismiss,
+                    variant = AgarthaButtonVariant.Secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS),
+                ) {
+                    Text(
+                        text = stringResource(R.string.report_discard_keep),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                AgarthaButton(
+                    onClick = onConfirm,
+                    variant = AgarthaButtonVariant.Destructive,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(ReportSheetTestTags.DISCARD_DIALOG_CONFIRM),
+                ) {
+                    Text(
+                        text = stringResource(R.string.report_discard_confirm),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        },
+        dismissButton = null,
+        modifier = Modifier.testTag(ReportSheetTestTags.DISCARD_DIALOG),
+    )
 }
 
 @Composable
@@ -360,32 +425,110 @@ fun SampleCountAcknowledgmentCard(
         }
 
         Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onAcknowledgedChange(!acknowledged) }
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(
-                checked = acknowledged,
-                onCheckedChange = onAcknowledgedChange,
-                colors = CheckboxDefaults.colors(
-                    checkedColor = colors.brandFill,
-                    checkmarkColor = colors.onBrandFill,
-                    uncheckedColor = colors.borderStrong,
-                ),
-                modifier = Modifier.testTag(ReportSheetTestTags.SAMPLE_ACK_CHECKBOX),
+        WarningAcknowledgmentRow(
+            text = stringResource(R.string.report_warning_acknowledgment_checkbox),
+            acknowledged = acknowledged,
+            onAcknowledgedChange = onAcknowledgedChange,
+            checkboxTag = ReportSheetTestTags.SAMPLE_ACK_CHECKBOX,
+        )
+    }
+}
+
+@Composable
+internal fun UnverifiedSampleWarning(
+    sampleCount: Int,
+    acknowledged: Boolean = false,
+    onAcknowledgedChange: ((Boolean) -> Unit)? = null,
+) {
+    val colors = AgarthaTheme.colors
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(colors.warningTint)
+            .border(1.dp, colors.warning.copy(alpha = 0.3f), shape)
+            .padding(14.dp)
+            .testTag(ReportSheetTestTags.UNVERIFIED_WARNING),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(
+                imageVector = AgarthaIcons.Warning,
+                contentDescription = null,
+                tint = colors.warning,
+                modifier = Modifier.size(20.dp).padding(top = 2.dp),
             )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.report_warning_acknowledgment_checkbox),
-                fontSize = 13.sp,
-                color = colors.textPrimary,
-                fontWeight = FontWeight.Medium,
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.report_warning_unverified_fields_title,
+                        sampleCount,
+                        sampleCount,
+                    ),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.warningText,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(
+                        if (onAcknowledgedChange == null) {
+                            R.string.report_warning_unverified_fields_config_subtitle
+                        } else {
+                            R.string.report_warning_unverified_fields_preview_subtitle
+                        },
+                    ),
+                    fontSize = 12.sp,
+                    color = colors.warningText,
+                )
+            }
+        }
+        if (onAcknowledgedChange != null) {
+            Spacer(Modifier.height(10.dp))
+            WarningAcknowledgmentRow(
+                text = stringResource(R.string.report_warning_unverified_fields_checkbox),
+                acknowledged = acknowledged,
+                onAcknowledgedChange = onAcknowledgedChange,
+                checkboxTag = ReportSheetTestTags.UNVERIFIED_ACK_CHECKBOX,
             )
         }
+    }
+}
+
+@Composable
+private fun WarningAcknowledgmentRow(
+    text: String,
+    acknowledged: Boolean,
+    onAcknowledgedChange: (Boolean) -> Unit,
+    checkboxTag: String,
+) {
+    val colors = AgarthaTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onAcknowledgedChange(!acknowledged) }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = acknowledged,
+            onCheckedChange = onAcknowledgedChange,
+            colors = CheckboxDefaults.colors(
+                checkedColor = colors.brandFill,
+                checkmarkColor = colors.onBrandFill,
+                uncheckedColor = colors.borderStrong,
+            ),
+            modifier = Modifier.testTag(checkboxTag),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = text,
+            fontSize = 13.sp,
+            color = colors.textPrimary,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

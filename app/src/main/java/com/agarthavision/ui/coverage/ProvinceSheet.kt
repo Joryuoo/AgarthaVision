@@ -42,6 +42,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.geo.AreaShape
 import com.agarthavision.domain.model.AreaStat
 import com.agarthavision.domain.model.SpeciesFinding
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.dashboard.coverage.CoverageStatColumn
 import com.agarthavision.ui.dashboard.coverage.RateSwatch
 import com.agarthavision.ui.dashboard.coverage.foldSpecies
@@ -72,6 +73,7 @@ fun ProvinceSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
         Unit
     }
+    if (LocalAppLocked.current) return
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

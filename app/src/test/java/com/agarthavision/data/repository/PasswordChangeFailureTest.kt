@@ -18,6 +18,12 @@ import java.io.IOException
 class PasswordChangeFailureTest {
 
     @Test
+    fun `a banned refusal is recognised by its code, not its wording`() {
+        assertTrue(AuthRestException("user_banned", "User is banned", 400).isBannedRefusal())
+        assertFalse(AuthRestException("invalid_credentials", "Invalid login credentials", 400).isBannedRefusal())
+    }
+
+    @Test
     fun `invalid credentials on the check mean the current password was wrong`() {
         val error = AuthRestException("invalid_credentials", "Invalid login credentials", 400)
         assertEquals(PasswordChangeResult.WrongCurrentPassword, passwordCheckFailure(error))

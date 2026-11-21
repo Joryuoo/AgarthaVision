@@ -1,5 +1,13 @@
 package com.agarthavision.ui.sessions
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -9,11 +17,17 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.unit.dp
+import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
+import com.agarthavision.ui.components.BiometricLockHost
+import com.agarthavision.ui.components.BiometricLockTestTags
 import com.agarthavision.ui.records.ReportSheetStep
 import com.agarthavision.ui.records.ReportSheetTestTags
 import com.agarthavision.ui.theme.AgarthaVisionTheme
@@ -497,7 +511,7 @@ class PatientReportSheetTest {
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_WARNING_BANNER)
             .performScrollTo()
             .assertIsDisplayed()
-        composeRule.onNodeWithText("Only 7 of 10 recommended samples selected")
+        composeRule.onNodeWithText("Only 7 of 10 recommended fields selected")
             .performScrollTo()
             .assertIsDisplayed()
     }
@@ -648,6 +662,77 @@ class PatientReportSheetTest {
     }
 
     @Test
+    fun `configuration directs reports with unverified fields to preview`() {
+        val sheetState = PatientReportSheetState(
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+            unverifiedSampleCount = 1,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheetContent(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("1 unverified field will be excluded from the report")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_ACK_CHECKBOX).assertDoesNotExist()
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.GENERATE_BUTTON).assertIsNotEnabled()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON).assertIsEnabled()
+    }
+
+    @Test
+    fun `preview requires unverified fields acknowledgment even with enough verified fields`() {
+        var sheetState by mutableStateOf(
+            PatientReportSheetState(
+                step = ReportSheetStep.PREVIEW,
+                candidates = listOf(
+                    makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10),
+                    makeCandidate("s2", "MEIK-M21-S02", verifiedCount = 10),
+                ),
+                selectedSessionIds = setOf("s1", "s2"),
+                unverifiedSampleCount = 3,
+            ),
+        )
+        var generated = false
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheetContent(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = { generated = true },
+                    onAcknowledgeUnverifiedWarning = {
+                        sheetState = sheetState.copy(isUnverifiedWarningAcknowledged = it)
+                    },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertDoesNotExist()
+        composeRule.onNodeWithText("3 unverified fields will be excluded from the report")
+            .performScrollTo()
+            .assertIsDisplayed()
+        val generateButton = composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+        generateButton.assertIsNotEnabled()
+        composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_ACK_CHECKBOX).performScrollTo().performClick()
+        generateButton.performScrollTo().assertIsEnabled().performClick()
+        assertTrue(generated)
+    }
+
+    @Test
     fun `preview step tapping acknowledgment checkbox invokes onAcknowledgeWarning`() {
         var acknowledged = false
         val sheetState = PatientReportSheetState(
@@ -728,6 +813,7 @@ class PatientReportSheetTest {
         }
 
         composeRule.onNodeWithTag(ReportSheetTestTags.SAMPLE_ACK_CARD).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.UNVERIFIED_WARNING).assertDoesNotExist()
         composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
             .assertIsEnabled()
             .performClick()
@@ -759,5 +845,313 @@ class PatientReportSheetTest {
 
         composeRule.onNodeWithTag(ReportSheetTestTags.EDIT_OPTIONS_BUTTON).performClick()
         assertTrue(backCalled)
+    }
+
+    @Test
+    fun `preview step displays localized unverified count change error`() {
+        val sheetState = PatientReportSheetState(
+            step = ReportSheetStep.PREVIEW,
+            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+            selectedSessionIds = setOf("s1"),
+            errorRes = R.string.report_warning_unverified_fields_changed,
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    onDismiss = {},
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onGenerate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("The number of unverified fields changed. Confirm again.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `patient report sheet configuration and preview are hidden while locked and resume coherently on unlock`() {
+        var isLocked by mutableStateOf(false)
+        var step by mutableStateOf(ReportSheetStep.CONFIGURATION)
+        var dismissed = false
+        var generated = false
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                BiometricLockHost(
+                    isLocked = isLocked,
+                    onUnlockClick = {},
+                ) {
+                    PatientReportSheet(
+                        sheet = PatientReportSheetState(
+                            step = step,
+                            candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10)),
+                            selectedSessionIds = setOf("s1"),
+                        ),
+                        patientName = "Dela Cruz, Juan M.",
+                        onDismiss = { dismissed = true },
+                        onDateRangeSelected = { _, _ -> },
+                        onSelectAll = {},
+                        onToggleSession = {},
+                        onPreview = { step = ReportSheetStep.PREVIEW },
+                        onBackToConfig = { step = ReportSheetStep.CONFIGURATION },
+                        onGenerate = { generated = true },
+                    )
+                }
+            }
+        }
+
+        // Open in CONFIGURATION step
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.SHEET).assertIsDisplayed()
+        composeRule.onNodeWithText("MEIK-M21-S01").assertIsDisplayed()
+
+        // Lock while CONFIGURATION step is open
+        isLocked = true
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(BiometricLockTestTags.OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.SHEET).assertDoesNotExist()
+        composeRule.onNodeWithText("MEIK-M21-S01").assertDoesNotExist()
+        assertFalse(dismissed)
+
+        // Unlock and switch to PREVIEW step
+        isLocked = false
+        step = ReportSheetStep.PREVIEW
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertIsDisplayed()
+
+        // Lock while Report Preview is open
+        isLocked = true
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(BiometricLockTestTags.OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.SHEET).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertDoesNotExist()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON).assertDoesNotExist()
+
+        // Unlock and verify Report Preview resumes coherently
+        isLocked = false
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_VIEWPORT).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.GENERATE_PDF_BUTTON)
+            .assertIsDisplayed()
+            .performClick()
+        assertTrue(generated)
+    }
+
+    @Test
+    fun `changed session selection requests confirmation on dismiss and keeps on keep`() {
+        var dismissed = false
+        val initialCandidates = listOf(
+            makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 5),
+            makeCandidate("s2", "MEIK-M21-S02", verifiedCount = 4),
+        )
+        val initialSelected = setOf("s1", "s2")
+        var sheetState by mutableStateOf(
+            PatientReportSheetState(
+                step = ReportSheetStep.CONFIGURATION,
+                candidates = initialCandidates,
+                selectedSessionIds = initialSelected,
+                initialSelectedIds = initialSelected,
+            ),
+        )
+        var backDispatcher: OnBackPressedDispatcher? = null
+
+        composeRule.setContent {
+            backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    patientName = "Dela Cruz, Juan M.",
+                    onDismiss = { dismissed = true },
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = { sessionId ->
+                        val current = sheetState.selectedSessionIds
+                        val next = if (sessionId in current) current - sessionId else current + sessionId
+                        sheetState = sheetState.copy(selectedSessionIds = next)
+                    },
+                    onGenerate = {},
+                )
+            }
+        }
+
+        // Changing session selection -> header X requests confirmation
+        composeRule.onNodeWithText("MEIK-M21-S02").performClick()
+        assertTrue(sheetState.hasUnsavedChanges)
+        assertEquals(setOf("s1"), sheetState.selectedSessionIds)
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        assertFalse(dismissed)
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithText("Discard changes?").assertIsDisplayed()
+
+        // Keep editing preserves configuration
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertDoesNotExist()
+        assertFalse(dismissed)
+        assertEquals(setOf("s1"), sheetState.selectedSessionIds)
+
+        // System Back requests confirmation when changed
+        composeRule.runOnIdle { backDispatcher?.onBackPressed() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+        assertFalse(dismissed)
+
+        // Returning session selection to initial values removes discard prompt
+        composeRule.onNodeWithText("MEIK-M21-S02").performClick()
+        assertEquals(setOf("s1", "s2"), sheetState.selectedSessionIds)
+        assertFalse(sheetState.hasUnsavedChanges)
+
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertDoesNotExist()
+        assertTrue(dismissed)
+    }
+
+    @Test
+    fun `changed report config and downward swipe request confirmation and revert removes prompt`() {
+        var dismissed = false
+        var darkTheme by mutableStateOf(false)
+        var sheetWidthDp by mutableStateOf(411.dp)
+        var sheetState by mutableStateOf(
+            PatientReportSheetState(
+                step = ReportSheetStep.CONFIGURATION,
+                candidates = listOf(makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 5)),
+                selectedSessionIds = setOf("s1"),
+                initialSelectedIds = setOf("s1"),
+                config = ReportConfig(),
+                initialConfig = ReportConfig(),
+            ),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme(darkTheme = darkTheme) {
+                Box(modifier = Modifier.size(width = sheetWidthDp, height = 891.dp)) {
+                    PatientReportSheet(
+                        sheet = sheetState,
+                        patientName = "Dela Cruz, Juan M.",
+                        onDismiss = { dismissed = true },
+                        onDateRangeSelected = { _, _ -> },
+                        onSelectAll = {},
+                        onToggleSession = {},
+                        onConfigChange = { sheetState = sheetState.copy(config = it) },
+                        onGenerate = {},
+                    )
+                }
+            }
+        }
+
+        // Downward swipe with dirty config in dark mode and sheet sizes requests confirmation
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH).performClick()
+        assertTrue(sheetState.config.includeSampleImages)
+        assertTrue(sheetState.hasUnsavedChanges)
+
+        darkTheme = true
+        sheetWidthDp = 600.dp
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(PatientReportSheetTestTags.SHEET).performTouchInput { swipeDown() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_DISMISS).performClick()
+        assertFalse(dismissed)
+
+        // Reverting config back to default removes protection
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH).performClick()
+        assertFalse(sheetState.config.includeSampleImages)
+        assertFalse(sheetState.hasUnsavedChanges)
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertDoesNotExist()
+        assertTrue(dismissed)
+    }
+
+    @Test
+    fun `preview close button returns to edit options without discard prompt and preserves settings`() {
+        var dismissed = false
+        val initialCandidates = listOf(
+            makeCandidate("s1", "MEIK-M21-S01", verifiedCount = 10),
+        )
+        var sheetState by mutableStateOf(
+            PatientReportSheetState(
+                step = ReportSheetStep.CONFIGURATION,
+                candidates = initialCandidates,
+                selectedSessionIds = setOf("s1"),
+                initialSelectedIds = setOf("s1"),
+                config = ReportConfig(),
+                initialConfig = ReportConfig(),
+            ),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                PatientReportSheet(
+                    sheet = sheetState,
+                    patientName = "Dela Cruz, Juan M.",
+                    onDismiss = { dismissed = true },
+                    onDateRangeSelected = { _, _ -> },
+                    onSelectAll = {},
+                    onToggleSession = {},
+                    onConfigChange = { sheetState = sheetState.copy(config = it) },
+                    onAcknowledgeWarning = { sheetState = sheetState.copy(isWarningAcknowledged = it) },
+                    onPreview = { sheetState = sheetState.copy(step = ReportSheetStep.PREVIEW) },
+                    onBackToConfig = { sheetState = sheetState.copy(step = ReportSheetStep.CONFIGURATION) },
+                    onGenerate = {},
+                )
+            }
+        }
+
+        // Change options and open Preview
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH)
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_CENSOR)
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON)
+            .performScrollTo()
+            .performClick()
+
+        assertEquals(ReportSheetStep.PREVIEW, sheetState.step)
+        composeRule.onNodeWithText("Included").assertIsDisplayed()
+        composeRule.onNodeWithText("Censor").assertIsDisplayed()
+
+        // Tap X in Report Preview -> returns to CONFIGURATION without discard prompt and without closing wizard
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertDoesNotExist()
+        assertFalse(dismissed)
+        assertEquals(ReportSheetStep.CONFIGURATION, sheetState.step)
+        assertTrue(sheetState.config.includeSampleImages)
+        assertEquals(PatientNameOption.CENSOR, sheetState.config.patientNameOption)
+
+        // Further edit options and reopen preview -> preview reflects updated settings
+        composeRule.onNodeWithTag(ReportSheetTestTags.INCLUDE_IMAGES_SWITCH)
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PATIENT_NAME_EXCLUDE)
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.PREVIEW_BUTTON)
+            .performScrollTo()
+            .performClick()
+
+        assertEquals(ReportSheetStep.PREVIEW, sheetState.step)
+        composeRule.onNodeWithText("Not included").assertIsDisplayed()
+        composeRule.onNodeWithText("Exclude").assertIsDisplayed()
+
+        // Confirming discard when exiting the changed wizard closes it
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        assertEquals(ReportSheetStep.CONFIGURATION, sheetState.step)
+        composeRule.onNodeWithTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON).performClick()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG).assertIsDisplayed()
+        composeRule.onNodeWithTag(ReportSheetTestTags.DISCARD_DIALOG_CONFIRM).performClick()
+        assertTrue(dismissed)
     }
 }

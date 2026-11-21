@@ -135,6 +135,9 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * `reports.session_id` becomes nullable, and `reports.patient_id` /
  * `reports.session_ids_json` are added so one report can pool several sessions' findings for
  * a patient rather than describing exactly one session. `MIGRATION_24_25` rebuilds the table.
+ *
+ * Version 26 requires non-null `colleagues.full_name` (14zcqntx3v6, `0019_require_profile_full_name.sql`).
+ * `MIGRATION_25_26` rebuilds the table and backfills any null rows to 'Pending Profile Setup'.
  */
 @Database(
     entities = [
@@ -149,7 +152,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         SpeciesSuggestionEntity::class,
         ColleagueEntity::class,
     ],
-    version = 25,
+    version = 26,
     exportSchema = true,
 )
 // One accessor per DAO is how Room exposes them; splitting the class is not an option.

@@ -99,10 +99,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.components.SkeletonBox
-import com.agarthavision.ui.components.recordedByText
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -292,13 +292,16 @@ fun SessionsScreen(
         PatientReportSheet(
             sheet = sheet,
             patientName = state.patient?.displayName,
-            onDismiss = viewModel::onDismissReportSheet,
+            onDismiss = viewModel::onConfirmDiscardReportSheet,
+            onRequestDismiss = viewModel::onDismissReportSheet,
+            onDismissDiscard = viewModel::onCancelDiscardReportSheet,
             onDateRangeSelected = viewModel::onReportDateRangeSelected,
             onSelectAll = viewModel::onSelectAllReportSessions,
             onToggleSession = viewModel::onToggleReportSession,
             onGenerate = viewModel::onGeneratePatientReport,
             onConfigChange = viewModel::onUpdatePatientReportConfig,
             onAcknowledgeWarning = viewModel::onAcknowledgePatientReportWarning,
+            onAcknowledgeUnverifiedWarning = viewModel::onAcknowledgeUnverifiedReportWarning,
             onPreview = viewModel::onPreviewPatientReport,
             onBackToConfig = viewModel::onBackToPatientReportConfig,
         )
@@ -632,6 +635,13 @@ private fun NewSessionSheet(
     onSubmit: (label: String) -> Unit
 ) {
     val colors = AgarthaTheme.colors
+    // Keyed on the suggestion so a sheet opened after the previous smear was created
+    // starts on the new number rather than the one already used. It is only a seed: the
+    // field is editable from the first keystroke, and nothing re-applies it.
+    var label by remember(state.suggestedLabel) { mutableStateOf(state.suggestedLabel) }
+    var showEmptyError by remember { mutableStateOf(false) }
+    if (LocalAppLocked.current) return
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -648,12 +658,6 @@ private fun NewSessionSheet(
         },
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     ) {
-        // Keyed on the suggestion so a sheet opened after the previous smear was created
-        // starts on the new number rather than the one already used. It is only a seed: the
-        // field is editable from the first keystroke, and nothing re-applies it.
-        var label by remember(state.suggestedLabel) { mutableStateOf(state.suggestedLabel) }
-        var showEmptyError by remember { mutableStateOf(false) }
-
         val activeErrorMessage = when {
             showEmptyError && label.isBlank() -> stringResource(R.string.session_new_label_required)
             !state.errorMessage.isNullOrBlank() -> state.errorMessage

@@ -102,6 +102,7 @@ import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.FileOpen
@@ -669,6 +670,7 @@ private fun SpeciesFilterDialog(
     onSelectSpecies: (EggSpecies?) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (LocalAppLocked.current) return
     val options = listOf(
         null to stringResource(R.string.records_species_all),
         EggSpecies.ASCARIS to EggSpecies.ASCARIS.displayName,
