@@ -52,6 +52,7 @@ class GenerateSessionReportUseCase @Inject constructor(
     suspend operator fun invoke(
         sessionId: String,
         config: ReportConfig = ReportConfig(),
+        acknowledgedUnverifiedCount: Int? = null,
     ): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
@@ -69,6 +70,10 @@ class GenerateSessionReportUseCase @Inject constructor(
         // disabled in that state too; this keeps any other caller from producing one.
         val samples = sampleRepository.getSamplesForSession(sessionId, userId)
         require(samples.isNotEmpty()) { NO_VERIFIED_SAMPLES_MESSAGE }
+        requireUnverifiedFieldsAcknowledged(
+            sampleRepository.countUnverifiedFieldsForReport(sessionId, userId),
+            acknowledgedUnverifiedCount,
+        )
 
         val patient = requireNotNull(patientRepository.getPatientById(session.patientId)) {
             PATIENT_NOT_ON_DEVICE_MESSAGE

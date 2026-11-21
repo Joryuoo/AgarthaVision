@@ -301,6 +301,7 @@ fun SessionsScreen(
             onGenerate = viewModel::onGeneratePatientReport,
             onConfigChange = viewModel::onUpdatePatientReportConfig,
             onAcknowledgeWarning = viewModel::onAcknowledgePatientReportWarning,
+            onAcknowledgeUnverifiedWarning = viewModel::onAcknowledgeUnverifiedReportWarning,
             onPreview = viewModel::onPreviewPatientReport,
             onBackToConfig = viewModel::onBackToPatientReportConfig,
         )

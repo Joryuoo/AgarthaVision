@@ -298,6 +298,7 @@ fun SessionDetailScreen(
             onDismissDiscard = viewModel::onCancelDiscardReportSheet,
             onConfigChange = viewModel::onUpdateReportConfig,
             onAcknowledgeWarning = viewModel::onAcknowledgeReportWarning,
+            onAcknowledgeUnverifiedWarning = viewModel::onAcknowledgeUnverifiedReportWarning,
             onPreview = viewModel::onPreviewSessionReport,
             onBackToConfig = viewModel::onBackToReportConfig,
             onGeneratePdf = viewModel::onFinalizeSessionReport,

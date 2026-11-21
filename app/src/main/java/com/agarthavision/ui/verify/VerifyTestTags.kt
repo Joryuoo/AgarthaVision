@@ -10,10 +10,10 @@ package com.agarthavision.ui.verify
  */
 @Suppress("TooManyFunctions")
 internal object VerifyTestTags {
-    /** [SheetActionRow]'s confirm button — "Submit" at both sheet call sites. */
+    /** [SheetActionRow]'s confirm button — "Submit" or "Save changes" in edit mode. */
     const val SHEET_PRIMARY_ACTION = "sheet_primary_action"
 
-    /** [SheetActionRow]'s destructive button — "Discard" at both sheet call sites. */
+    /** [SheetActionRow]'s secondary button — "Discard" or "Cancel" in edit mode. */
     const val SHEET_SECONDARY_ACTION = "sheet_secondary_action"
 
     /** Frame-level queue navigation. */

@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-11-05
-commit: ce41b5ca
+verified: 2026-11-20
+commit: 199c5e31
 ---
 
 # report
@@ -27,7 +27,7 @@ over.
    never synced to this device (`GenerateSessionReportUseCase.kt::GenerateSessionReportUseCase`). A session with no
    verified samples is refused too. Works offline when signed in and the patient is already local.
    On a colleague's session Session Detail offers no generate button and names the author instead
-   (`SessionDetailContentState.kt::SessionDetailContentState`, 14zcqntjph6); the reports that session already has
+   (`SessionDetailScreen.kt::SessionDetailContentState`, 14zcqntjph6); the reports that session already has
    stay listed and open for the assigned medtech, files included (`RestoreReportFilesUseCase.kt::RestoreReportFilesUseCase`
    builds the path from the report's own `user_id`).
 2. **Gather.** Fetch the session's live verified samples (`deleted_at is null`), their detections,
@@ -56,24 +56,42 @@ over.
 Both session and multi-session patient reports support user configuration before generation:
 - **Configuration options:** Encapsulated in `ReportConfig.kt::ReportConfig`:
   - `includeSampleImages: Boolean` (default `false`) — controls whether verified sample micrographs are appended to the document.
-  - `patientNameOption: PatientNameOption` (`ReportConfig.kt::PatientNameOption`, default `SHOW`) — determines whether the patient name is fully displayed (`SHOW`), masked with asterisks (`CENSOR`), or completely omitted (`EXCLUDE`).
-- **Low sample count soft-limit:** Reliable direct fecal smear microscopy recommends at least 10 examined fields (`ReportSheetComponents.kt::RECOMMENDED_MIN_SAMPLES`). When 1 to 9 verified samples are included:
+  - `patientNameOption: PatientNameOption` (`ReportConfig.kt::PatientNameOption`, default `SHOW`) — determines whether the patient name is fully displayed (`SHOW`), masked with asterisks (`CENSOR`), or replaced with "Excluded" (`EXCLUDE`, `ReportOrganizationUtils.kt::formatPatientNameForReport`).
+- **Low field count warning:** Reliable direct fecal smear microscopy recommends at least 10 examined fields (`ReportSheetComponents.kt::RECOMMENDED_MIN_SAMPLES`). When 1 to 9 verified fields are included:
   - Configuration step displays an amber banner (`ReportSheetComponents.kt::SampleCountWarningBanner`).
   - Preview step requires the medtech to explicitly check an acknowledgment checkbox (`ReportSheetComponents.kt::SampleCountAcknowledgmentCard`) before the "Generate PDF" action becomes enabled (`ReportSheetComponents.kt::ReportSheetTestTags`).
+- **Unverified fields** (14zcqntx3up). The report flow shows how many captured fields will
+  be excluded and requires a separate acknowledgment on the preview before generation
+  (`ReportSheetComponents.kt::UnverifiedSampleWarning`). The medtech can leave the report
+  flow to verify the fields first. The count includes flagged fields still waiting for model
+  output and skips tombstoned fields (`SampleDao.kt::observeFlaggedSamplesForSession`).
+  A patient report adds up flagged fields from the selected smears that contribute verified
+  samples. Both generation use cases check the current count before rendering or saving.
+  If a positive count differs from the acknowledged count, the medtech has to acknowledge
+  the new count (`UnverifiedReportFieldsException.kt::requireUnverifiedFieldsAcknowledged`).
+  The report stays open, updates the count, clears its acknowledgment, and shows "The number
+  of unverified fields changed. Confirm again." from `report_warning_unverified_fields_changed`.
+  Ticking the unverified-field checkbox again clears that message
+  (`SessionDetailViewModel.kt::onAcknowledgeUnverifiedReportWarning`,
+  `SessionsViewModel.kt::onAcknowledgeUnverifiedReportWarning`).
+  Only verified fields contribute to the PDF and its counts.
 
 ## Interactive Preview Flow
 
 Prior to writing a report row to the database or saving a final PDF file to device storage, the medtech can review an interactive in-memory preview:
 1. **Request preview:** The bottom sheets (`SessionReportSheet.kt::SessionReportSheet`, `PatientReportSheet.kt::PatientReportSheet`) transition from `ReportSheetStep.CONFIGURATION` to `ReportSheetStep.PREVIEW` by invoking `PreviewSessionReportUseCase.kt::PreviewSessionReportUseCase` or `PreviewPatientReportUseCase.kt::PreviewPatientReportUseCase`.
-2. **In-memory rendering:** The preview use cases construct the document with temporary IDs and render it to a `ByteArray` without hitting the file store, Room database, or sync scheduler.
+2. **In-memory rendering.** The preview use cases read the records and render temporary PDFs to
+   a `ByteArray`. They leave the report file store, report rows, and sync schedule untouched.
 3. **Viewport & pagination:** `ReportSheetComponents.kt::PdfPreviewViewport` renders the PDF pages into display bitmaps and presents them with swipeable pagination and page counter captions.
-4. **Pre-rendered handoff:** When the medtech taps "Generate PDF", the pre-rendered `ByteArray` is passed directly into `GenerateSessionReportUseCase.kt::GenerateSessionReportUseCase` or `GeneratePatientReportUseCase.kt::GeneratePatientReportUseCase` as `preRenderedPdf`. If provided, generation skips duplicate PDF construction and rendering, writing the verified bytes straight to storage and database. If generation is invoked directly without preview, the use cases render the PDF on the fly using `ReportConfig.kt::ReportConfig`.
-5. **Editing options:** Medtechs can tap "Edit options" in `ReportSheetStep.PREVIEW` to return to `ReportSheetStep.CONFIGURATION` and adjust parameters.
+4. **Final rendering.** When the medtech taps "Generate PDF",
+   `GenerateSessionReportUseCase.kt::invoke` or `GeneratePatientReportUseCase.kt::invoke`
+   reads the current report data and renders a fresh PDF with the selected options.
+5. **Editing options:** Medtechs can tap "Edit options" in `ReportSheetStep.PREVIEW` to return to `ReportSheetStep.CONFIGURATION` and adjust parameters. Returning to options resets the acknowledgments for low field count and unverified fields (`SessionDetailViewModel.kt::onBackToReportConfig`, `SessionsViewModel.kt::onBackToPatientReportConfig`). The next preview requires each applicable acknowledgment again.
 
 ## Redesigned PDF Layout
 
 Both single-session and multi-session patient PDFs share a redesigned clinical document design:
-- **Chrome & Header:** `PdfChrome.kt::PdfChrome` renders a branded clinical header including an email-derived organization label (`ReportOrganizationUtils.kt::deriveOrganizationFromEmail`, e.g. "DEPARTMENT OF HEALTH" or healthcare facility domain), document title, generation timestamp, and medtech credentials.
+- **Chrome & Header:** `PdfChrome.kt::PdfChrome` renders a branded clinical header including an organization label derived from the medtech's email domain (`ReportOrganizationUtils.kt::deriveOrganizationFromEmail`), document title, generation timestamp, and medtech credentials.
 - **Microscopy Results Hero Card:** Rendered with deep maroon brand styling displaying identified species rows, Low Power Field density ranges (`min..max / LPF`), qualitative descriptors, and high-visibility parasite burden level pill badges (`ReportSpeciesRows.kt::buildReportSpeciesRows`, `PdfChrome.kt::PdfChrome`).
 - **Sample Image Appendix:** When `includeSampleImages = true`, verified field images are laid out in a balanced 2×2 grid per appendix page (`ReportOrganizationUtils.kt::buildAppendixSamples`), complete with field IDs, timestamps, and human-verified egg detections (`verdict != DetectionVerdict.FALSE_POSITIVE`, covering `CONFIRMED`, `WRONG_CLASS`, and `BOX_INCORRECT` with species resolved from `expertClass ?: classLabel` to match `DetectionDao.kt::getConfirmedEggCountsForSession`), powered by `AndroidReportPdfRenderer.kt::AndroidReportPdfRenderer` and `AndroidPatientReportPdfRenderer.kt::AndroidPatientReportPdfRenderer`.
 
@@ -100,7 +118,7 @@ Both single-session and multi-session patient PDFs share a redesigned clinical d
 **Input** — a patient id, a signed-in medtech, a `PatientReportScope.kt::PatientReportScope` (a date range and/or an explicit session-id subset; both default to "every session"), and a `ReportConfig.kt::ReportConfig`.
 **Output** — a persisted `Report` row with `report_type = 'patient'`, `patient_id` set, `session_id` null, and `session_ids` naming every session actually included; a PDF in `Documents/AgarthaVision/`.
 
-1. **Resolve scope.** `resolvePatientReportSessions` (`GeneratePatientReportUseCase.kt::resolvePatientReportSessions`, pure, C2) filters the patient's sessions by the scope's inclusive date range and/or session-id subset. A session id in the subset that does not belong to the patient is a caller error (`IllegalArgumentException`), not a silent drop.
+1. **Resolve scope.** `PatientReportSessionResolution.kt::resolvePatientReportSessions` filters the patient's sessions by the scope's inclusive date range and/or session-id subset. It throws `IllegalArgumentException` if a requested session id does not belong to the patient.
 2. **Drop empty sessions.** Any resolved session with zero verified samples is excluded entirely — not reported as a zero row — so an unexamined smear cannot pad the "sessions covered" count on a clinical document. If nothing survives, generation fails with `NO_VERIFIED_SAMPLES_MESSAGE`. The "generate report" sheet shows these sessions disabled rather than hiding them (`GetPatientReportCandidatesUseCase.kt::GetPatientReportCandidatesUseCase`), and they never start checked. Picking a date range re-derives the checklist's selection to sessions that are both eligible and inside it (`SessionsViewModel.kt::onReportDateRangeSelected`), so a checked session can never silently fall out of scope. If the medtech still taps Generate with nothing selected — e.g. a range with no eligible sessions in it — the sheet shows "No verified samples in the selected range." without calling the use case at all, distinct from `NO_VERIFIED_SAMPLES_MESSAGE`, which means the patient has no verified samples anywhere.
 3. **Pool, don't sum per-session ranges.** Every surviving session's findings are collected into one list and passed to a single `aggregateLpfPerSpecies(all, totalFieldsAcrossSessions)` call (`LpfAggregation.kt::aggregateLpfPerSpecies`) — the headline species table is the pooled range across every included session, not each session's range combined after the fact. The per-session breakdown table keeps each smear's own range visible alongside the pooled figure.
 4. **Resolve the patient header.** `displayName` formatted according to `ReportConfig.kt::PatientNameOption`, age computed at the same instant as `generatedAt`, sex, and the full address via `PsgcBarangay.kt::PsgcBarangay` (falling back to the raw PSGC code when the barangay no longer resolves).

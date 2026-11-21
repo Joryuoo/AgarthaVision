@@ -69,9 +69,10 @@ sync attempt.
 9. **Input is held while it saves.** `isSubmitting` lays an input blocker over the sheet and clears
    its semantics, and the view model refuses paging, back, discard and `setFrame` until it ends
    (`VerificationSheet.kt::SavingInputBlocker`, `VerificationViewModel.kt::requestLeave`).
-10. **Discard or leave.** Initial verification asks before deleting the frame
-    (`VerificationSheet.kt::DiscardFrameDialog`). The edit-mode footer routes Discard through the
-    leave flow, which offers to keep editing when there are unsaved changes
+10. **Discard or leave.** Initial verification's Discard button asks before deleting the frame
+    (`VerificationSheet.kt::VerificationSheetFooter`, `::DiscardFrameDialog`). The edit-mode
+    footer's Cancel button uses the same leave flow as back. It closes immediately when there
+    are no changes and offers to keep editing or discard edits when there are unsaved changes
     (`VerificationSheet.kt::LeaveUnsavedChangesDialog`, `VerificationViewModel.kt::requestLeave`).
 
 ## A colleague's sample is read-only

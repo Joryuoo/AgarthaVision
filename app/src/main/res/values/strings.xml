@@ -541,15 +541,23 @@
     <string name="report_option_name_selected_prefix">Selected: %1$s</string>
     <string name="report_option_name_excluded">Excluded</string>
     <string name="report_option_censor_codename_toast">Patient uses a codename and cannot be censored.</string>
-    <string name="report_warning_fewer_samples_title">Only %1$d of %2$d recommended samples selected</string>
+    <string name="report_warning_fewer_samples_title">Only %1$d of %2$d recommended fields selected</string>
     <plurals name="report_warning_fewer_samples_title">
-        <item quantity="one">Only %1$d of %2$d recommended sample selected</item>
-        <item quantity="other">Only %1$d of %2$d recommended samples selected</item>
+        <item quantity="one">Only %1$d of %2$d recommended fields selected</item>
+        <item quantity="other">Only %1$d of %2$d recommended fields selected</item>
     </plurals>
     <string name="report_warning_fewer_samples_config_subtitle">You can still preview and continue.</string>
-    <string name="report_warning_fewer_samples_preview_subtitle_single">You can continue with this sample.</string>
-    <string name="report_warning_fewer_samples_preview_subtitle_multiple">You can continue with these samples.</string>
+    <string name="report_warning_fewer_samples_preview_subtitle_single">You can continue with this field.</string>
+    <string name="report_warning_fewer_samples_preview_subtitle_multiple">You can continue with these fields.</string>
     <string name="report_warning_acknowledgment_checkbox">I understand and want to continue.</string>
+    <plurals name="report_warning_unverified_fields_title">
+        <item quantity="one">%1$d unverified field will be excluded from the report</item>
+        <item quantity="other">%1$d unverified fields will be excluded from the report</item>
+    </plurals>
+    <string name="report_warning_unverified_fields_config_subtitle">Open the preview to continue, or close the report to verify the fields first.</string>
+    <string name="report_warning_unverified_fields_preview_subtitle">To include these fields, close the report and verify them first.</string>
+    <string name="report_warning_unverified_fields_checkbox">I understand the report excludes unverified fields.</string>
+    <string name="report_warning_unverified_fields_changed">The number of unverified fields changed. Confirm again.</string>
     <string name="report_sheet_generate_title">Generate report</string>
     <string name="report_sheet_pdf_report_label">PDF report</string>
     <plurals name="report_sheet_pdf_page_summary">

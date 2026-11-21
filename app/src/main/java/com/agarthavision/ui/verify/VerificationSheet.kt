@@ -684,7 +684,9 @@ private fun VerificationSheetFooter(
         SheetActionRow(
             SheetActionRowState(
                 primaryLabel = primaryLabel,
-                secondaryLabel = stringResource(R.string.verify_action_discard),
+                secondaryLabel = stringResource(
+                    if (isEditing) R.string.verify_cancel else R.string.verify_action_discard,
+                ),
                 onPrimaryClick = onSubmit,
                 onSecondaryClick = onDiscard,
                 primaryLoading = state.isSubmitting,
