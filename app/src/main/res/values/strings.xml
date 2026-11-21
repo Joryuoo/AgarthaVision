@@ -201,7 +201,8 @@
     <string name="verify_action_discard">Discard</string>
     <string name="verify_action_save_changes">Save changes</string>
     <string name="verify_action_submit">Submit</string>
-    <string name="verify_action_submit_clean_field">Submit (No eggs in field)</string>
+    <string name="verify_enlarge_image">Enlarge image</string>
+    <string name="verify_close_enlarged_image">Close enlarged image</string>
     <string name="verify_confirm_detection">Confirm detection</string>
     <string name="verify_suggested_species_label">AI suggestion:</string>
     <string name="verify_detection_species_subtitle">Model: %1$s</string>
