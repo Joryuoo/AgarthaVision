@@ -49,16 +49,20 @@ login no longer reaches one. They are `patient_users.user_id` and the console's
 |---|---|---|
 | `id` | PK. FK → `auth.users(id)` ON DELETE CASCADE until 0011, which drops it | `supabase/migrations/0001_init.sql:35`, `0011_profile_outlives_login.sql:48-64` |
 | `account_id` | nullable text, UNIQUE; the login's subject id, null once the login is deleted | `supabase/migrations/0011_profile_outlives_login.sql:42-46` |
-| `full_name` | nullable text | `supabase/migrations/0001_init.sql:36` |
+| `full_name` | NOT NULL text, CHECK (trim(full_name) <> '') | `supabase/migrations/0001_init.sql:36`, `0019_require_profile_full_name.sql:22-38` |
 | `role` | NOT NULL, default `medtech`, CHECK in (`medtech`, `admin`). Retired by 0014: grants nothing | `supabase/migrations/0001_init.sql:37`, `0014_super_admins.sql:150-152` |
 | `created_at` | NOT NULL, default `now()` | `supabase/migrations/0001_init.sql:38` |
 
 Auto-creation: `handle_new_user()` inserts a profile on every `auth.users` insert —
 `supabase/migrations/0001_init.sql:42-52` — since 0011 with `account_id = id`
-(`0011_profile_outlives_login.sql:66-73`), and since 0014 naming no role, so `role` takes its
-default (`0014_super_admins.sql:142-148`). `handle_deleted_user()` sets `account_id` to null when
-a login is deleted (`:75-87`). Note neither populates `full_name`, so that column is null in
-practice.
+(`0011_profile_outlives_login.sql:66-73`), since 0014 naming no role, so `role` takes its
+default (`0014_super_admins.sql:142-148`), and since 0019 populating `full_name` from
+auth metadata (`raw_user_meta_data->>'full_name'`), defaulting to `'Pending Profile Setup'`
+when metadata is absent (`0019_require_profile_full_name.sql`, 14zcqntx3v6). This ensures
+admin console invitation acceptance (`auth.admin.createUser`) and dashboard user additions succeed
+without trigger exceptions, satisfying `NOT NULL` and non-blank check constraints while the
+invitation accept RPC (`console_accept_invitation`) updates the profile with the user's entered full name.
+`handle_deleted_user()` sets `account_id` to null when a login is deleted (`:75-87`).
 
 **Nothing reads `account_id` yet.** Every policy still compares `auth.uid()` with `profiles.id`
 and the `user_id` columns, which holds while each profile's id equals its login id. Reconnecting
@@ -112,12 +116,16 @@ record can name its author (14zcqntjph6).
 **Room holds colleagues' names only.** Identity on-device is a DataStore-cached `LocalIdentity`
 (`app/src/main/java/com/agarthavision/domain/model/LocalIdentity.kt`,
 `SupabaseAuthRepository.kt::observeLocalIdentity`), not a `profiles` row. The `colleagues` table
-(`data/local/entity/ColleagueEntity.kt`, Room v24) caches `id` and `full_name` of those
+(`data/local/entity/ColleagueEntity.kt`, Room v26) caches `id` and `full_name` of those
 colleagues, filled by the pull (`data/supabase/ProfileRemoteDataSource.kt::fetchColleagues`, by
 the ids `ColleagueDao::getColleagueIdsOnLinkedPatients` reads off the device, so an org admin's
 phone never lists their laboratory's staff) and read through `ColleagueRepository`. It is a
-label, never a permission. Because `handle_new_user()` writes no name, a colleague reads as
-"another medtech" until something sets `full_name`.
+label, never a permission. With 0019 (`0019_require_profile_full_name.sql`) enforcing non-blank
+names across profiles with a graceful placeholder fallback ('Pending Profile Setup') and
+`ProfileRemoteDataSource` using nullable DTO decoding (`fullName: String? = null`), colleague
+synchronization remains fault-tolerant regardless of client-migration rollout order, and UI
+"another medtech" fallbacks have been retired (14zcqntx3v6). Profiles awaiting full name completion
+can be audited in Supabase via `WHERE full_name = 'Pending Profile Setup'`.
 
 ## Connected to
 

@@ -23,6 +23,11 @@ internal object VerifyTestTags {
     /** The JPEG preview. Present whether or not the image itself decodes. */
     const val FRAME_PREVIEW = "frame_preview"
 
+    /** Enlarged image overlay for detailed egg inspection (14zcqnthuab). */
+    const val ENLARGED_IMAGE_OVERLAY = "enlarged_image_overlay"
+    const val ENLARGED_IMAGE_SCRIM = "enlarged_image_scrim"
+    const val ENLARGED_FRAME_PREVIEW = "enlarged_frame_preview"
+
     /**
      * Shown in the preview's place when there is no image to load at all — neither local bytes,
      * nor a local file, nor a signed Storage URL.

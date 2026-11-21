@@ -154,9 +154,8 @@ class GenerateSessionReportUseCase @Inject constructor(
     }
 
     /**
-     * The medtech's name as printed on the report: display name first, falling back to email,
-     * then the raw user id — mirroring the convention used wherever a medtech's identity is
-     * shown without a guaranteed display name.
+     * The medtech's name as printed on the report: display name first, falling back to email
+     * or user id if an unauthenticated or cached record has no profile name.
      */
     private fun resolveGeneratedByName(userId: String, identity: LocalIdentity?): String {
         return identity?.displayName?.takeIf { it.isNotBlank() }

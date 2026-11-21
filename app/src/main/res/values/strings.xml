@@ -201,7 +201,8 @@
     <string name="verify_action_discard">Discard</string>
     <string name="verify_action_save_changes">Save changes</string>
     <string name="verify_action_submit">Submit</string>
-    <string name="verify_action_submit_clean_field">Submit (No eggs in field)</string>
+    <string name="verify_enlarge_image">Enlarge image</string>
+    <string name="verify_close_enlarged_image">Close enlarged image</string>
     <string name="verify_confirm_detection">Confirm detection</string>
     <string name="verify_suggested_species_label">AI suggestion:</string>
     <string name="verify_detection_species_subtitle">Model: %1$s</string>
@@ -1035,8 +1036,7 @@
         <item quantity="other">%d unverified</item>
     </plurals>
     <string name="patient_preview_age_sex">%1$s · %2$s</string>
-    <!-- A colleague's record, read-only on this phone (14zcqntjph6) -->
+    <!-- A colleague's record, read-only on this phone (14zcqntjph6). Colleague name is required (14zcqntx3v6) -->
     <string name="record_recorded_by">Recorded by %1$s</string>
-    <string name="record_recorded_by_unnamed">Recorded by another medtech</string>
     <string name="record_read_only_body">Only the medtech who recorded it can change it.</string>
 </resources>
