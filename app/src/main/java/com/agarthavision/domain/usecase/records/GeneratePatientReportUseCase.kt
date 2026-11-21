@@ -63,6 +63,7 @@ class GeneratePatientReportUseCase @Inject constructor(
         patientId: String,
         scope: PatientReportScope = PatientReportScope(),
         config: ReportConfig = ReportConfig(),
+        acknowledgedUnverifiedCount: Int? = null,
     ): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
@@ -81,6 +82,10 @@ class GeneratePatientReportUseCase @Inject constructor(
         val breakdown = buildSessionBreakdown(candidateSessions, userId)
         val sessionRows = breakdown.sessionRows
         require(sessionRows.isNotEmpty()) { NO_VERIFIED_SAMPLES_MESSAGE }
+        val unverifiedCount = breakdown.includedSessions.sumOf { session ->
+            sampleRepository.countUnverifiedFieldsForReport(session.id, userId)
+        }
+        requireUnverifiedFieldsAcknowledged(unverifiedCount, acknowledgedUnverifiedCount)
         val totalSamples = breakdown.totalSamples
         val totalEggsConfirmed = breakdown.totalEggsConfirmed
 

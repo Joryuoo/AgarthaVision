@@ -39,6 +39,7 @@ import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -113,11 +114,15 @@ class VerificationSheetContentTest {
         val removedReplacements = mutableListOf<Int>()
         var confirmedLeaves = 0
         var dismissedLeaves = 0
+        val confirmedDetections = mutableListOf<Int>()
+        val rejectedDetections = mutableListOf<Int>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
         onQ1Selected = { r.q1 += it },
         onQ2Selected = { r.q2 += it },
+        onConfirmDetection = { r.confirmedDetections += it },
+        onRejectDetection = { r.rejectedDetections += it },
         onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
         onOtherSpeciesChanged = { r.otherSpecies += it },
@@ -225,6 +230,51 @@ class VerificationSheetContentTest {
             VerifyTestTags.QUESTION_Q2,
         ).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
+    }
+
+    @Test
+    fun `an unanswered detection displays 1-tap confirm and reject buttons`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.CONFIRM_DETECTION).assertIsDisplayed()
+        sheetNode(VerifyTestTags.REJECT_DETECTION).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping 1-tap confirm button reports confirmation`() {
+        val r = setContent(state())
+
+        sheetNode(VerifyTestTags.CONFIRM_DETECTION).performClick()
+
+        assertEquals(listOf(0), r.confirmedDetections)
+        assertTrue(r.q1.isEmpty())
+    }
+
+    @Test
+    fun `tapping 1-tap reject button reports rejection`() {
+        val r = setContent(state())
+
+        sheetNode(VerifyTestTags.REJECT_DETECTION).performClick()
+
+        assertEquals(listOf(0), r.rejectedDetections)
+        assertTrue(r.q1.isEmpty())
+    }
+
+    @Test
+    fun `tapping unanswered detection card outside buttons does not confirm`() {
+        val r = setContent(state())
+
+        question(VerifyTestTags.QUESTION_Q1).performClick()
+
+        assertTrue(r.confirmedDetections.isEmpty())
+        assertTrue(r.q1.isEmpty())
+    }
+
+    @Test
+    fun `unanswered count is displayed in footer when detections remain`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.UNANSWERED_DETECTIONS_NOTE).assertIsDisplayed()
     }
 
     @Test
@@ -503,7 +553,7 @@ class VerificationSheetContentTest {
 
     @Test
     fun `answering the first question reports the choice`() {
-        val r = setContent(state())
+        val r = setContent(state(answers = listOf(answered(isEgg = false))))
 
         question(VerifyTestTags.QUESTION_Q1).performClick()
 
@@ -813,6 +863,76 @@ class VerificationSheetContentTest {
 
         assertEquals(1, r.framePrev)
         assertEquals(1, r.frameNext)
+    }
+
+    @Test
+    fun `the frame preview and cycle navigation remain visible while viewing detection questions`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.QUESTION_Q1).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the frame preview remains pinned at the top when scrolling down to remarks`() {
+        val r = setContent(state(frameIndexInQueue = 2, queueSize = 3))
+        val initialFrameBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
+        val initialNextBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).getBoundsInRoot()
+        val initialQ1Bounds = composeRule.onNodeWithTag(VerifyTestTags.QUESTION_Q1).getBoundsInRoot()
+
+        sheetNode(VerifyTestTags.NOTE_FIELD).assertIsDisplayed()
+
+        val scrolledFrameBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
+        val scrolledNextBounds = composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).getBoundsInRoot()
+        val scrolledQ1Bounds = composeRule.onNodeWithTag(VerifyTestTags.QUESTION_Q1).getBoundsInRoot()
+
+        assertEquals(initialFrameBounds, scrolledFrameBounds)
+        assertEquals(initialNextBounds, scrolledNextBounds)
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).assertIsDisplayed()
+
+        // Content in the scroll column moved upward
+        assertNotEquals(initialQ1Bounds, scrolledQ1Bounds)
+        assertTrue(
+            "Q1 must move up when scrolling down to remarks",
+            scrolledQ1Bounds.top < initialQ1Bounds.top,
+        )
+
+        // Reachable without scrolling back to the top
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREV).performClick()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).performClick()
+        assertEquals(1, r.framePrev)
+        assertEquals(1, r.frameNext)
+    }
+
+    @Test
+    fun `tapping the frame preview opens the enlarged image overlay`() {
+        setContent(state())
+
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertDoesNotExist()
+
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).performClick()
+
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_FRAME_PREVIEW).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping outside the enlarged image closes the overlay and restores view`() {
+        setContent(state())
+
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).performClick()
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertIsDisplayed()
+
+        // Tapping the outer dimmed background (away from the centered image) dismisses
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_SCRIM).performTouchInput {
+            click(Offset(20f, 20f))
+        }
+        composeRule.onNodeWithTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertIsDisplayed()
     }
 
     // Discard flow
@@ -1202,7 +1322,7 @@ class VerificationSheetContentTest {
         // A failed save leaves the sheet open with its error, and the medtech must be able to
         // correct and retry from there.
         val r = Recorder()
-        val current = mutableStateOf(state().copy(isSubmitting = true))
+        val current = mutableStateOf(state(answers = listOf(answered(isEgg = false))).copy(isSubmitting = true))
         composeRule.setContent {
             AgarthaVisionTheme {
                 VerificationSheetContent(state = current.value, actions = actionsFor(r))
@@ -1855,19 +1975,19 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `edit mode shows Save changes, Discard, and Editing title`() {
+    fun `edit mode shows Save changes, Cancel, and Editing title`() {
         setContentWithEditMode(state(), isEditing = true)
 
         composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
             .assertTextContains("Save changes")
         composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
-            .assertTextContains("Discard")
+            .assertTextContains("Cancel")
         composeRule.onNodeWithText("Editing sample").assertIsDisplayed()
         composeRule.onNodeWithText("Editing").assertDoesNotExist()
     }
 
     @Test
-    fun `discard in edit mode cancels without a frame deletion dialog`() {
+    fun `cancel in edit mode closes without a frame deletion dialog`() {
         val r = setContentWithEditMode(state(), isEditing = true)
 
         sheetNode(VerifyTestTags.SHEET_SECONDARY_ACTION).performClick()

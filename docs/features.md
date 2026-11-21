@@ -123,11 +123,15 @@ as working.
   disconnected on two consecutive failures and surface `ui/capture/ConnectionLossBanner.kt`.
 
 ### Validation (human-in-the-loop)
-- **Model output pre-filling, as checkboxes.** Each detected box shows three pre-checked
-  statements: Q1 "There is a parasitic egg in this box", Q2 "The bounding box is correctly
-  placed", Q3 "This egg is <species>" (`ui/verify/VerificationSheet.kt::CheckQuestion`).
-  Answering is only required when correcting the model; submitting an untouched row is the
-  medtech's confirmation of it.
+- **Unanswered model detections by default.** Each detected box opens unanswered on first
+  verification (`isEgg = null`), requiring explicit medtech action before submission. A
+  correct detection can be fully confirmed in a single tap via "Confirm detection", or rejected
+  in a single tap via "Not an egg". Detections confirmed as eggs display standard checkboxes:
+  Q1 "There is a parasitic egg in this box", Q2 "The bounding box is correctly placed", Q3 "This
+  egg is <species>" (`ui/verify/VerificationSheet.kt::CheckQuestion`). Submit is disabled while
+  any detection remains unanswered, with remaining count indicated in the footer note. Clean fields
+  (no model detections) state "Submit (No eggs in field)". Re-editing previously verified samples
+  preserves existing answers.
 - **Derived Q4.** The "missed eggs" flag (`needs_reannotation`) is derived automatically when a
   species' egg count exceeds what the model boxed, rather than asking a separate question.
 - **Add species, counted per field.** "+ Add species" opens one card per species with the
@@ -146,8 +150,8 @@ as working.
   `ui/verify/VerificationQueueViewModel.kt`). Supports batch hard-deletion of unverified frames.
 - **Bounding box overlay and redraw.** `ui/verify/FrameWithBoxes.kt` renders the boxes;
   `ui/verify/DrawMode.kt` draws a replacement box, or a box for an added egg.
-- **Verification layout and actions.** The sample image frame scrolls with the content column; the
-  pinned footer shows any save error above the action row
+- **Verification layout and actions.** The sample image frame preview and sample navigation are
+  pinned at the top while findings scroll below; the pinned footer shows any save error above the action row
   (`ui/verify/VerificationSheet.kt::VerificationSheetFooter`). The actions are "Discard" / "Save changes"
   in edit mode and "Discard" / "Submit" in initial verification mode.
 - **Tombstoning duplicates.** A duplicate verified sample is tombstoned via `samples.deleted_at`

@@ -55,6 +55,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SearchableDropdown
 import com.agarthavision.ui.components.SearchableDropdownActions
 import com.agarthavision.ui.components.SearchableDropdownConfig
@@ -112,9 +113,12 @@ fun PatientFormSheet(
 
     // Route system back through the dirty-check guard, the same way CaptureScreen routes it
     // through its isBusy guard.
-    BackHandler { viewModel.onCancel() }
+    BackHandler(enabled = !LocalAppLocked.current) { viewModel.onCancel() }
 
     var showDatePicker by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    if (LocalAppLocked.current) return
+
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
         confirmValueChange = { targetValue ->
@@ -196,7 +200,7 @@ fun PatientFormSheet(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(horizontal = 20.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
@@ -583,6 +587,8 @@ private fun BirthdatePickerDialog(
             }
         },
     )
+
+    if (LocalAppLocked.current) return
 
     // Material3 defaults dialogs to shapes.extraLarge, which is this app's 999.dp pill token,
     // so without this the picker renders as an ellipse. Every other dialog in the app already

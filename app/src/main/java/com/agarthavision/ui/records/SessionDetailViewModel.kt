@@ -1,8 +1,10 @@
 package com.agarthavision.ui.records
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.R
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.supabase.RestoreReportFilesUseCase
@@ -20,10 +22,12 @@ import com.agarthavision.domain.usecase.records.PreviewSessionReportUseCase
 import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.SessionSamplesResult
+import com.agarthavision.domain.usecase.records.UnverifiedReportFieldsException
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
 import com.agarthavision.domain.usecase.reports.SessionEggCounts
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -32,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -151,6 +156,7 @@ class SessionDetailViewModel @Inject constructor(
     sessionManager: SessionManager,
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
+    private val sessionPendingCount = observeSessionPendingCountUseCase(sessionId)
     private val generationState = MutableStateFlow(GenerationState())
     private var previewRequestId = 0L
     private val reportSheetState = MutableStateFlow<SessionReportSheetState?>(null)
@@ -222,7 +228,7 @@ class SessionDetailViewModel @Inject constructor(
                 generationError = generation.error,
             )
         },
-        observeSessionPendingCountUseCase(sessionId),
+        sessionPendingCount,
         isActiveSessionFlow,
         selectedTab,
         reportSheetState,
@@ -245,16 +251,21 @@ class SessionDetailViewModel @Inject constructor(
         selectedTab.value = tab
     }
 
-    fun onOpenGenerateReport() {
-        previewRequestId++
+    fun onOpenGenerateReport() = openReportSheet(state.value.pendingFlagged)
+
+    private fun openReportSheet(unverifiedCount: Int, @StringRes errorRes: Int? = null) {
+        val requestId = ++previewRequestId
         val currentSession = state.value.session ?: return
         val verifiedCount = currentSession.samples.size
         viewModelScope.launch {
             val patient = patientRepository.getPatientById(currentSession.session.patientId)
+            if (requestId != previewRequestId) return@launch
             reportSheetState.value = SessionReportSheetState(
                 step = ReportSheetStep.CONFIGURATION,
                 config = ReportConfig(),
                 verifiedSampleCount = verifiedCount,
+                unverifiedSampleCount = unverifiedCount,
+                errorRes = errorRes,
                 patientDisplayName = patient?.displayName.orEmpty(),
                 patientMaskedName = patient?.maskedDisplayName.orEmpty(),
                 isPatientCodename = patient?.isCodename == true,
@@ -263,8 +274,22 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     fun onDismissReportSheet() {
+        val current = reportSheetState.value ?: return
+        if (current.hasUnsavedChanges) {
+            reportSheetState.update { it?.copy(showDiscardConfirm = true) }
+        } else {
+            previewRequestId++
+            reportSheetState.value = null
+        }
+    }
+
+    fun onConfirmDiscardReportSheet() {
         previewRequestId++
         reportSheetState.value = null
+    }
+
+    fun onCancelDiscardReportSheet() {
+        reportSheetState.update { it?.copy(showDiscardConfirm = false) }
     }
 
     fun onUpdateReportConfig(config: ReportConfig) {
@@ -278,7 +303,15 @@ class SessionDetailViewModel @Inject constructor(
             } else {
                 config
             }
-            current.copy(config = effectiveConfig, previewPdfBytes = null, isLoadingPreview = false)
+            val hasChanges = effectiveConfig != current.initialConfig
+            current.copy(
+                config = effectiveConfig,
+                previewPdfBytes = null,
+                isLoadingPreview = false,
+                isUnverifiedWarningAcknowledged = false,
+                errorRes = null,
+                showDiscardConfirm = if (hasChanges) current.showDiscardConfirm else false,
+            )
         }
     }
 
@@ -288,25 +321,45 @@ class SessionDetailViewModel @Inject constructor(
         }
     }
 
+    fun onAcknowledgeUnverifiedReportWarning(acknowledged: Boolean) {
+        reportSheetState.update { sheet ->
+            if (sheet?.step != ReportSheetStep.PREVIEW || sheet.isGenerating) {
+                sheet
+            } else {
+                sheet.copy(
+                    isUnverifiedWarningAcknowledged = acknowledged,
+                    errorRes = if (acknowledged) null else sheet.errorRes,
+                )
+            }
+        }
+    }
+
     fun onPreviewSessionReport() {
         val currentSheet = reportSheetState.value ?: return
         val requestId = ++previewRequestId
         viewModelScope.launch {
             if (requestId != previewRequestId) return@launch
-            reportSheetState.update { it?.copy(isLoadingPreview = true, error = null) }
-            previewSessionReportUseCase(sessionId, currentSheet.config).fold(
-                onSuccess = { pdfBytes ->
+            reportSheetState.update { it?.copy(isLoadingPreview = true, error = null, errorRes = null) }
+            runCatching {
+                val unverifiedCount = sessionPendingCount.first()
+                val pdfBytes = previewSessionReportUseCase(sessionId, currentSheet.config).getOrThrow()
+                unverifiedCount to pdfBytes
+            }.fold(
+                onSuccess = { (unverifiedCount, pdfBytes) ->
                     reportSheetState.update {
                         if (requestId != previewRequestId) return@update it
                         it?.copy(
                             step = ReportSheetStep.PREVIEW,
                             previewPdfBytes = pdfBytes,
+                            unverifiedSampleCount = unverifiedCount,
+                            isUnverifiedWarningAcknowledged = false,
                             isLoadingPreview = false,
                             error = null,
                         )
                     }
                 },
                 onFailure = { error ->
+                    if (error is CancellationException) throw error
                     reportSheetState.update {
                         if (requestId != previewRequestId) return@update it
                         it?.copy(
@@ -322,18 +375,29 @@ class SessionDetailViewModel @Inject constructor(
     fun onBackToReportConfig() {
         previewRequestId++
         reportSheetState.update { current ->
-            current?.copy(step = ReportSheetStep.CONFIGURATION, isLoadingPreview = false)
+            current?.copy(
+                step = ReportSheetStep.CONFIGURATION,
+                isLoadingPreview = false,
+                isWarningAcknowledged = false,
+                isUnverifiedWarningAcknowledged = false,
+                errorRes = null,
+            )
         }
     }
 
     fun onFinalizeSessionReport() {
-        previewRequestId++
         val currentSheet = reportSheetState.value
+        if (generationState.value.isGenerating || currentSheet?.isLoadingPreview == true) return
+        if (currentSheet?.requiresUnverifiedWarningAck == true && !currentSheet.isUnverifiedWarningAcknowledged) return
+        previewRequestId++
         val config = currentSheet?.config ?: ReportConfig()
+        val acknowledgedCount = currentSheet
+            ?.takeIf { it.step == ReportSheetStep.PREVIEW && it.isUnverifiedWarningAcknowledged }
+            ?.unverifiedSampleCount
+        reportSheetState.update { it?.copy(isGenerating = true, error = null, errorRes = null) }
+        generationState.value = GenerationState(isGenerating = true)
         viewModelScope.launch {
-            reportSheetState.update { it?.copy(isGenerating = true, error = null) }
-            generationState.update { it.copy(isGenerating = true, error = null) }
-            generateSessionReportUseCase(sessionId, config).fold(
+            generateSessionReportUseCase(sessionId, config, acknowledgedCount).fold(
                 onSuccess = { report ->
                     generationState.update { GenerationState() }
                     reportSheetState.value = null
@@ -341,6 +405,22 @@ class SessionDetailViewModel @Inject constructor(
                     _events.emit(SessionDetailEvent.ReportGenerated(pdfPath = report.pdfFilePath))
                 },
                 onFailure = { error ->
+                    if (error is UnverifiedReportFieldsException) {
+                        generationState.value = GenerationState()
+                        if (reportSheetState.value == null) {
+                            openReportSheet(error.count, R.string.report_warning_unverified_fields_changed)
+                        } else {
+                            reportSheetState.update {
+                                it?.copy(
+                                    isGenerating = false,
+                                    unverifiedSampleCount = error.count,
+                                    isUnverifiedWarningAcknowledged = false,
+                                    errorRes = R.string.report_warning_unverified_fields_changed,
+                                )
+                            }
+                        }
+                        return@fold
+                    }
                     val errorMsg = error.message ?: error::class.simpleName
                     generationState.update { GenerationState(error = errorMsg) }
                     reportSheetState.update { it?.copy(isGenerating = false, error = errorMsg) }

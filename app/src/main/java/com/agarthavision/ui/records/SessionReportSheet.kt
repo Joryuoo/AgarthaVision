@@ -1,7 +1,9 @@
-@file:Suppress("LongParameterList")
+@file:Suppress("LongParameterList", "CyclomaticComplexMethod")
 
 package com.agarthavision.ui.records
 
+import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -24,12 +26,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Close
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -60,9 +68,19 @@ data class SessionReportSheetState(
     val isWarningAcknowledged: Boolean = false,
     val error: String? = null,
     val isPatientCodename: Boolean = false,
+    val initialConfig: ReportConfig = ReportConfig(),
+    val showDiscardConfirm: Boolean = false,
+    val unverifiedSampleCount: Int = 0,
+    val isUnverifiedWarningAcknowledged: Boolean = false,
+    @StringRes val errorRes: Int? = null,
 ) {
+    val hasUnsavedChanges: Boolean get() = config != initialConfig
     val requiresWarningAck: Boolean get() = verifiedSampleCount < RECOMMENDED_MIN_SAMPLES
-    val canGeneratePdf: Boolean get() = !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
+    val requiresUnverifiedWarningAck: Boolean get() = unverifiedSampleCount > 0
+    val canGeneratePdf: Boolean
+        get() = !isGenerating &&
+            (!requiresWarningAck || isWarningAcknowledged) &&
+            (!requiresUnverifiedWarningAck || isUnverifiedWarningAcknowledged)
     val estimatedPages: Int get() = if (config.includeSampleImages && verifiedSampleCount > 0) {
         1 + ((verifiedSampleCount + 3) / 4)
     } else {
@@ -82,7 +100,12 @@ data class SessionReportSheetState(
         if (isGenerating != other.isGenerating) return false
         if (isWarningAcknowledged != other.isWarningAcknowledged) return false
         if (error != other.error) return false
+        if (errorRes != other.errorRes) return false
         if (isPatientCodename != other.isPatientCodename) return false
+        if (initialConfig != other.initialConfig) return false
+        if (showDiscardConfirm != other.showDiscardConfirm) return false
+        if (unverifiedSampleCount != other.unverifiedSampleCount) return false
+        if (isUnverifiedWarningAcknowledged != other.isUnverifiedWarningAcknowledged) return false
         return true
     }
 
@@ -97,7 +120,12 @@ data class SessionReportSheetState(
         result = 31 * result + isGenerating.hashCode()
         result = 31 * result + isWarningAcknowledged.hashCode()
         result = 31 * result + (error?.hashCode() ?: 0)
+        result = 31 * result + (errorRes ?: 0)
         result = 31 * result + isPatientCodename.hashCode()
+        result = 31 * result + initialConfig.hashCode()
+        result = 31 * result + showDiscardConfirm.hashCode()
+        result = 31 * result + unverifiedSampleCount
+        result = 31 * result + isUnverifiedWarningAcknowledged.hashCode()
         return result
     }
 }
@@ -115,12 +143,43 @@ fun SessionReportSheet(
     onBackToConfig: () -> Unit,
     onGeneratePdf: () -> Unit,
     modifier: Modifier = Modifier,
+    onRequestDismiss: () -> Unit = {},
+    onDismissDiscard: () -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var localShowDiscardConfirm by remember { mutableStateOf(false) }
+    LaunchedEffect(state.hasUnsavedChanges) {
+        if (!state.hasUnsavedChanges) {
+            localShowDiscardConfirm = false
+        }
+    }
+    if (LocalAppLocked.current) return
+    val requestDismiss = {
+        if (state.hasUnsavedChanges) {
+            localShowDiscardConfirm = true
+            onRequestDismiss()
+        } else {
+            onDismiss()
+        }
+    }
+    val currentHasUnsavedChanges by rememberUpdatedState(state.hasUnsavedChanges)
+    val currentRequestDismiss by rememberUpdatedState(requestDismiss)
+    BackHandler(enabled = true, onBack = requestDismiss)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { targetValue ->
+            if (targetValue == SheetValue.Hidden && currentHasUnsavedChanges) {
+                currentRequestDismiss()
+                false
+            } else {
+                true
+            }
+        },
+    )
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = requestDismiss,
         sheetState = sheetState,
         containerColor = colors.surfaceHigh,
         dragHandle = {
@@ -141,9 +200,14 @@ fun SessionReportSheet(
             onDismiss = onDismiss,
             onConfigChange = onConfigChange,
             onAcknowledgeWarning = onAcknowledgeWarning,
+            onAcknowledgeUnverifiedWarning = onAcknowledgeUnverifiedWarning,
             onPreview = onPreview,
             onBackToConfig = onBackToConfig,
             onGeneratePdf = onGeneratePdf,
+            onRequestDismiss = onRequestDismiss,
+            onDismissDiscard = onDismissDiscard,
+            externalShowDiscardConfirm = localShowDiscardConfirm,
+            onExternalShowDiscardConfirmChange = { localShowDiscardConfirm = it },
         )
     }
 }
@@ -160,16 +224,43 @@ internal fun SessionReportSheetContent(
     onBackToConfig: () -> Unit,
     onGeneratePdf: () -> Unit,
     modifier: Modifier = Modifier,
+    onRequestDismiss: () -> Unit = {},
+    onDismissDiscard: () -> Unit = {},
+    externalShowDiscardConfirm: Boolean = false,
+    onExternalShowDiscardConfirmChange: (Boolean) -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
-    var previewCurrentPage by remember { mutableIntStateOf(1) }
-    var previewTotalPages by remember { mutableIntStateOf(state.estimatedPages) }
+    var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
+    var previewTotalPages by rememberSaveable { mutableIntStateOf(state.estimatedPages) }
+    var internalShowDiscardConfirm by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(state.estimatedPages, state.previewPdfBytes) {
+        previewCurrentPage = 1
+        previewTotalPages = state.estimatedPages
+    }
+    LaunchedEffect(state.hasUnsavedChanges) {
+        if (!state.hasUnsavedChanges) {
+            internalShowDiscardConfirm = false
+        }
+    }
+    if (LocalAppLocked.current) return
+    val requestDismiss = {
+        if (state.hasUnsavedChanges) {
+            internalShowDiscardConfirm = true
+            onExternalShowDiscardConfirmChange(true)
+            onRequestDismiss()
+        } else {
+            onDismiss()
+        }
+    }
+    BackHandler(enabled = true, onBack = requestDismiss)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag(ReportSheetTestTags.SHEET)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 20.dp)
             .padding(bottom = 24.dp),
     ) {
@@ -178,7 +269,7 @@ internal fun SessionReportSheetContent(
                 SessionReportSheetHeader(
                     title = stringResource(R.string.report_sheet_generate_title),
                     subtitle = "$sessionLabel · $sessionDate",
-                    onDismiss = onDismiss,
+                    onDismiss = requestDismiss,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -204,6 +295,11 @@ internal fun SessionReportSheetContent(
                 if (state.requiresWarningAck) {
                     Spacer(Modifier.height(12.dp))
                     SampleCountWarningBanner(sampleCount = state.verifiedSampleCount)
+                }
+
+                if (state.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(sampleCount = state.unverifiedSampleCount)
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -235,7 +331,8 @@ internal fun SessionReportSheetContent(
                     )
                 }
 
-                state.error?.let { error ->
+                val errorMessage = state.errorRes?.let { stringResource(it) } ?: state.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }
@@ -275,7 +372,7 @@ internal fun SessionReportSheetContent(
                 Spacer(Modifier.height(8.dp))
 
                 Button(
-                    onClick = onDismiss,
+                    onClick = requestDismiss,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Transparent,
                         contentColor = colors.textSecondary,
@@ -301,7 +398,7 @@ internal fun SessionReportSheetContent(
                         previewCurrentPage,
                         previewTotalPages,
                     ),
-                    onDismiss = onDismiss,
+                    onDismiss = onBackToConfig,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -330,7 +427,17 @@ internal fun SessionReportSheetContent(
                     )
                 }
 
-                state.error?.let { error ->
+                if (state.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(
+                        sampleCount = state.unverifiedSampleCount,
+                        acknowledged = state.isUnverifiedWarningAcknowledged,
+                        onAcknowledgedChange = onAcknowledgeUnverifiedWarning,
+                    )
+                }
+
+                val errorMessage = state.errorRes?.let { stringResource(it) } ?: state.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }
@@ -390,6 +497,21 @@ internal fun SessionReportSheetContent(
             }
         }
     }
+
+    if (state.showDiscardConfirm || externalShowDiscardConfirm || internalShowDiscardConfirm) {
+        ReportDiscardConfirmDialog(
+            onConfirm = {
+                internalShowDiscardConfirm = false
+                onExternalShowDiscardConfirmChange(false)
+                onDismiss()
+            },
+            onDismiss = {
+                internalShowDiscardConfirm = false
+                onExternalShowDiscardConfirmChange(false)
+                onDismissDiscard()
+            },
+        )
+    }
 }
 
 @Composable
@@ -422,7 +544,8 @@ private fun SessionReportSheetHeader(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(colors.surfaceMuted),
+                .background(colors.surfaceMuted)
+                .testTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON),
         ) {
             Icon(
                 imageVector = AgarthaIcons.Close,

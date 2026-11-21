@@ -34,10 +34,9 @@ sealed interface RecordAuthor {
     /**
      * A colleague wrote it. Read-only, and the screen says whose it is.
      *
-     * [name] is null when the colleague's profile carries none, or the name has not been pulled
-     * yet; the screen then says "another medtech" rather than showing nothing.
+     * [name] is the colleague's full name, required by 0019 (14zcqntx3v6).
      */
-    data class Colleague(val name: String?) : RecordAuthor
+    data class Colleague(val name: String) : RecordAuthor
 }
 
 /** True for a colleague's record: every editing action on it is hidden (14zcqntjph6). */

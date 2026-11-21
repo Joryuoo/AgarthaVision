@@ -13,6 +13,7 @@ import com.agarthavision.domain.inference.InferenceResult
 import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.inference.Prediction
 import com.google.gson.Gson
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -68,6 +69,22 @@ class SampleDaoInferenceQueueTest {
         sampleDao.upsertSample(sample("verified", timestamp = 80, status = "verified"))
 
         assertEquals(listOf("early", "late"), repository.queuedSampleIds())
+    }
+
+    @Test
+    fun `report warning includes live flagged fields across inference states`() = runTest {
+        seedSession()
+        sampleDao.upsertSample(sample("queued"))
+        sampleDao.upsertSample(sample("running", inferenceState = "in_inference"))
+        sampleDao.upsertSample(sample("ready", inferenceState = "ready"))
+        sampleDao.upsertSample(sample("manual", inferenceState = "manual", isManual = true))
+        sampleDao.upsertSample(sample("verified", status = "verified"))
+        sampleDao.upsertSample(sample("deleted").copy(deletedAt = 1_600L))
+        sampleDao.upsertSample(sample("other-user").copy(userId = "user-2"))
+
+        val flaggedFields = sampleDao.observeFlaggedSamplesForSession(SESSION_ID, USER_ID).first()
+
+        assertEquals(setOf("queued", "running", "ready", "manual"), flaggedFields.map { it.sampleId }.toSet())
     }
 
     @Test

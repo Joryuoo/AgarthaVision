@@ -2,6 +2,8 @@
 
 package com.agarthavision.ui.sessions
 
+import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,13 +29,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +57,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.PatientNameOption
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SingleDatePickerDialog
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Check
@@ -59,12 +66,14 @@ import com.agarthavision.ui.icons.DateRange
 import com.agarthavision.ui.icons.Description
 import com.agarthavision.ui.records.PdfPreviewViewport
 import com.agarthavision.ui.records.RECOMMENDED_MIN_SAMPLES
+import com.agarthavision.ui.records.ReportDiscardConfirmDialog
 import com.agarthavision.ui.records.ReportOptionsSection
 import com.agarthavision.ui.records.ReportPreviewSummaryCard
 import com.agarthavision.ui.records.ReportSheetStep
 import com.agarthavision.ui.records.ReportSheetTestTags
 import com.agarthavision.ui.records.SampleCountAcknowledgmentCard
 import com.agarthavision.ui.records.SampleCountWarningBanner
+import com.agarthavision.ui.records.UnverifiedSampleWarning
 import com.agarthavision.ui.theme.AgarthaTheme
 import java.time.LocalDate
 import java.time.ZoneId
@@ -94,9 +103,28 @@ data class PatientReportSheetState(
     val error: String? = null,
     val selectedSessionIds: Set<String> = selectedIds,
     val isPatientCodename: Boolean = false,
+    val initialStartDate: LocalDate? = null,
+    val initialEndDate: LocalDate? = null,
+    val initialSelectedIds: Set<String>? = null,
+    val initialConfig: ReportConfig = ReportConfig(),
+    val showDiscardConfirm: Boolean = false,
+    val unverifiedSampleCount: Int = 0,
+    val isUnverifiedWarningAcknowledged: Boolean = false,
+    @StringRes val errorRes: Int? = null,
 ) {
     val effectiveSelectedIds: Set<String>
         get() = if (selectedIds.isNotEmpty()) selectedIds else selectedSessionIds
+
+    val resolvedInitialSelectedIds: Set<String>
+        get() = initialSelectedIds ?: candidates
+            .filter { it.verifiedSampleCount > 0 }
+            .mapTo(mutableSetOf()) { it.session.id }
+
+    val hasUnsavedChanges: Boolean
+        get() = startDate != initialStartDate ||
+            endDate != initialEndDate ||
+            config != initialConfig ||
+            (!isLoadingCandidates && effectiveSelectedIds != resolvedInitialSelectedIds)
 
     val includedSessionCount: Int
         get() = candidates.count { it.session.id in effectiveSelectedIds }
@@ -107,8 +135,13 @@ data class PatientReportSheetState(
     val requiresWarningAck: Boolean
         get() = includedSampleCount in 1 until RECOMMENDED_MIN_SAMPLES
 
+    val requiresUnverifiedWarningAck: Boolean
+        get() = unverifiedSampleCount > 0
+
     val canGeneratePdf: Boolean
-        get() = includedSessionCount > 0 && !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
+        get() = includedSessionCount > 0 && !isGenerating &&
+            (!requiresWarningAck || isWarningAcknowledged) &&
+            (!requiresUnverifiedWarningAck || isUnverifiedWarningAcknowledged)
 
     val estimatedPages: Int
         get() = if (config.includeSampleImages && includedSampleCount > 0) {
@@ -135,7 +168,15 @@ data class PatientReportSheetState(
         if (isGenerating != other.isGenerating) return false
         if (isLoadingCandidates != other.isLoadingCandidates) return false
         if (error != other.error) return false
+        if (errorRes != other.errorRes) return false
         if (isPatientCodename != other.isPatientCodename) return false
+        if (initialStartDate != other.initialStartDate) return false
+        if (initialEndDate != other.initialEndDate) return false
+        if (initialSelectedIds != other.initialSelectedIds) return false
+        if (initialConfig != other.initialConfig) return false
+        if (showDiscardConfirm != other.showDiscardConfirm) return false
+        if (unverifiedSampleCount != other.unverifiedSampleCount) return false
+        if (isUnverifiedWarningAcknowledged != other.isUnverifiedWarningAcknowledged) return false
         return true
     }
 
@@ -155,7 +196,15 @@ data class PatientReportSheetState(
         result = 31 * result + isGenerating.hashCode()
         result = 31 * result + isLoadingCandidates.hashCode()
         result = 31 * result + (error?.hashCode() ?: 0)
+        result = 31 * result + (errorRes ?: 0)
         result = 31 * result + isPatientCodename.hashCode()
+        result = 31 * result + (initialStartDate?.hashCode() ?: 0)
+        result = 31 * result + (initialEndDate?.hashCode() ?: 0)
+        result = 31 * result + (initialSelectedIds?.hashCode() ?: 0)
+        result = 31 * result + initialConfig.hashCode()
+        result = 31 * result + showDiscardConfirm.hashCode()
+        result = 31 * result + unverifiedSampleCount
+        result = 31 * result + isUnverifiedWarningAcknowledged.hashCode()
         return result
     }
 }
@@ -183,12 +232,43 @@ internal fun PatientReportSheet(
     onPreview: () -> Unit = {},
     onBackToConfig: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onRequestDismiss: () -> Unit = {},
+    onDismissDiscard: () -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var localShowDiscardConfirm by remember { mutableStateOf(false) }
+    LaunchedEffect(sheet.hasUnsavedChanges) {
+        if (!sheet.hasUnsavedChanges) {
+            localShowDiscardConfirm = false
+        }
+    }
+    if (LocalAppLocked.current) return
+    val requestDismiss = {
+        if (sheet.hasUnsavedChanges) {
+            localShowDiscardConfirm = true
+            onRequestDismiss()
+        } else {
+            onDismiss()
+        }
+    }
+    val currentHasUnsavedChanges by rememberUpdatedState(sheet.hasUnsavedChanges)
+    val currentRequestDismiss by rememberUpdatedState(requestDismiss)
+    BackHandler(enabled = true, onBack = requestDismiss)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { targetValue ->
+            if (targetValue == SheetValue.Hidden && currentHasUnsavedChanges) {
+                currentRequestDismiss()
+                false
+            } else {
+                true
+            }
+        },
+    )
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = requestDismiss,
         sheetState = sheetState,
         containerColor = colors.surfaceHigh,
         // Same drag handle and corner radius as every other sheet in the app.
@@ -213,8 +293,13 @@ internal fun PatientReportSheet(
             onGenerate = onGenerate,
             onConfigChange = onConfigChange,
             onAcknowledgeWarning = onAcknowledgeWarning,
+            onAcknowledgeUnverifiedWarning = onAcknowledgeUnverifiedWarning,
             onPreview = onPreview,
             onBackToConfig = onBackToConfig,
+            onRequestDismiss = onRequestDismiss,
+            onDismissDiscard = onDismissDiscard,
+            externalShowDiscardConfirm = localShowDiscardConfirm,
+            onExternalShowDiscardConfirmChange = { localShowDiscardConfirm = it },
         )
     }
 }
@@ -233,16 +318,43 @@ internal fun PatientReportSheetContent(
     onPreview: () -> Unit = {},
     onBackToConfig: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onRequestDismiss: () -> Unit = {},
+    onDismissDiscard: () -> Unit = {},
+    externalShowDiscardConfirm: Boolean = false,
+    onExternalShowDiscardConfirmChange: (Boolean) -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
-    var previewCurrentPage by remember { mutableIntStateOf(1) }
-    var previewTotalPages by remember { mutableIntStateOf(sheet.estimatedPages) }
+    var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
+    var previewTotalPages by rememberSaveable { mutableIntStateOf(sheet.estimatedPages) }
+    var internalShowDiscardConfirm by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    LaunchedEffect(sheet.estimatedPages, sheet.previewPdfBytes) {
+        previewCurrentPage = 1
+        previewTotalPages = sheet.estimatedPages
+    }
+    LaunchedEffect(sheet.hasUnsavedChanges) {
+        if (!sheet.hasUnsavedChanges) {
+            internalShowDiscardConfirm = false
+        }
+    }
+    if (LocalAppLocked.current) return
+    val requestDismiss = {
+        if (sheet.hasUnsavedChanges) {
+            internalShowDiscardConfirm = true
+            onExternalShowDiscardConfirmChange(true)
+            onRequestDismiss()
+        } else {
+            onDismiss()
+        }
+    }
+    BackHandler(enabled = true, onBack = requestDismiss)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag(PatientReportSheetTestTags.SHEET)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 20.dp)
             .padding(bottom = 24.dp),
     ) {
@@ -251,7 +363,7 @@ internal fun PatientReportSheetContent(
                 PatientReportSheetHeader(
                     candidateCount = sheet.candidates.size,
                     patientName = patientName,
-                    onDismiss = onDismiss,
+                    onDismiss = requestDismiss,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -333,7 +445,13 @@ internal fun PatientReportSheetContent(
                     SampleCountWarningBanner(sampleCount = sheet.includedSampleCount)
                 }
 
-                sheet.error?.let { error ->
+                if (sheet.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(sampleCount = sheet.unverifiedSampleCount)
+                }
+
+                val errorMessage = sheet.errorRes?.let { stringResource(it) } ?: sheet.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }
@@ -379,7 +497,7 @@ internal fun PatientReportSheetContent(
                 PatientReportPreviewHeader(
                     currentPage = previewCurrentPage,
                     totalPages = previewTotalPages,
-                    onDismiss = onDismiss,
+                    onDismiss = onBackToConfig,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -406,7 +524,17 @@ internal fun PatientReportSheetContent(
                     )
                 }
 
-                sheet.error?.let { error ->
+                if (sheet.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(
+                        sampleCount = sheet.unverifiedSampleCount,
+                        acknowledged = sheet.isUnverifiedWarningAcknowledged,
+                        onAcknowledgedChange = onAcknowledgeUnverifiedWarning,
+                    )
+                }
+
+                val errorMessage = sheet.errorRes?.let { stringResource(it) } ?: sheet.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }
@@ -464,6 +592,21 @@ internal fun PatientReportSheetContent(
             }
         }
     }
+
+    if (sheet.showDiscardConfirm || externalShowDiscardConfirm || internalShowDiscardConfirm) {
+        ReportDiscardConfirmDialog(
+            onConfirm = {
+                internalShowDiscardConfirm = false
+                onExternalShowDiscardConfirmChange(false)
+                onDismiss()
+            },
+            onDismiss = {
+                internalShowDiscardConfirm = false
+                onExternalShowDiscardConfirmChange(false)
+                onDismissDiscard()
+            },
+        )
+    }
 }
 
 @Composable
@@ -500,7 +643,8 @@ private fun PatientReportPreviewHeader(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(colors.surfaceMuted),
+                .background(colors.surfaceMuted)
+                .testTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON),
         ) {
             Icon(
                 imageVector = AgarthaIcons.Close,
@@ -556,7 +700,8 @@ private fun PatientReportSheetHeader(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(colors.surfaceMuted),
+                .background(colors.surfaceMuted)
+                .testTag(ReportSheetTestTags.HEADER_CLOSE_BUTTON),
         ) {
             Icon(
                 imageVector = AgarthaIcons.Close,
@@ -965,7 +1110,8 @@ private fun PatientReportSummaryText(sheet: PatientReportSheetState) {
 @Composable
 private fun PatientReportGenerateButton(sheet: PatientReportSheetState, onGenerate: () -> Unit) {
     val colors = AgarthaTheme.colors
-    val isEnabled = sheet.effectiveSelectedIds.isNotEmpty() && !sheet.isGenerating
+    val isEnabled = sheet.effectiveSelectedIds.isNotEmpty() && !sheet.isGenerating &&
+        !sheet.requiresUnverifiedWarningAck
     Button(
         onClick = onGenerate,
         enabled = isEnabled,

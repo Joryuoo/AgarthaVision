@@ -45,9 +45,13 @@ class GetPatientReportCandidatesUseCaseTest {
     )
 
     @Test
-    fun `annotates every session with its verified sample count, including zero`() = runTest {
+    fun `annotates every session with both field counts, including zero`() = runTest {
         val sessions = listOf(session("s1"), session("s2"))
-        val samples = listOf(sample("sample-1", "s1"))
+        val samples = listOf(
+            sample("sample-1", "s1"),
+            sample("sample-2", "s1").copy(status = SampleStatus.FLAGGED),
+            sample("sample-3", "s1").copy(status = SampleStatus.FLAGGED),
+        )
         val useCase = GetPatientReportCandidatesUseCase(
             authRepository = FakeAuth("user-1"),
             sessionRepository = FakeSessions(sessions),
@@ -60,7 +64,9 @@ class GetPatientReportCandidatesUseCaseTest {
         val candidates = result.getOrThrow()
         assertEquals(2, candidates.size)
         assertEquals(1, candidates.first { it.session.id == "s1" }.verifiedSampleCount)
+        assertEquals(2, candidates.first { it.session.id == "s1" }.unverifiedSampleCount)
         assertEquals(0, candidates.first { it.session.id == "s2" }.verifiedSampleCount)
+        assertEquals(0, candidates.first { it.session.id == "s2" }.unverifiedSampleCount)
     }
 
     @Test
@@ -74,6 +80,23 @@ class GetPatientReportCandidatesUseCaseTest {
         val result = useCase("patient-1")
 
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `a partial refresh reads counts only for the requested sessions`() = runTest {
+        val samples = FakeSamples(emptyList())
+        val useCase = GetPatientReportCandidatesUseCase(
+            authRepository = FakeAuth("user-1"),
+            sessionRepository = FakeSessions(listOf(session("s1"), session("s2"))),
+            sampleRepository = samples,
+        )
+
+        val refreshed = useCase("patient-1", sessionIds = setOf("s2")).getOrThrow()
+        val empty = useCase("patient-1", sessionIds = emptySet()).getOrThrow()
+
+        assertEquals(listOf("s2"), refreshed.map { it.session.id })
+        assertEquals(listOf("s2"), samples.observedFlaggedSessions)
+        assertTrue(empty.isEmpty())
     }
 
     private class FakeAuth(private val userId: String?) : AuthRepository {
@@ -137,16 +160,23 @@ class GetPatientReportCandidatesUseCaseTest {
     }
 
     private class FakeSamples(private val samples: List<Sample>) : SampleRepository {
+        val observedFlaggedSessions = mutableListOf<String>()
+
         override suspend fun saveSample(sample: Sample) = Unit
         override fun observeLatestSample(userId: String): Flow<Sample?> = flowOf(null)
         override fun observeAllSamples(userId: String): Flow<List<Sample>> = flowOf(samples)
         override suspend fun getSampleById(sampleId: String): Sample? = samples.firstOrNull { it.id == sampleId }
         override fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
-            flowOf(samples.filter { it.sessionId == sessionId })
+            flowOf(getSessionSamples(sessionId))
         override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> =
-            samples.filter { it.sessionId == sessionId }
+            getSessionSamples(sessionId)
         override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
-        override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
-            flowOf(emptyList())
+        override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> {
+            observedFlaggedSessions += sessionId
+            return flowOf(samples.filter { it.sessionId == sessionId && it.status == SampleStatus.FLAGGED })
+        }
+
+        private fun getSessionSamples(sessionId: String): List<Sample> =
+            samples.filter { it.sessionId == sessionId && it.status != SampleStatus.FLAGGED }
     }
 }

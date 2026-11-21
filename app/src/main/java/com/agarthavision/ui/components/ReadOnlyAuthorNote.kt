@@ -33,7 +33,7 @@ const val READ_ONLY_AUTHOR_NOTE_TAG = "read_only_author_note"
  * the reason in the same place rather than hunting for a button that is not there.
  */
 @Composable
-fun ReadOnlyAuthorNote(authorName: String?, modifier: Modifier = Modifier) {
+fun ReadOnlyAuthorNote(authorName: String, modifier: Modifier = Modifier) {
     val colors = AgarthaTheme.colors
     Row(
         modifier = modifier
@@ -66,11 +66,7 @@ fun ReadOnlyAuthorNote(authorName: String?, modifier: Modifier = Modifier) {
     }
 }
 
-/** "Recorded by Maria Santos", or "Recorded by another medtech" when no name is known. */
+/** "Recorded by Maria Santos". Colleague name is required (14zcqntx3v6). */
 @Composable
-fun recordedByText(authorName: String?): String =
-    if (authorName.isNullOrBlank()) {
-        stringResource(R.string.record_recorded_by_unnamed)
-    } else {
-        stringResource(R.string.record_recorded_by, authorName)
-    }
+fun recordedByText(authorName: String): String =
+    stringResource(R.string.record_recorded_by, authorName)

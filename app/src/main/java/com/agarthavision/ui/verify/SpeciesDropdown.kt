@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
+import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AgarthaColors
 
@@ -133,7 +134,7 @@ fun SpeciesDropdown(
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable),
             )
             ExposedDropdownMenu(
-                expanded = expanded,
+                expanded = expanded && !LocalAppLocked.current,
                 onDismissRequest = { expanded = false },
             ) {
                 EggSpecies.entries.forEach { species ->
@@ -267,7 +268,7 @@ fun StageDropdown(
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable),
             )
             ExposedDropdownMenu(
-                expanded = expanded,
+                expanded = expanded && !LocalAppLocked.current,
                 onDismissRequest = { expanded = false },
             ) {
                 stages.forEach { stage ->

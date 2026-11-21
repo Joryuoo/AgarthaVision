@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.HumanCheckConfig
 import com.agarthavision.domain.model.HumanCheckRejectedException
+import com.agarthavision.domain.model.LaboratoryAccessInactiveException
 import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
@@ -108,6 +109,25 @@ class LoginViewModelHumanCheckTest {
             assertNull(viewModel.state.value.humanCheck.token)
             assertEquals(resetBefore + 1, viewModel.state.value.humanCheck.resetKey)
             assertFalse(viewModel.state.value.canSubmit)
+        }
+
+    @Test
+    fun `a deactivated laboratory is explained, not reported as a banned user`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(signInUseCase.invoke("user@example.com", "secret123", "token-1"))
+                .thenReturn(Result.failure(LaboratoryAccessInactiveException()))
+            val viewModel = viewModel()
+            viewModel.fill()
+            viewModel.onHumanCheckToken("token-1")
+
+            viewModel.events.test {
+                viewModel.onSubmit()
+                advanceUntilIdle()
+                val message = (awaitItem() as LoginEvent.ShowLoginError).message.orEmpty()
+                assertTrue(message.contains("not active"))
+                assertTrue(message.contains("administrator"))
+                assertFalse(message.contains("banned"))
+            }
         }
 
     @Test

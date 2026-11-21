@@ -15,6 +15,6 @@ class ColleagueRepositoryImpl @Inject constructor(
 
     override fun observeNames(): Flow<Map<String, String?>> =
         colleagueDao.observeColleagues().map { rows ->
-            rows.associate { it.userId to it.fullName?.takeIf(String::isNotBlank) }
+            rows.associate { it.userId to it.fullName.takeIf(String::isNotBlank) }
         }
 }

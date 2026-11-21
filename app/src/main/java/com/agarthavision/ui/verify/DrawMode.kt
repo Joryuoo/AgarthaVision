@@ -59,8 +59,9 @@ import com.agarthavision.ui.theme.AgarthaTheme
  * **It takes every touch.** It is laid over a sheet that stays composed underneath, and a layer
  * with no pointer handling of its own lets a tap on its empty space fall through to whatever is
  * below it: the sheet's buttons, or the host screen behind the sheet. Keeping the sheet composed
- * is what lets Cancel return the medtech to the exact scroll they left; [onSaved] is where the
- * caller scrolls back to the top, so the box just saved is on screen when they land.
+ * is what lets Cancel and Save return the medtech to the exact scroll they left; the pinned
+ * preview at the top of the sheet keeps the box visible without forcing a scroll back to the top
+ * (14zcqnthuab).
  *
  * **Cancel and Save box sit below the frame, not over it.** Laid over the bottom of the image they
  * covered the pixels being drawn on, and an egg near the lower edge could not be boxed without
