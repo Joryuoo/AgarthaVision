@@ -32,7 +32,7 @@ class LocalIdentityCacheTest {
     }
 
     @Test
-    fun `legacy identity keys still open the account without branding`() = runTest {
+    fun `legacy identity keys open without branding and default to pending profile`() = runTest {
         fakeDataStore.state.value = mutablePreferencesOf(
             USER_ID_KEY to "user-123",
             EMAIL_KEY to "medtech@citu.edu",
@@ -40,7 +40,34 @@ class LocalIdentityCacheTest {
 
         val identity = cache.observeIdentity().first()
 
-        assertEquals(LocalIdentity(userId = "user-123", email = "medtech@citu.edu"), identity)
+        assertEquals(
+            LocalIdentity(
+                userId = "user-123",
+                email = "medtech@citu.edu",
+                displayName = LocalIdentity.PENDING_PROFILE_PLACEHOLDER,
+            ),
+            identity,
+        )
+    }
+
+    @Test
+    fun `observeLocalIdentity reflects a cached display name when present`() = runTest {
+        fakeDataStore.state.value = mutablePreferencesOf(
+            USER_ID_KEY to "user-123",
+            EMAIL_KEY to "medtech@citu.edu",
+            DISPLAY_NAME_KEY to "Maria Santos",
+        )
+
+        val identity = cache.observeIdentity().first()
+
+        assertEquals(
+            LocalIdentity(
+                userId = "user-123",
+                email = "medtech@citu.edu",
+                displayName = "Maria Santos",
+            ),
+            identity,
+        )
     }
 
     @Test
@@ -98,6 +125,7 @@ class LocalIdentityCacheTest {
     private companion object {
         val USER_ID_KEY = stringPreferencesKey("local_identity_user_id")
         val EMAIL_KEY = stringPreferencesKey("local_identity_email")
+        val DISPLAY_NAME_KEY = stringPreferencesKey("local_identity_display_name")
         const val USER = "user-1"
     }
 }

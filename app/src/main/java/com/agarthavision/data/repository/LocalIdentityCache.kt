@@ -18,10 +18,14 @@ class LocalIdentityCache @Inject constructor(
 ) {
     fun observeIdentity(): Flow<LocalIdentity?> = dataStore.data.map { preferences ->
         val userId = preferences[USER_ID] ?: return@map null
+        val displayName = preferences[DISPLAY_NAME]
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: LocalIdentity.PENDING_PROFILE_PLACEHOLDER
         LocalIdentity(
             userId = userId,
             email = preferences[EMAIL].orEmpty(),
-            displayName = preferences[DISPLAY_NAME],
+            displayName = displayName,
             laboratory = preferences[LABORATORY_NAME]?.let { name ->
                 LaboratoryBranding(name, preferences[LABORATORY_LOGO])
             },

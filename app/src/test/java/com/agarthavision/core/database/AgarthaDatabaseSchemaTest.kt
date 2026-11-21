@@ -117,12 +117,12 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `the colleagues name cache exists with a nullable name`() {
-        // Added at version 24 (14zcqntjph6) so a colleague's read-only record can say whose it
-        // is offline. Nullable because `profiles.full_name` is.
+    fun `the colleagues name cache exists with a required name`() {
+        // Added at version 24 (14zcqntjph6) and made non-null at version 26 (14zcqntx3v6)
+        // matching the profiles.full_name NOT NULL constraint.
         assertTrue(tables().contains("colleagues"))
         assertTrue(columnsOf("colleagues").containsAll(listOf("user_id", "full_name")))
-        assertFalse(isNotNull("colleagues", "full_name"))
+        assertTrue(isNotNull("colleagues", "full_name"))
     }
 
     @Test
@@ -340,6 +340,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 25
+        private const val EXPECTED_VERSION = 26
     }
 }

@@ -107,5 +107,31 @@ val MIGRATION_24_25: Migration = object : Migration(24, 25) {
     }
 }
 
+/**
+ * Version 25 → 26: require non-null full_name on colleagues (14zcqntx3v6, `0019_require_profile_full_name.sql`).
+ *
+ * Every profile on the server now has a non-null, non-blank name. Existing cached colleague rows
+ * with null names are backfilled to 'Pending Profile Setup' so no cached records fail the SQLite constraint.
+ */
+val MIGRATION_25_26: Migration = object : Migration(25, 26) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `colleagues_new` " +
+                "(`user_id` TEXT NOT NULL, `full_name` TEXT NOT NULL, PRIMARY KEY(`user_id`))",
+        )
+        db.execSQL(
+            "INSERT INTO `colleagues_new` (`user_id`, `full_name`) " +
+                "SELECT `user_id`, COALESCE(`full_name`, 'Pending Profile Setup') FROM `colleagues`",
+        )
+        db.execSQL("DROP TABLE `colleagues`")
+        db.execSQL("ALTER TABLE `colleagues_new` RENAME TO `colleagues`")
+    }
+}
+
 /** Every hand-written migration, for `DatabaseModule` and the migration test to share. */
-val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25)
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+    MIGRATION_22_23,
+    MIGRATION_23_24,
+    MIGRATION_24_25,
+    MIGRATION_25_26,
+)

@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.records
 
+import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.isColleagueRecord
@@ -91,7 +92,9 @@ class GetSessionSamplesUseCase @Inject constructor(
     /** The viewer, or the colleague who wrote it — the second is read-only (14zcqntjph6). */
     private suspend fun authorOf(authorId: String?, userId: String?): RecordAuthor =
         if (authorId != null && isColleagueRecord(authorId, userId)) {
-            RecordAuthor.Colleague(name = colleagueRepository.nameOf(authorId))
+            RecordAuthor.Colleague(
+                name = colleagueRepository.nameOf(authorId) ?: LocalIdentity.PENDING_PROFILE_PLACEHOLDER,
+            )
         } else {
             RecordAuthor.Viewer
         }
