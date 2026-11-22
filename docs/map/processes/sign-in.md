@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-11-05
-commit: 2cc16989
+verified: 2026-11-17
+commit: 3c5ef316
 ---
 
 # sign-in
@@ -46,7 +46,7 @@ the same identity signing in with a new password.
    Without a site key there is no widget and no token, which only works while Supabase's CAPTCHA
    protection is off.
 3. **Authenticate, then cache.** `SignInUseCase` → `SupabaseAuthRepository.kt::signIn` signs in
-   with email, password and the token (`captchaToken`), then `::cacheIdentity` writes user id,
+   with email, password and the token (`captchaToken`), then `LocalIdentityCache.kt::saveIdentity` writes user id,
    email and display name (`full_name` from auth metadata) to DataStore. Supabase checks the
    token with Cloudflare; a refused one (`captcha_failed`) becomes `HumanCheckRejectedException`,
    and the screen says the security check expired or did not pass, never that the password was
@@ -54,6 +54,13 @@ the same identity signing in with a new password.
    Console does) becomes `LaboratoryAccessInactiveException`, and the screen says the laboratory's
    access is not active and to contact its administrator, not the server's "User is banned".
    Other refusals (wrong password, unknown e-mail) still show the server's own message.
+   The authenticated app also reads the member's own laboratory name and optional PNG
+   from the admin repository's `get_my_laboratory_branding` RPC (admin migration 0024).
+   `LocalIdentityCache.kt::saveLaboratory` stores both fields with the signed-in identity.
+   Consumers read them through `LocalIdentity.laboratory` while offline. The sign-in
+   fetch has a short timeout. `SyncWorker.kt::doWork` retries during online sync.
+   A failed fetch keeps the same account's last successful result. A successful response
+   with no active laboratory clears it, and a laboratory without a logo keeps just its name.
 4. **Await the patient list only, then leave the screen.** `LoginViewModel` calls
    `CompleteSignInUseCase`, which awaits `FetchRemoteDataUseCase::pullPatientsOnly` (about a
    second or two) and then calls `SyncScheduler::requestSyncAfterSignIn`, even if the pull failed.
@@ -72,7 +79,7 @@ the same identity signing in with a new password.
    dialog says how many items that is and that it cannot be undone
    (`settings_sign_out_dialog_body_pending`). It runs before `signOut` because `signOut` clears the
    id it is scoped by.
-3. **Forget, then sign out.** `SupabaseAuthRepository.kt::signOut` removes the three cached keys
+3. **Forget, then sign out.** `SupabaseAuthRepository.kt::signOut` removes cached identity and branding
    first and revokes the Supabase session second. The order matters: a cached identity with no
    Supabase session is what the account check below reads as "the server refused this account",
    so the medtech's own sign-out must never pass through that state.

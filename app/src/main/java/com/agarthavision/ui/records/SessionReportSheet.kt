@@ -3,6 +3,7 @@
 package com.agarthavision.ui.records
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -69,10 +70,17 @@ data class SessionReportSheetState(
     val isPatientCodename: Boolean = false,
     val initialConfig: ReportConfig = ReportConfig(),
     val showDiscardConfirm: Boolean = false,
+    val unverifiedSampleCount: Int = 0,
+    val isUnverifiedWarningAcknowledged: Boolean = false,
+    @StringRes val errorRes: Int? = null,
 ) {
     val hasUnsavedChanges: Boolean get() = config != initialConfig
     val requiresWarningAck: Boolean get() = verifiedSampleCount < RECOMMENDED_MIN_SAMPLES
-    val canGeneratePdf: Boolean get() = !isGenerating && (!requiresWarningAck || isWarningAcknowledged)
+    val requiresUnverifiedWarningAck: Boolean get() = unverifiedSampleCount > 0
+    val canGeneratePdf: Boolean
+        get() = !isGenerating &&
+            (!requiresWarningAck || isWarningAcknowledged) &&
+            (!requiresUnverifiedWarningAck || isUnverifiedWarningAcknowledged)
     val estimatedPages: Int get() = if (config.includeSampleImages && verifiedSampleCount > 0) {
         1 + ((verifiedSampleCount + 3) / 4)
     } else {
@@ -92,9 +100,12 @@ data class SessionReportSheetState(
         if (isGenerating != other.isGenerating) return false
         if (isWarningAcknowledged != other.isWarningAcknowledged) return false
         if (error != other.error) return false
+        if (errorRes != other.errorRes) return false
         if (isPatientCodename != other.isPatientCodename) return false
         if (initialConfig != other.initialConfig) return false
         if (showDiscardConfirm != other.showDiscardConfirm) return false
+        if (unverifiedSampleCount != other.unverifiedSampleCount) return false
+        if (isUnverifiedWarningAcknowledged != other.isUnverifiedWarningAcknowledged) return false
         return true
     }
 
@@ -109,9 +120,12 @@ data class SessionReportSheetState(
         result = 31 * result + isGenerating.hashCode()
         result = 31 * result + isWarningAcknowledged.hashCode()
         result = 31 * result + (error?.hashCode() ?: 0)
+        result = 31 * result + (errorRes ?: 0)
         result = 31 * result + isPatientCodename.hashCode()
         result = 31 * result + initialConfig.hashCode()
         result = 31 * result + showDiscardConfirm.hashCode()
+        result = 31 * result + unverifiedSampleCount
+        result = 31 * result + isUnverifiedWarningAcknowledged.hashCode()
         return result
     }
 }
@@ -131,6 +145,7 @@ fun SessionReportSheet(
     modifier: Modifier = Modifier,
     onRequestDismiss: () -> Unit = {},
     onDismissDiscard: () -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var localShowDiscardConfirm by remember { mutableStateOf(false) }
@@ -185,6 +200,7 @@ fun SessionReportSheet(
             onDismiss = onDismiss,
             onConfigChange = onConfigChange,
             onAcknowledgeWarning = onAcknowledgeWarning,
+            onAcknowledgeUnverifiedWarning = onAcknowledgeUnverifiedWarning,
             onPreview = onPreview,
             onBackToConfig = onBackToConfig,
             onGeneratePdf = onGeneratePdf,
@@ -212,6 +228,7 @@ internal fun SessionReportSheetContent(
     onDismissDiscard: () -> Unit = {},
     externalShowDiscardConfirm: Boolean = false,
     onExternalShowDiscardConfirmChange: (Boolean) -> Unit = {},
+    onAcknowledgeUnverifiedWarning: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var previewCurrentPage by rememberSaveable { mutableIntStateOf(1) }
@@ -280,6 +297,11 @@ internal fun SessionReportSheetContent(
                     SampleCountWarningBanner(sampleCount = state.verifiedSampleCount)
                 }
 
+                if (state.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(sampleCount = state.unverifiedSampleCount)
+                }
+
                 Spacer(Modifier.height(12.dp))
 
                 Row(
@@ -309,7 +331,8 @@ internal fun SessionReportSheetContent(
                     )
                 }
 
-                state.error?.let { error ->
+                val errorMessage = state.errorRes?.let { stringResource(it) } ?: state.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }
@@ -404,7 +427,17 @@ internal fun SessionReportSheetContent(
                     )
                 }
 
-                state.error?.let { error ->
+                if (state.requiresUnverifiedWarningAck) {
+                    Spacer(Modifier.height(12.dp))
+                    UnverifiedSampleWarning(
+                        sampleCount = state.unverifiedSampleCount,
+                        acknowledged = state.isUnverifiedWarningAcknowledged,
+                        onAcknowledgedChange = onAcknowledgeUnverifiedWarning,
+                    )
+                }
+
+                val errorMessage = state.errorRes?.let { stringResource(it) } ?: state.error
+                errorMessage?.let { error ->
                     Spacer(Modifier.height(8.dp))
                     Text(text = error, color = colors.danger, fontSize = 12.sp)
                 }

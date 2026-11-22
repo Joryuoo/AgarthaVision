@@ -11,6 +11,34 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/require-medtech-name — a medtech's name must be required, so no profile can exist without one · 2026-11-19
+
+### Require non-empty full_name across database, Room schema, and authorship notes · `14zcqntx3v6`
+
+- **Database migration `0019_require_profile_full_name.sql`.** Backfills null or blank `full_name` fields on existing profiles with `'Pending Profile Setup'` (omitting email prefix derivations), sets `profiles.full_name` to `NOT NULL` with a `CHECK (trim(full_name) <> '')` constraint, and updates `handle_new_user()` to default to `'Pending Profile Setup'` when metadata is missing so Admin Console onboarding invitations and dashboard creations succeed without aborting before accept RPCs run.
+- **Room migration `MIGRATION_25_26` & `ColleagueEntity`.** Rebuilds the `colleagues` table with `full_name TEXT NOT NULL`, bumps Room database version to 26, and exports schema `26.json`.
+- **Fault-tolerant network decoding & identity fallbacks.** Updates `ProfileRemoteDataSource` to decode `fullName: String? = null` at the network boundary, falling back to `LocalIdentity.PENDING_PROFILE_PLACEHOLDER` so colleague sync never crashes if the mobile build is deployed before the manual database migration is applied. Removes email-prefix derivation from `LocalIdentity` and `SupabaseAuthRepository`.
+- **Domain & use-case guarantees.** Guarantees non-null `displayName` in `LocalIdentity` and `RecordAuthor.Colleague(name: String)`, removing obsolete "Recorded by another medtech" fallbacks across UI screens, author notes, and strings.
+- **Documentation & test coverage.** Documents constraints in `docs/map/objects/Profile.md`, adds `Migration25To26Test`, and updates schema test assertions.
+
+---
+
+## feat/unverified-report-warning — reports warn about unverified fields · 2026-11-18
+
+- Session and patient report previews show how many captured fields will be excluded and
+  require an acknowledgment before generating the PDF (14zcqntx3up). The count includes
+  fields awaiting inference and skips deleted fields. The PDF still uses verified fields.
+
+---
+
+## feat/offline-laboratory-branding · 2026-11-17
+
+The signed-in identity carries its laboratory's name and optional PNG logo after a
+successful sign-in or online sync (14zcqntx3v7). The app fetches only the account's own
+active laboratory and keeps the last successful result for offline use. Signing out or
+switching accounts clears the previous account's branding. The read uses the admin
+repository's migration 0024 (`docs/map/processes/sign-in.md`).
+
 ## fix/login-deactivated-laboratory-message — sign-in explains a deactivated laboratory · 2026-11-10
 
 ### Replace "User is banned" with a plain message at sign-in · `14zcqnttvpa`

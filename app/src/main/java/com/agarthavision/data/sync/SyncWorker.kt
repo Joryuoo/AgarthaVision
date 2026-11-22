@@ -2,6 +2,7 @@ package com.agarthavision.data.sync
 
 import android.content.Context
 import com.agarthavision.core.util.Logger
+import com.agarthavision.data.repository.SupabaseAuthRepository
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -32,6 +33,7 @@ class SyncWorker @AssistedInject constructor(
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
     private val enforceAccountAccessUseCase: EnforceAccountAccessUseCase,
+    private val authRepository: SupabaseAuthRepository,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -54,6 +56,8 @@ class SyncWorker @AssistedInject constructor(
         // ran. Reporting success stops WorkManager backing off against a device that is
         // simply signed out, which would then delay the pass that matters after login.
         if (push.getOrNull() is SyncSummary.Skipped) return Result.success()
+
+        authRepository.refreshLaboratoryBranding()
 
         // A pull that lost some entity types reports Result.success, because each type is
         // caught individually so one bad type cannot abort the rest. That tolerance is right,

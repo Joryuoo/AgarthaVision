@@ -11,6 +11,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -49,26 +53,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,11 +98,11 @@ import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonVariant
 import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.LocalAppLocked
+import com.agarthavision.ui.components.ResizeForKeyboard
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
-import kotlinx.coroutines.launch
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -205,11 +212,14 @@ internal fun VerificationSheetContent(
 ) {
     val frame = state.frame ?: return
 
+    ResizeForKeyboard()
+
     // Hoisted above the draw screen and kept for the sheet's whole life, so cancelling a draw
     // lands the medtech on the exact scroll they left rather than back at the top.
     val scrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
     val showDiscardConfirm = remember { mutableStateOf(false) }
+    val showEnlargedImage = remember { mutableStateOf(false) }
+    val imageModel = rememberFrameImageModel(frame, state.imageSource)
     // The sample's label is the moment it was captured. The same label the queue row carries,
     // so the row the medtech tapped names the screen they land on.
     val capturedAtLabel = remember(frame.capturedAt) {
@@ -220,7 +230,9 @@ internal fun VerificationSheetContent(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
                 // Saving too: TalkBack activates a node through its semantics, not a touch, so the
                 // input blocker over the sheet would not stop it.
                 .then(
@@ -232,6 +244,16 @@ internal fun VerificationSheetContent(
                 title = if (isEditing) stringResource(R.string.verify_editing_title) else capturedAtLabel,
                 metaText = if (isEditing) stringResource(R.string.verify_captured_at, capturedAtLabel) else "",
                 onBack = actions.onCancel,
+            )
+
+            // 2. Frame section: image preview and sample cycle row.
+            //    Pinned at top with the top bar so the sample remains in view while answering findings.
+            VerificationFrameSection(
+                state = state,
+                actions = actions,
+                frame = frame,
+                imageModel = imageModel,
+                onEnlarge = { showEnlargedImage.value = true },
             )
 
             VerificationFindingsColumn(
@@ -294,17 +316,28 @@ internal fun VerificationSheetContent(
             DrawModeScreen(
                 state = state,
                 actions = actions,
-                // Back to the top on a save, where the frame is, so the box just drawn is the first
-                // thing the medtech sees. A cancel has nothing new to show, and leaves them in place.
-                onSaved = { box ->
-                    actions.onBoxDrawn(box)
-                    scope.launch { scrollState.scrollTo(0) }
-                },
+                // The frame preview is permanently pinned at the top (14zcqnthuab), so the box just
+                // drawn is immediately visible without scrolling. Saving leaves the medtech at the
+                // finding they were editing.
+                onSaved = actions.onBoxDrawn,
+            )
+        }
+
+        if (showEnlargedImage.value && imageModel != null) {
+            EnlargedImageOverlay(
+                frame = frame,
+                imageModel = imageModel,
+                state = state,
+                onDismiss = { showEnlargedImage.value = false },
             )
         }
     }
 }
 
+/**
+ * Scrollable verification findings containing model output, current detection questions,
+ * added findings, and remarks. The frame preview sits pinned above this column.
+ */
 @Composable
 private fun VerificationFindingsColumn(
     state: VerificationUiState,
@@ -326,8 +359,6 @@ private fun VerificationFindingsColumn(
             )
             .verticalScroll(scrollState),
     ) {
-        VerificationFrameSection(state, actions, frame)
-
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             // 3. Model output: what the container said, or that it said nothing, or that it has
             //    not answered yet. Always present, never collapsed to two states.
@@ -399,11 +430,18 @@ private fun VerificationFindingsColumn(
     }
 }
 
+/**
+ * Pinned frame section: the sample image preview and sample cycle row stay anchored
+ * in view while the medtech answers questions in the scrollable findings column below.
+ * Tapping the preview opens the enlarged overlay (14zcqnthuab).
+ */
 @Composable
 private fun VerificationFrameSection(
     state: VerificationUiState,
     actions: VerificationSheetActions,
     frame: FlaggedFrame,
+    imageModel: Any?,
+    onEnlarge: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -411,10 +449,9 @@ private fun VerificationFrameSection(
             .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val imageModel = rememberFrameImageModel(frame, state.imageSource)
         val frameModifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
+            .heightIn(max = 220.dp)
+            .aspectRatio(frame.previewAspectRatio(), matchHeightConstraintsFirst = true)
             .clip(RoundedCornerShape(16.dp))
             .background(AgarthaTheme.colors.surfaceVariant)
             .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
@@ -433,7 +470,12 @@ private fun VerificationFrameSection(
                 showBoxes = state.showBoundingBoxes,
                 inferenceImageWidth = frame.imageWidth,
                 inferenceImageHeight = frame.imageHeight,
-                modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
+                modifier = frameModifier
+                    .testTag(VerifyTestTags.FRAME_PREVIEW)
+                    .clickable(
+                        onClickLabel = stringResource(R.string.verify_enlarge_image),
+                        onClick = onEnlarge,
+                    ),
             )
         }
 
@@ -458,6 +500,81 @@ private fun VerificationFrameSection(
             centered = true,
             modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
         )
+    }
+}
+
+/**
+ * Full-width enlarged image overlay with dimmed background (14zcqnthuab).
+ * Allows the medtech to inspect egg morphology at maximum screen width without
+ * losing their questionnaire scroll position. Supports pinch-to-zoom.
+ */
+@Composable
+private fun EnlargedImageOverlay(
+    frame: FlaggedFrame,
+    imageModel: Any,
+    state: VerificationUiState,
+    onDismiss: () -> Unit,
+) {
+    BackHandler(onBack = onDismiss)
+
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        scale = (scale * zoomChange).coerceIn(1f, 5f)
+        if (scale == 1f) {
+            offset = Offset.Zero
+        } else {
+            offset += panChange
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(VerifyTestTags.ENLARGED_IMAGE_OVERLAY),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Scrim: tapping the dimmed background outside the image dismisses the overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.82f))
+                .testTag(VerifyTestTags.ENLARGED_IMAGE_SCRIM)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+                .aspectRatio(frame.previewAspectRatio())
+                .clip(RoundedCornerShape(12.dp))
+                .background(AgarthaTheme.colors.surfaceVariant),
+        ) {
+            FrameWithBoxes(
+                imageModel = imageModel,
+                boxes = state.findings.frameBoxes(
+                    active = DrawTarget(state.currentDetectionIndex),
+                ),
+                showBoxes = state.showBoundingBoxes,
+                inferenceImageWidth = frame.imageWidth,
+                inferenceImageHeight = frame.imageHeight,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(VerifyTestTags.ENLARGED_FRAME_PREVIEW)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    }
+                    .transformable(state = transformableState),
+            )
+        }
     }
 }
 
@@ -558,16 +675,18 @@ private fun VerificationSheetFooter(
             )
         }
 
-        val primaryLabel = when {
-            isEditing -> stringResource(R.string.verify_action_save_changes)
-            state.isCleanField -> stringResource(R.string.verify_action_submit_clean_field)
-            else -> stringResource(R.string.verify_action_submit)
+        val primaryLabel = if (isEditing) {
+            stringResource(R.string.verify_action_save_changes)
+        } else {
+            stringResource(R.string.verify_action_submit)
         }
 
         SheetActionRow(
             SheetActionRowState(
                 primaryLabel = primaryLabel,
-                secondaryLabel = stringResource(R.string.verify_action_discard),
+                secondaryLabel = stringResource(
+                    if (isEditing) R.string.verify_cancel else R.string.verify_action_discard,
+                ),
                 onPrimaryClick = onSubmit,
                 onSecondaryClick = onDiscard,
                 primaryLoading = state.isSubmitting,

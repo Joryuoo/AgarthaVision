@@ -3,6 +3,7 @@ package com.agarthavision.ui.sessions
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.R
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
@@ -22,6 +23,7 @@ import com.agarthavision.ui.records.ReportSheetStep
 import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
 import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
+import com.agarthavision.domain.usecase.records.UnverifiedReportFieldsException
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import android.database.sqlite.SQLiteConstraintException
@@ -31,6 +33,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
@@ -502,8 +505,8 @@ class SessionsViewModel @Inject constructor(
      * they believe covers a smear it silently drops.
      */
     fun onOpenGenerateReport() {
-        previewRequestId++
         val patientId = patientId ?: return
+        val requestId = ++previewRequestId
         val currentPatient = internalState.value.patient
         val displayName = currentPatient?.displayName.orEmpty()
         val maskedName = currentPatient?.maskedDisplayName.orEmpty()
@@ -527,31 +530,22 @@ class SessionsViewModel @Inject constructor(
                 .onSuccess { candidates ->
                     val eligible = eligibleSessionIds(candidates, start = null, end = null)
                     internalState.update {
+                        if (requestId != previewRequestId) return@update it
                         it.copy(
                             reportSheet = it.reportSheet?.copy(
                                 patientDisplayName = resolvedDisplay,
                                 patientMaskedName = resolvedMasked,
                                 isPatientCodename = resolvedCodename,
                                 candidates = candidates,
-                                selectedIds = eligible,
-                                selectedSessionIds = eligible,
                                 initialSelectedIds = eligible,
                                 isLoadingCandidates = false,
-                            ) ?: PatientReportSheetState(
-                                patientDisplayName = resolvedDisplay,
-                                patientMaskedName = resolvedMasked,
-                                isPatientCodename = resolvedCodename,
-                                candidates = candidates,
-                                selectedIds = eligible,
-                                selectedSessionIds = eligible,
-                                initialSelectedIds = eligible,
-                                isLoadingCandidates = false,
-                            ),
+                            )?.withSelectedReportSessions(eligible),
                         )
                     }
                 }
                 .onFailure { error ->
                     internalState.update {
+                        if (requestId != previewRequestId) return@update it
                         it.copy(
                             reportSheet = it.reportSheet?.copy(
                                 patientDisplayName = resolvedDisplay,
@@ -592,6 +586,21 @@ class SessionsViewModel @Inject constructor(
     private fun PatientReportSheetState.syncDiscardConfirm(): PatientReportSheetState =
         if (hasUnsavedChanges) this else copy(showDiscardConfirm = false)
 
+    private fun PatientReportSheetState.withSelectedReportSessions(ids: Set<String>): PatientReportSheetState =
+        copy(
+            selectedIds = ids,
+            selectedSessionIds = ids,
+            previewPdfBytes = null,
+            isLoadingPreview = false,
+            unverifiedSampleCount = countUnverifiedFields(candidates, ids),
+            isUnverifiedWarningAcknowledged = false,
+            errorRes = null,
+        ).syncDiscardConfirm()
+
+    private fun countUnverifiedFields(candidates: List<PatientReportCandidate>, ids: Set<String>): Int =
+        candidates.filter { it.session.id in ids && it.verifiedSampleCount > 0 }
+            .sumOf { it.unverifiedSampleCount }
+
     /**
      * Applies a date range to the report sheet and re-derives the selection from scratch to the
      * sessions that are both in range and eligible (verified samples > 0).
@@ -611,11 +620,7 @@ class SessionsViewModel @Inject constructor(
                 reportSheet = sheet.copy(
                     startDate = safeStart,
                     endDate = safeEnd,
-                    selectedIds = eligible,
-                    selectedSessionIds = eligible,
-                    previewPdfBytes = null,
-                    isLoadingPreview = false,
-                ).syncDiscardConfirm(),
+                ).withSelectedReportSessions(eligible),
             )
         }
     }
@@ -648,14 +653,7 @@ class SessionsViewModel @Inject constructor(
             val sheet = state.reportSheet ?: return@update state
             val eligible = eligibleSessionIds(sheet.candidates, sheet.startDate, sheet.endDate)
             val updated = if (sheet.effectiveSelectedIds == eligible) emptySet() else eligible
-            state.copy(
-                reportSheet = sheet.copy(
-                    selectedIds = updated,
-                    selectedSessionIds = updated,
-                    previewPdfBytes = null,
-                    isLoadingPreview = false,
-                ).syncDiscardConfirm(),
-            )
+            state.copy(reportSheet = sheet.withSelectedReportSessions(updated))
         }
     }
 
@@ -665,14 +663,7 @@ class SessionsViewModel @Inject constructor(
             val sheet = state.reportSheet ?: return@update state
             val selected = sheet.effectiveSelectedIds
             val updated = if (sessionId in selected) selected - sessionId else selected + sessionId
-            state.copy(
-                reportSheet = sheet.copy(
-                    selectedIds = updated,
-                    selectedSessionIds = updated,
-                    previewPdfBytes = null,
-                    isLoadingPreview = false,
-                ).syncDiscardConfirm(),
-            )
+            state.copy(reportSheet = sheet.withSelectedReportSessions(updated))
         }
     }
 
@@ -692,6 +683,8 @@ class SessionsViewModel @Inject constructor(
                     config = effectiveConfig,
                     previewPdfBytes = null,
                     isLoadingPreview = false,
+                    isUnverifiedWarningAcknowledged = false,
+                    errorRes = null,
                 ).syncDiscardConfirm(),
             )
         }
@@ -701,6 +694,19 @@ class SessionsViewModel @Inject constructor(
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
             state.copy(reportSheet = sheet.copy(isWarningAcknowledged = acknowledged))
+        }
+    }
+
+    fun onAcknowledgeUnverifiedReportWarning(acknowledged: Boolean) {
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            if (sheet.step != ReportSheetStep.PREVIEW || sheet.isGenerating) return@update state
+            state.copy(
+                reportSheet = sheet.copy(
+                    isUnverifiedWarningAcknowledged = acknowledged,
+                    errorRes = if (acknowledged) null else sheet.errorRes,
+                ),
+            )
         }
     }
 
@@ -717,10 +723,16 @@ class SessionsViewModel @Inject constructor(
             if (requestId != previewRequestId) return@launch
             internalState.update { state ->
                 val current = state.reportSheet ?: return@update state
-                state.copy(reportSheet = current.copy(isLoadingPreview = true, error = null))
+                state.copy(reportSheet = current.copy(isLoadingPreview = true, error = null, errorRes = null))
             }
-            previewPatientReportUseCase(patient, scope, sheet.config).fold(
-                onSuccess = { pdfBytes ->
+            runCatching {
+                val candidates = getPatientReportCandidatesUseCase(patient, sheet.effectiveSelectedIds).getOrThrow()
+                val included = eligibleSessionIds(candidates, sheet.startDate, sheet.endDate)
+                val unverifiedCount = countUnverifiedFields(candidates, included)
+                val pdfBytes = previewPatientReportUseCase(patient, scope, sheet.config).getOrThrow()
+                unverifiedCount to pdfBytes
+            }.fold(
+                onSuccess = { (unverifiedCount, pdfBytes) ->
                     internalState.update { state ->
                         if (requestId != previewRequestId) return@update state
                         val current = state.reportSheet ?: return@update state
@@ -728,6 +740,8 @@ class SessionsViewModel @Inject constructor(
                             reportSheet = current.copy(
                                 step = ReportSheetStep.PREVIEW,
                                 previewPdfBytes = pdfBytes,
+                                unverifiedSampleCount = unverifiedCount,
+                                isUnverifiedWarningAcknowledged = false,
                                 isLoadingPreview = false,
                                 error = null,
                             ),
@@ -735,6 +749,7 @@ class SessionsViewModel @Inject constructor(
                     }
                 },
                 onFailure = { error ->
+                    if (error is CancellationException) throw error
                     internalState.update { state ->
                         if (requestId != previewRequestId) return@update state
                         val current = state.reportSheet ?: return@update state
@@ -754,22 +769,38 @@ class SessionsViewModel @Inject constructor(
         previewRequestId++
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state
-            state.copy(reportSheet = sheet.copy(step = ReportSheetStep.CONFIGURATION, isLoadingPreview = false))
+            state.copy(
+                reportSheet = sheet.copy(
+                    step = ReportSheetStep.CONFIGURATION,
+                    isLoadingPreview = false,
+                    isWarningAcknowledged = false,
+                    isUnverifiedWarningAcknowledged = false,
+                    errorRes = null,
+                ),
+            )
         }
     }
 
     fun onGeneratePatientReport() {
-        previewRequestId++
-        val patient = patientId
+        val patient = patientId ?: return
         val sheet = internalState.value.reportSheet
-        if (patient == null || sheet == null || sheet.isGenerating) return
+            ?.takeUnless { it.isGenerating || it.isLoadingPreview }
+            ?.takeUnless { it.requiresUnverifiedWarningAck && !it.isUnverifiedWarningAcknowledged }
+            ?: return
         if (sheet.effectiveSelectedIds.isEmpty()) {
             internalState.update {
                 it.copy(reportSheet = sheet.copy(error = NO_VERIFIED_SAMPLES_IN_RANGE))
             }
-            return
+        } else {
+            finalizePatientReport(patient, sheet)
         }
-        internalState.update { it.copy(reportSheet = sheet.copy(isGenerating = true, error = null)) }
+    }
+
+    private fun finalizePatientReport(patient: String, sheet: PatientReportSheetState) {
+        previewRequestId++
+        val acknowledgedCount = sheet.unverifiedSampleCount
+            .takeIf { sheet.step == ReportSheetStep.PREVIEW && sheet.isUnverifiedWarningAcknowledged }
+        internalState.update { it.copy(reportSheet = sheet.copy(isGenerating = true, error = null, errorRes = null)) }
         viewModelScope.launch {
             val scope = PatientReportScope(
                 startDate = sheet.startDate,
@@ -780,6 +811,7 @@ class SessionsViewModel @Inject constructor(
                 patientId = patient,
                 scope = scope,
                 config = sheet.config,
+                acknowledgedUnverifiedCount = acknowledgedCount,
             )
                 .onSuccess { report ->
                     internalState.update { it.copy(reportSheet = null) }
@@ -787,11 +819,22 @@ class SessionsViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     internalState.update {
-                        it.copy(
-                            reportSheet = it.reportSheet?.copy(
+                        val current = it.reportSheet ?: return@update it
+                        val next = if (error is UnverifiedReportFieldsException) {
+                            current.copy(
+                                isGenerating = false,
+                                unverifiedSampleCount = error.count,
+                                isUnverifiedWarningAcknowledged = false,
+                                errorRes = R.string.report_warning_unverified_fields_changed,
+                            )
+                        } else {
+                            current.copy(
                                 isGenerating = false,
                                 error = error.message ?: "Could not generate report.",
-                            ),
+                            )
+                        }
+                        it.copy(
+                            reportSheet = next,
                         )
                     }
                 }

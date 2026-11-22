@@ -201,7 +201,8 @@
     <string name="verify_action_discard">Discard</string>
     <string name="verify_action_save_changes">Save changes</string>
     <string name="verify_action_submit">Submit</string>
-    <string name="verify_action_submit_clean_field">Submit (No eggs in field)</string>
+    <string name="verify_enlarge_image">Enlarge image</string>
+    <string name="verify_close_enlarged_image">Close enlarged image</string>
     <string name="verify_confirm_detection">Confirm detection</string>
     <string name="verify_suggested_species_label">AI suggestion:</string>
     <string name="verify_detection_species_subtitle">Model: %1$s</string>
@@ -540,15 +541,23 @@
     <string name="report_option_name_selected_prefix">Selected: %1$s</string>
     <string name="report_option_name_excluded">Excluded</string>
     <string name="report_option_censor_codename_toast">Patient uses a codename and cannot be censored.</string>
-    <string name="report_warning_fewer_samples_title">Only %1$d of %2$d recommended samples selected</string>
+    <string name="report_warning_fewer_samples_title">Only %1$d of %2$d recommended fields selected</string>
     <plurals name="report_warning_fewer_samples_title">
-        <item quantity="one">Only %1$d of %2$d recommended sample selected</item>
-        <item quantity="other">Only %1$d of %2$d recommended samples selected</item>
+        <item quantity="one">Only %1$d of %2$d recommended fields selected</item>
+        <item quantity="other">Only %1$d of %2$d recommended fields selected</item>
     </plurals>
     <string name="report_warning_fewer_samples_config_subtitle">You can still preview and continue.</string>
-    <string name="report_warning_fewer_samples_preview_subtitle_single">You can continue with this sample.</string>
-    <string name="report_warning_fewer_samples_preview_subtitle_multiple">You can continue with these samples.</string>
+    <string name="report_warning_fewer_samples_preview_subtitle_single">You can continue with this field.</string>
+    <string name="report_warning_fewer_samples_preview_subtitle_multiple">You can continue with these fields.</string>
     <string name="report_warning_acknowledgment_checkbox">I understand and want to continue.</string>
+    <plurals name="report_warning_unverified_fields_title">
+        <item quantity="one">%1$d unverified field will be excluded from the report</item>
+        <item quantity="other">%1$d unverified fields will be excluded from the report</item>
+    </plurals>
+    <string name="report_warning_unverified_fields_config_subtitle">Open the preview to continue, or close the report to verify the fields first.</string>
+    <string name="report_warning_unverified_fields_preview_subtitle">To include these fields, close the report and verify them first.</string>
+    <string name="report_warning_unverified_fields_checkbox">I understand the report excludes unverified fields.</string>
+    <string name="report_warning_unverified_fields_changed">The number of unverified fields changed. Confirm again.</string>
     <string name="report_sheet_generate_title">Generate report</string>
     <string name="report_sheet_pdf_report_label">PDF report</string>
     <plurals name="report_sheet_pdf_page_summary">
@@ -1030,8 +1039,7 @@
         <item quantity="other">%d unverified</item>
     </plurals>
     <string name="patient_preview_age_sex">%1$s · %2$s</string>
-    <!-- A colleague's record, read-only on this phone (14zcqntjph6) -->
+    <!-- A colleague's record, read-only on this phone (14zcqntjph6). Colleague name is required (14zcqntx3v6) -->
     <string name="record_recorded_by">Recorded by %1$s</string>
-    <string name="record_recorded_by_unnamed">Recorded by another medtech</string>
     <string name="record_read_only_body">Only the medtech who recorded it can change it.</string>
 </resources>

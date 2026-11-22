@@ -134,14 +134,6 @@ class SampleDetailContentTest {
     }
 
     @Test
-    fun `a colleague with no name on file reads as another medtech`() {
-        render(author = RecordAuthor.Colleague(name = null))
-
-        scrollTo(READ_ONLY_AUTHOR_NOTE_TAG)
-        composeRule.onNodeWithText("Recorded by another medtech").assertExists()
-    }
-
-    @Test
     fun `the medtech's own sample keeps both ways into edit mode`() {
         render(detection("a", DetectionVerdict.CONFIRMED, label = "Ascaris lumbricoides"))
 

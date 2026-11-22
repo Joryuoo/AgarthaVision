@@ -52,6 +52,7 @@ class GenerateSessionReportUseCase @Inject constructor(
     suspend operator fun invoke(
         sessionId: String,
         config: ReportConfig = ReportConfig(),
+        acknowledgedUnverifiedCount: Int? = null,
     ): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
@@ -69,6 +70,10 @@ class GenerateSessionReportUseCase @Inject constructor(
         // disabled in that state too; this keeps any other caller from producing one.
         val samples = sampleRepository.getSamplesForSession(sessionId, userId)
         require(samples.isNotEmpty()) { NO_VERIFIED_SAMPLES_MESSAGE }
+        requireUnverifiedFieldsAcknowledged(
+            sampleRepository.countUnverifiedFieldsForReport(sessionId, userId),
+            acknowledgedUnverifiedCount,
+        )
 
         val patient = requireNotNull(patientRepository.getPatientById(session.patientId)) {
             PATIENT_NOT_ON_DEVICE_MESSAGE
@@ -149,9 +154,8 @@ class GenerateSessionReportUseCase @Inject constructor(
     }
 
     /**
-     * The medtech's name as printed on the report: display name first, falling back to email,
-     * then the raw user id — mirroring the convention used wherever a medtech's identity is
-     * shown without a guaranteed display name.
+     * The medtech's name as printed on the report: display name first, falling back to email
+     * or user id if an unauthenticated or cached record has no profile name.
      */
     private fun resolveGeneratedByName(userId: String, identity: LocalIdentity?): String {
         return identity?.displayName?.takeIf { it.isNotBlank() }

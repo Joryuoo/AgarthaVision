@@ -103,7 +103,6 @@ import com.agarthavision.ui.components.LocalAppLocked
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.components.SkeletonBox
-import com.agarthavision.ui.components.recordedByText
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -302,6 +301,7 @@ fun SessionsScreen(
             onGenerate = viewModel::onGeneratePatientReport,
             onConfigChange = viewModel::onUpdatePatientReportConfig,
             onAcknowledgeWarning = viewModel::onAcknowledgePatientReportWarning,
+            onAcknowledgeUnverifiedWarning = viewModel::onAcknowledgeUnverifiedReportWarning,
             onPreview = viewModel::onPreviewPatientReport,
             onBackToConfig = viewModel::onBackToPatientReportConfig,
         )

@@ -12,6 +12,12 @@ data class LocalIdentity(
     val userId: String,
     /** Email the user signed in with; shown in the Dashboard account state. */
     val email: String,
-    /** Optional display name copied from auth metadata when available. */
-    val displayName: String? = null,
-)
+    /** Medtech's required full name (14zcqntx3v6). Defaults to [PENDING_PROFILE_PLACEHOLDER] if not supplied. */
+    val displayName: String = PENDING_PROFILE_PLACEHOLDER,
+    /** Last known branding for the signed-in medtech's active laboratory. */
+    val laboratory: LaboratoryBranding? = null,
+) {
+    companion object {
+        const val PENDING_PROFILE_PLACEHOLDER = "Pending Profile Setup"
+    }
+}
