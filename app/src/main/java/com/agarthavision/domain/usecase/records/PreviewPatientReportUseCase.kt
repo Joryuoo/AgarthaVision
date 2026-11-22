@@ -95,6 +95,7 @@ class PreviewPatientReportUseCase @Inject constructor(
             generatedByEmail = identity?.email,
             organizationName = deriveOrganizationFromEmail(identity?.email),
             appendixSamples = appendixSamples,
+            patientId = patientId,
         )
         patientReportPdfRenderer.render(pdfDoc)
     }.onFailure { throwable ->

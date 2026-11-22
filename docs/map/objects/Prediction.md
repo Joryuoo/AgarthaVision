@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-11-05
-commit: 2cc16989
+verified: 2026-11-22
+commit: 4f6d0bbc
 entity: supabase/migrations/0004_predictions.sql
 ---
 

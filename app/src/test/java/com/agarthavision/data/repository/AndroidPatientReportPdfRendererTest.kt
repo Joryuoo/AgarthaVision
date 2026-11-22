@@ -373,7 +373,8 @@ class AndroidPatientReportPdfRendererTest {
     @Test
     fun `render patient report with verificationUrl renders authenticity QR code`() = runTest {
         val doc = createPatientDocument(
-            verificationUrl = "https://agarthavision.vercel.app/verify/report?id=rep-pat-1&patient=pat-1&ts=1762344000",
+            verificationUrl = "https://agarthan-admin.vercel.app/verify/report" +
+                "?id=rep-pat-1&patient=pat-1&ts=1762344000",
         )
         val bytes = renderer.render(doc)
 
@@ -406,7 +407,7 @@ class AndroidPatientReportPdfRendererTest {
         appendixSamples: List<ReportPdfSampleItem> = emptyList(),
         organizationName: String? = "Barangay Health Unit",
         generatedByEmail: String? = "admin@clinic.ph",
-        verificationUrl: String? = "https://agarthavision.vercel.app/verify/report" +
+        verificationUrl: String? = "https://agarthan-admin.vercel.app/verify/report" +
             "?id=rep-pat-12345678&ts=1762344000",
     ): PatientReportPdfDocument {
         return PatientReportPdfDocument(

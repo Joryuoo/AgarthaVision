@@ -17,7 +17,7 @@ class ReportVerificationUrlBuilderTest {
         )
 
         assertEquals(
-            "https://agarthavision.vercel.app/verify/report?id=rep-1234-uuid&session=ses-5678-uuid&ts=1763630400",
+            "https://agarthan-admin.vercel.app/verify/report?id=rep-1234-uuid&session=ses-5678-uuid&ts=1763630400",
             url,
         )
     }
@@ -32,7 +32,7 @@ class ReportVerificationUrlBuilderTest {
         )
 
         assertEquals(
-            "https://agarthavision.vercel.app/verify/report?id=rep-patient-1&patient=pat-uuid-99&ts=1763630400",
+            "https://agarthan-admin.vercel.app/verify/report?id=rep-patient-1&patient=pat-uuid-99&ts=1763630400",
             url,
         )
     }
@@ -47,7 +47,7 @@ class ReportVerificationUrlBuilderTest {
         )
 
         assertEquals(
-            "https://agarthavision.vercel.app/verify/report?id=rep-patient-1&ts=1763630400",
+            "https://agarthan-admin.vercel.app/verify/report?id=rep-patient-1&ts=1763630400",
             url,
         )
     }

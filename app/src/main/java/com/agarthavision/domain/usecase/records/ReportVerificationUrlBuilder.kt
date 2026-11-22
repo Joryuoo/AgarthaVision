@@ -15,7 +15,7 @@ import java.time.Instant
  */
 object ReportVerificationUrlBuilder {
 
-    const val DEFAULT_BASE_URL = "https://agarthavision.vercel.app/verify/report"
+    const val DEFAULT_BASE_URL = "https://agarthan-admin.vercel.app/verify/report"
 
     fun buildSessionReportUrl(
         reportId: String,

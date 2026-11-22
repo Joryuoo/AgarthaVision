@@ -53,5 +53,5 @@ INFERENCE_URL_PROD=http://<droplet-ip>:8000
 # ── Report Verification (Admin Portal QR Verifier, 86d4a6jzt) ───────────────
 # The web endpoint where doctors are routed upon scanning a report's QR code.
 # The verifier resolves the report_id against Supabase and validates row authenticity.
-REPORT_VERIFICATION_BASE_URL_DEV=https://agarthavision.vercel.app/verify/report
-REPORT_VERIFICATION_BASE_URL_PROD=https://agarthavision.vercel.app/verify/report
+REPORT_VERIFICATION_BASE_URL_DEV=https://agarthan-admin.vercel.app/verify/report
+REPORT_VERIFICATION_BASE_URL_PROD=https://agarthan-admin.vercel.app/verify/report

@@ -618,7 +618,7 @@ internal object PdfChrome {
 
         var qrBottomY = 0f
         if (!params.verificationUrl.isNullOrBlank()) {
-            qrBottomY = drawAuthenticityQrBlock(
+            qrBottomY = drawVerificationQrCode(
                 context = context,
                 canvas = canvas,
                 verificationUrl = params.verificationUrl,
@@ -629,7 +629,7 @@ internal object PdfChrome {
         return maxOf(currentY + 12f, qrBottomY)
     }
 
-    private fun drawAuthenticityQrBlock(
+    internal fun drawVerificationQrCode(
         context: Context,
         canvas: Canvas,
         verificationUrl: String,

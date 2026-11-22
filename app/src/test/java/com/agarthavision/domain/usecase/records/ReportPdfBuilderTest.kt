@@ -11,6 +11,7 @@ import com.agarthavision.domain.model.ReportPatient
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
 import com.agarthavision.domain.model.ReportPdfSpeciesRow
+import com.agarthavision.domain.model.ReportVerificationConfig
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
@@ -146,7 +147,7 @@ class ReportPdfBuilderTest {
                 generatedAt = generatedAt,
                 totalEggsConfirmed = TOTAL_EGGS_CONFIRMED,
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
-                verificationUrl = "https://agarthavision.vercel.app/verify/report" +
+                verificationUrl = "https://agarthan-admin.vercel.app/verify/report" +
                     "?id=report-1&session=session-1&ts=${generatedAt.epochSecond}",
             ),
             speciesRows = listOf(
@@ -506,5 +507,38 @@ class ReportPdfBuilderTest {
             detectionsBySample = emptyMap(),
         )
         assertEquals(ParasiteBurdenLevel.LOW, docFew.speciesRows.first().burdenLevel)
+    }
+
+    @Test
+    fun `custom verificationConfig baseUrl is reflected in session report header verificationUrl`() {
+        val customConfig = ReportVerificationConfig(baseUrl = "https://staging.agartha.ph/verify")
+        val customBuilder = ReportPdfBuilder(verificationConfig = customConfig)
+        val generatedAt = Instant.ofEpochSecond(1762344000L)
+        val metadata = ReportMetadata(
+            reportId = "rep-custom-1",
+            session = Session(
+                id = "session-custom-1",
+                userId = "user-1",
+                deviceId = "dev-1",
+                startedAt = SESSION_STARTED_AT,
+                patientId = SESSION_PATIENT_ID,
+                label = null,
+            ),
+            patient = reportPatient(),
+            generatedBy = "user-1",
+            generatedByName = "Dr. Medtech",
+            generatedAt = generatedAt,
+            totalSamples = 1,
+            totalEggsConfirmed = 0,
+            positiveSpecies = emptyList(),
+            lpfPerSpecies = emptyMap(),
+        )
+
+        val doc = customBuilder.build(metadata = metadata, samples = emptyList(), detectionsBySample = emptyMap())
+
+        assertEquals(
+            "https://staging.agartha.ph/verify?id=rep-custom-1&session=session-custom-1&ts=1762344000",
+            doc.header.verificationUrl,
+        )
     }
 }

@@ -16,7 +16,7 @@ class QrCodeGeneratorTest {
 
     @Test
     fun `generateQrBitmap with valid URL produces square bitmap with expected dimensions`() {
-        val url = "https://agarthavision.vercel.app/verify/report?id=123&session=456&ts=1700000000"
+        val url = "https://agarthan-admin.vercel.app/verify/report?id=123&session=456&ts=1700000000"
         val bitmap = QrCodeGenerator.generateQrBitmap(url, sizePx = 150)
 
         assertNotNull(bitmap)
@@ -40,7 +40,7 @@ class QrCodeGeneratorTest {
 
     @Test
     fun `generateQrBitmap contains both dark and light pixels`() {
-        val url = "https://agarthavision.vercel.app/verify/report?id=rep-test"
+        val url = "https://agarthan-admin.vercel.app/verify/report?id=rep-test"
         val bitmap = QrCodeGenerator.generateQrBitmap(
             content = url,
             sizePx = 100,

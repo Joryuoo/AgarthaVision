@@ -15,6 +15,6 @@ data class ReportVerificationPayload(
     val sessionId: String? = null,
     val patientId: String? = null,
     val generatedAt: Instant,
-    val baseUrl: String = "https://agarthavision.vercel.app/verify/report",
+    val baseUrl: String = "https://agarthan-admin.vercel.app/verify/report",
 )
 

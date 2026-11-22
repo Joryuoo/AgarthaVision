@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-11-20
-commit: 199c5e31
+verified: 2026-11-22
+commit: 4f6d0bbc
 ---
 
 # report
@@ -101,7 +101,7 @@ Both single-session and multi-session patient PDFs share a redesigned clinical d
 Per consultation with Dr. Bayron (86d4a6jzt), because reports are delivered directly to patients without requiring them to physically return to the laboratory, a QR code on the PDF report provides independent authenticity attestation to the attending physician.
 
 ### 1. What the QR Code Encodes
-- **Target URL:** An admin web endpoint (`REPORT_VERIFICATION_BASE_URL`, configured via `local.properties` / `BuildConfig`, default `https://agarthavision.vercel.app/verify/report`) resolvable by any smartphone camera.
+- **Target URL:** An admin web endpoint (`REPORT_VERIFICATION_BASE_URL`, configured via `local.properties` / `BuildConfig`, default `https://agarthan-admin.vercel.app/verify/report`) resolvable by any smartphone camera.
 - **Payload Shape:**
   - `id`: The report UUID (`ReportEntity.report_id`).
   - `session`: The session UUID (`SessionEntity.session_id`, session reports only).
