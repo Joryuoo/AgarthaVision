@@ -4,6 +4,8 @@ import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.LpfDensity
+import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.PatientReportSessionRow
 import com.agarthavision.domain.model.Report
@@ -105,31 +107,20 @@ class GeneratePatientReportUseCase @Inject constructor(
         val positiveSpecies = pooledLpfPerSpecies.filterValues { it.max > 0 }.keys.sorted()
 
         val formattedPatientName = formatPatientNameForReport(patient, config.patientNameOption)
-        val appendixSamples = buildAppendixSamplesIfNeeded(breakdown, config)
-
-        // Render the final data and identity together; preview bytes are transient only.
-        val pdfBytes = run {
-            val pdfDoc = patientReportPdfBuilder.build(
-                reportId = reportId,
-                patientDisplayName = formattedPatientName,
-                ageYears = patient.ageYears(generatedAt),
-                sex = patient.sex,
-                address = address,
-                scope = scope,
-                generatedByName = generatedByName,
-                generatedAt = generatedAt,
-                pooledLpfPerSpecies = pooledLpfPerSpecies,
-                totalSamples = totalSamples,
-                totalEggsConfirmed = totalEggsConfirmed,
-                positiveSpecies = positiveSpecies,
-                sessionRows = sessionRows,
-                config = config,
-                generatedByEmail = identity?.email,
-                organizationName = deriveOrganizationFromEmail(identity?.email),
-                appendixSamples = appendixSamples,
-            )
-            patientReportPdfRenderer.render(pdfDoc)
-        }
+        val pdfBytes = renderPdf(
+            reportId = reportId,
+            patient = patient,
+            formattedPatientName = formattedPatientName,
+            address = address,
+            scope = scope,
+            generatedByName = generatedByName,
+            generatedAt = generatedAt,
+            breakdown = breakdown,
+            pooledLpfPerSpecies = pooledLpfPerSpecies,
+            positiveSpecies = positiveSpecies,
+            config = config,
+            identity = identity,
+        )
         val pdfPath = reportFileStore.writePatientPdf(reportId, patientId, pdfBytes)
 
         val report = Report(
@@ -155,6 +146,44 @@ class GeneratePatientReportUseCase @Inject constructor(
         report
     }.onFailure { throwable ->
         if (throwable is CancellationException) throw throwable
+    }
+
+    @Suppress("LongParameterList")
+    private suspend fun renderPdf(
+        reportId: String,
+        patient: Patient,
+        formattedPatientName: String,
+        address: String,
+        scope: PatientReportScope,
+        generatedByName: String,
+        generatedAt: Instant,
+        breakdown: SessionBreakdown,
+        pooledLpfPerSpecies: Map<String, LpfDensity>,
+        positiveSpecies: List<String>,
+        config: ReportConfig,
+        identity: LocalIdentity?,
+    ): ByteArray {
+        val appendixSamples = buildAppendixSamplesIfNeeded(breakdown, config)
+        val pdfDoc = patientReportPdfBuilder.build(
+            reportId = reportId,
+            patientDisplayName = formattedPatientName,
+            ageYears = patient.ageYears(generatedAt),
+            sex = patient.sex,
+            address = address,
+            scope = scope,
+            generatedByName = generatedByName,
+            generatedAt = generatedAt,
+            pooledLpfPerSpecies = pooledLpfPerSpecies,
+            totalSamples = breakdown.totalSamples,
+            totalEggsConfirmed = breakdown.totalEggsConfirmed,
+            positiveSpecies = positiveSpecies,
+            sessionRows = breakdown.sessionRows,
+            config = config,
+            generatedByEmail = identity?.email,
+            organizationName = deriveOrganizationFromEmail(identity?.email),
+            appendixSamples = appendixSamples,
+        )
+        return patientReportPdfRenderer.render(pdfDoc)
     }
 
     private suspend fun buildAppendixSamplesIfNeeded(

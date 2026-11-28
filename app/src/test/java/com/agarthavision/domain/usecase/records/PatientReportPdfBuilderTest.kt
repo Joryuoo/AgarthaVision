@@ -6,6 +6,7 @@ import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.PatientReportSessionRow
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.ReportPdfSampleItem
+import com.agarthavision.domain.model.ReportVerificationConfig
 import com.agarthavision.domain.model.Sex
 import java.time.Instant
 import java.time.LocalDate
@@ -250,5 +251,57 @@ class PatientReportPdfBuilderTest {
             organizationName = "Department of Health - Region VII",
         )
         assertEquals("Department of Health - Region VII", docExplicit.header.organizationName)
+    }
+
+    @Test
+    fun `verificationUrl encodes reportId only`() {
+        val instant = Instant.parse("2026-01-05T12:00:00Z")
+        val doc = builder.build(
+            reportId = "rep-pat-1",
+            patientDisplayName = "Cruz, Gerald",
+            ageYears = 26,
+            sex = Sex.MALE,
+            address = "Lahug",
+            scope = PatientReportScope(),
+            generatedByName = "Dr. Reyes",
+            generatedAt = instant,
+            pooledLpfPerSpecies = emptyMap(),
+            totalSamples = 0,
+            totalEggsConfirmed = 0,
+            positiveSpecies = emptyList(),
+            sessionRows = emptyList(),
+        )
+
+        assertEquals(
+            "https://agarthan-admin.vercel.app/verify/report?id=rep-pat-1",
+            doc.header.verificationUrl,
+        )
+    }
+
+    @Test
+    fun `custom verificationConfig baseUrl is used by builder`() {
+        val customConfig = ReportVerificationConfig(baseUrl = "https://agarthan-admin-staging.vercel.app/verify/report")
+        val customBuilder = PatientReportPdfBuilder(verificationConfig = customConfig)
+        val instant = Instant.parse("2026-01-05T12:00:00Z")
+        val doc = customBuilder.build(
+            reportId = "rep-pat-1",
+            patientDisplayName = "Cruz, Gerald",
+            ageYears = 26,
+            sex = Sex.MALE,
+            address = "Lahug",
+            scope = PatientReportScope(),
+            generatedByName = "Dr. Reyes",
+            generatedAt = instant,
+            pooledLpfPerSpecies = emptyMap(),
+            totalSamples = 0,
+            totalEggsConfirmed = 0,
+            positiveSpecies = emptyList(),
+            sessionRows = emptyList(),
+        )
+
+        assertEquals(
+            "https://agarthan-admin-staging.vercel.app/verify/report?id=rep-pat-1",
+            doc.header.verificationUrl,
+        )
     }
 }

@@ -49,3 +49,9 @@ TURNSTILE_HOSTNAME_PROD=<widget-hostname>
 # or every cloud call gets a 401 and the frame falls back to the on-device model.
 INFERENCE_URL_DEV=http://<droplet-ip>:8000
 INFERENCE_URL_PROD=http://<droplet-ip>:8000
+
+# ── Report Verification (Admin Portal QR Verifier, 86d4a6jzt) ───────────────
+# The web endpoint where clinicians are routed upon scanning a report's QR code.
+# Debug builds target the staging admin console; release builds target production.
+REPORT_VERIFICATION_BASE_URL_DEV=https://agarthan-admin-staging.vercel.app/verify/report
+REPORT_VERIFICATION_BASE_URL_PROD=https://agarthan-admin.vercel.app/verify/report

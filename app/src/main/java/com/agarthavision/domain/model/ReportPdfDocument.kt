@@ -41,6 +41,7 @@ data class ReportPdfHeader(
     val positiveSpecies: List<String>,
     val includeSampleImages: Boolean = false,
     val totalPages: Int = 1,
+    val verificationUrl: String? = null,
 )
 
 /**

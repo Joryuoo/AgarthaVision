@@ -109,6 +109,11 @@ internal object PdfChrome {
     private const val TEXT_SIZE_APPENDIX_EGGS = 8.5f
     private const val TEXT_SIZE_PLACEHOLDER_TITLE = 8.5f
     private const val TEXT_SIZE_PLACEHOLDER_SUB = 7.5f
+    private const val TEXT_SIZE_QR_HEADER = 8f
+    private const val TEXT_SIZE_QR_SUB = 7f
+    private const val QR_CODE_DISPLAY_SIZE = 78f
+    private const val QR_TEXT_MAX_WIDTH = 165f
+    private const val QR_TEXT_LINE_HEIGHT = 10f
 
     const val ELLIPSIS = "…"
 
@@ -555,10 +560,16 @@ internal object PdfChrome {
         }
     }
 
-    fun calculateSignoffHeight(organizationName: String?, reviewerEmail: String?): Float {
-        return 10f + 32f + 16f + 12f +
+    fun calculateSignoffHeight(
+        organizationName: String?,
+        reviewerEmail: String?,
+        hasVerificationUrl: Boolean = false,
+    ): Float {
+        val leftHeight = 10f + 32f + 16f + 12f +
             (if (!reviewerEmail.isNullOrBlank()) 13f else 0f) +
             (if (!organizationName.isNullOrBlank()) 13f else 0f)
+        val qrHeight = if (hasVerificationUrl) QR_CODE_DISPLAY_SIZE + 16f else 0f
+        return maxOf(leftHeight, qrHeight)
     }
 
     fun drawReviewerSignoff(
@@ -606,7 +617,66 @@ internal object PdfChrome {
             canvas.drawText(params.organizationName, MARGIN, currentY, subPaint)
         }
 
-        return currentY + 12f
+        var qrBottomY = 0f
+        if (!params.verificationUrl.isNullOrBlank()) {
+            qrBottomY = drawVerificationQrCode(
+                context = context,
+                canvas = canvas,
+                verificationUrl = params.verificationUrl,
+                topY = headerY - 2f,
+            )
+        }
+
+        return maxOf(currentY + 12f, qrBottomY)
+    }
+
+    internal fun drawVerificationQrCode(
+        context: Context,
+        canvas: Canvas,
+        verificationUrl: String,
+        topY: Float,
+    ): Float {
+        val qrRight = PAGE_WIDTH - MARGIN
+        val qrLeft = qrRight - QR_CODE_DISPLAY_SIZE
+        val qrTop = topY
+        val qrBottom = qrTop + QR_CODE_DISPLAY_SIZE
+
+        val qrBitmap = QrCodeGenerator.generateCompactQrBitmap(
+            content = verificationUrl,
+        )
+        val destRect = RectF(qrLeft, qrTop, qrRight, qrBottom)
+        val qrPaint = Paint().apply { isFilterBitmap = false }
+        canvas.drawBitmap(qrBitmap, null, destRect, qrPaint)
+        qrBitmap.recycle()
+
+        val qrHeaderPaint = pdfPaint(
+            color = AppColors.Maroon,
+            textSize = TEXT_SIZE_QR_HEADER,
+            weight = 700,
+            letterSpacing = 0.06f,
+        ).apply { textAlign = Paint.Align.RIGHT }
+
+        val qrSubPaint = pdfPaint(
+            color = AppColors.Gray700,
+            textSize = TEXT_SIZE_QR_SUB,
+            weight = 500,
+            letterSpacing = 0.02f,
+        ).apply { textAlign = Paint.Align.RIGHT }
+
+        val textX = qrLeft - 8f
+        val line1Y = qrTop + 20f
+        canvas.drawText(context.getString(R.string.report_pdf_qr_scan_to_verify), textX, line1Y, qrHeaderPaint)
+
+        val recordCheckLines = wrapText(
+            paint = qrSubPaint,
+            text = context.getString(R.string.report_pdf_qr_record_check),
+            maxWidth = QR_TEXT_MAX_WIDTH,
+        )
+        recordCheckLines.forEachIndexed { index, line ->
+            canvas.drawText(line, textX, line1Y + 12f + index * QR_TEXT_LINE_HEIGHT, qrSubPaint)
+        }
+
+        return qrBottom + 12f
     }
 
     fun drawRedesignedFooter(
@@ -921,6 +991,7 @@ internal data class ReviewerSignoffParams(
     val reviewerName: String,
     val organizationName: String? = null,
     val reviewerEmail: String? = null,
+    val verificationUrl: String? = null,
 )
 
 internal data class RedesignedFooterParams(

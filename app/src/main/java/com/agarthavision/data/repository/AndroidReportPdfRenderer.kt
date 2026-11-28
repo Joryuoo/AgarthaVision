@@ -122,6 +122,7 @@ class AndroidReportPdfRenderer @Inject constructor(
             reviewerName = document.header.generatedByName,
             organizationName = document.header.organizationName,
             reviewerEmail = document.header.generatedByEmail,
+            verificationUrl = document.header.verificationUrl,
         )
         PdfChrome.drawReviewerSignoff(context, canvas, signoffParams, heroBottom)
 

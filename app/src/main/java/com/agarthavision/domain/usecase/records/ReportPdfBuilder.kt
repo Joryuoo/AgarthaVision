@@ -5,6 +5,7 @@ import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
+import com.agarthavision.domain.model.ReportVerificationConfig
 import com.agarthavision.domain.model.Sample
 import javax.inject.Inject
 
@@ -16,7 +17,10 @@ import javax.inject.Inject
  * when [ReportConfig.includeSampleImages] is enabled; the current PDF renders the patient
  * block, the aggregate header, the per-species table, and the optional sample appendix.
  */
-class ReportPdfBuilder @Inject constructor() {
+class ReportPdfBuilder @Inject constructor(
+    private val verificationConfig: ReportVerificationConfig,
+) {
+    constructor() : this(ReportVerificationConfig())
     @Suppress("LongParameterList")
     fun build(
         metadata: ReportMetadata,
@@ -40,6 +44,10 @@ class ReportPdfBuilder @Inject constructor() {
         } else {
             1
         }
+        val verificationUrl = ReportVerificationUrlBuilder.buildReportUrl(
+            reportId = metadata.reportId,
+            baseUrl = verificationConfig.baseUrl,
+        )
         val header = ReportPdfHeader(
             reportId = metadata.reportId,
             sessionId = metadata.session.id,
@@ -57,6 +65,7 @@ class ReportPdfBuilder @Inject constructor() {
             positiveSpecies = metadata.positiveSpecies,
             includeSampleImages = config.includeSampleImages,
             totalPages = totalPages,
+            verificationUrl = verificationUrl,
         )
         return ReportPdfDocument(
             header = header,

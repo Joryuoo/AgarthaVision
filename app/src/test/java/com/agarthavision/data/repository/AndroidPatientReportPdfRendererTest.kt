@@ -370,6 +370,24 @@ class AndroidPatientReportPdfRendererTest {
         assertValidPdf(bytes, expectedPages = 2)
     }
 
+    @Test
+    fun `render patient report with verificationUrl renders authenticity QR code`() = runTest {
+        val doc = createPatientDocument(
+            verificationUrl = "https://agarthan-admin-staging.vercel.app/verify/report?id=rep-pat-1",
+        )
+        val bytes = renderer.render(doc)
+
+        assertValidPdf(bytes, expectedPages = 1)
+    }
+
+    @Test
+    fun `render patient report without verificationUrl renders cleanly`() = runTest {
+        val doc = createPatientDocument(verificationUrl = null)
+        val bytes = renderer.render(doc)
+
+        assertValidPdf(bytes, expectedPages = 1)
+    }
+
     private fun assertValidPdf(bytes: ByteArray, expectedPages: Int) {
         assertNotNull(bytes)
         assertTrue("PDF bytes must not be empty", bytes.isNotEmpty())
@@ -388,6 +406,7 @@ class AndroidPatientReportPdfRendererTest {
         appendixSamples: List<ReportPdfSampleItem> = emptyList(),
         organizationName: String? = "Barangay Health Unit",
         generatedByEmail: String? = "admin@clinic.ph",
+        verificationUrl: String? = "https://agarthan-admin-staging.vercel.app/verify/report?id=rep-pat-12345678",
     ): PatientReportPdfDocument {
         return PatientReportPdfDocument(
             header = PatientReportPdfHeader(
@@ -406,6 +425,7 @@ class AndroidPatientReportPdfRendererTest {
                 totalSamples = sessionRows.sumOf { it.sampleCount },
                 totalEggsConfirmed = sessionRows.sumOf { it.eggsConfirmed },
                 positiveSpecies = speciesRows.map { it.speciesDisplayName },
+                verificationUrl = verificationUrl,
             ),
             speciesRows = speciesRows,
             sessionRows = sessionRows,

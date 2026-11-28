@@ -7,6 +7,7 @@ import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.PatientReportSessionRow
 import com.agarthavision.domain.model.ReportConfig
 import com.agarthavision.domain.model.ReportPdfSampleItem
+import com.agarthavision.domain.model.ReportVerificationConfig
 import com.agarthavision.domain.model.Sex
 import java.time.Instant
 import javax.inject.Inject
@@ -19,7 +20,10 @@ import javax.inject.Inject
  * [ReportPdfBuilder]'s session-scoped table (`buildReportSpeciesRows`) so the two documents
  * never describe the same underlying findings differently.
  */
-class PatientReportPdfBuilder @Inject constructor() {
+class PatientReportPdfBuilder @Inject constructor(
+    private val verificationConfig: ReportVerificationConfig,
+) {
+    constructor() : this(ReportVerificationConfig())
     @Suppress("LongParameterList")
     fun build(
         reportId: String,
@@ -41,6 +45,10 @@ class PatientReportPdfBuilder @Inject constructor() {
         appendixSamples: List<ReportPdfSampleItem> = emptyList(),
     ): PatientReportPdfDocument {
         val appendixPageCount = if (config.includeSampleImages) appendixPageCount(appendixSamples.size) else 0
+        val verificationUrl = ReportVerificationUrlBuilder.buildReportUrl(
+            reportId = reportId,
+            baseUrl = verificationConfig.baseUrl,
+        )
         val header = PatientReportPdfHeader(
             reportId = reportId,
             patientDisplayName = patientDisplayName,
@@ -59,6 +67,7 @@ class PatientReportPdfBuilder @Inject constructor() {
             positiveSpecies = positiveSpecies,
             includeSampleImages = config.includeSampleImages,
             totalPages = 1 + appendixPageCount,
+            verificationUrl = verificationUrl,
         )
         return PatientReportPdfDocument(
             header = header,

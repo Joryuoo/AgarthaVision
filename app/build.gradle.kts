@@ -19,6 +19,8 @@ detekt {
 val localProperties = Properties()
 val localPropsFile = rootProject.file("local.properties")
 if (localPropsFile.exists()) localPropsFile.reader().use { reader -> localProperties.load(reader) }
+val defaultReportVerificationUrlDev = "https://agarthan-admin-staging.vercel.app/verify/report"
+val defaultReportVerificationUrlProd = "https://agarthan-admin.vercel.app/verify/report"
 
 android {
     namespace = "com.agarthavision"
@@ -79,6 +81,11 @@ android {
                 "TURNSTILE_HOSTNAME",
                 "\"${localProperties.getProperty("TURNSTILE_HOSTNAME_DEV") ?: ""}\"",
             )
+            buildConfigField(
+                "String",
+                "REPORT_VERIFICATION_BASE_URL",
+                "\"${localProperties.getProperty("REPORT_VERIFICATION_BASE_URL_DEV") ?: defaultReportVerificationUrlDev}\"",
+            )
         }
         release {
             isMinifyEnabled = false
@@ -108,6 +115,11 @@ android {
                 "String",
                 "TURNSTILE_HOSTNAME",
                 "\"${localProperties.getProperty("TURNSTILE_HOSTNAME_PROD") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "REPORT_VERIFICATION_BASE_URL",
+                "\"${localProperties.getProperty("REPORT_VERIFICATION_BASE_URL_PROD") ?: defaultReportVerificationUrlProd}\"",
             )
         }
     }
@@ -154,6 +166,7 @@ dependencies {
     implementation(libs.core.splashscreen)
     implementation(libs.exifinterface)
     implementation(libs.biometric)
+    implementation(libs.zxing.core)
 
     // Activity
     implementation(libs.activity.compose)

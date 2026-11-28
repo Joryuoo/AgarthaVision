@@ -44,6 +44,7 @@ data class PatientReportPdfHeader(
     val positiveSpecies: List<String>,
     val includeSampleImages: Boolean = false,
     val totalPages: Int = 1,
+    val verificationUrl: String? = null,
 )
 
 /** One row of the per-session breakdown table. */

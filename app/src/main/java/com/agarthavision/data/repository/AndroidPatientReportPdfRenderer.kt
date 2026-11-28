@@ -322,14 +322,16 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
 
     private fun drawSignoff(cursor: PageCursor, header: PatientReportPdfHeader) {
         val signoffHeight = PdfChrome.calculateSignoffHeight(
-            header.organizationName,
-            header.generatedByEmail,
+            organizationName = header.organizationName,
+            reviewerEmail = header.generatedByEmail,
+            hasVerificationUrl = !header.verificationUrl.isNullOrBlank(),
         )
         cursor.newPageIfNeeded(signoffHeight)
         val signoffParams = ReviewerSignoffParams(
             reviewerName = header.generatedBy,
             organizationName = header.organizationName,
             reviewerEmail = header.generatedByEmail,
+            verificationUrl = header.verificationUrl,
         )
         cursor.y = PdfChrome.drawReviewerSignoff(context, cursor.canvas, signoffParams, cursor.y)
     }
@@ -402,8 +404,9 @@ class AndroidPatientReportPdfRenderer @Inject constructor(
         simY += TABLE_BOTTOM_GAP
 
         val signoffHeight = PdfChrome.calculateSignoffHeight(
-            document.header.organizationName,
-            document.header.generatedByEmail,
+            organizationName = document.header.organizationName,
+            reviewerEmail = document.header.generatedByEmail,
+            hasVerificationUrl = !document.header.verificationUrl.isNullOrBlank(),
         )
         if (simY + signoffHeight > maxContentY) {
             simPage++
