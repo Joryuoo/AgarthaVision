@@ -147,8 +147,7 @@ class ReportPdfBuilderTest {
                 generatedAt = generatedAt,
                 totalEggsConfirmed = TOTAL_EGGS_CONFIRMED,
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
-                verificationUrl = "https://agarthan-admin.vercel.app/verify/report" +
-                    "?id=report-1&session=session-1&ts=${generatedAt.epochSecond}",
+                verificationUrl = "https://agarthan-admin.vercel.app/verify/report?id=report-1",
             ),
             speciesRows = listOf(
                 ReportPdfSpeciesRow(
@@ -537,7 +536,7 @@ class ReportPdfBuilderTest {
         val doc = customBuilder.build(metadata = metadata, samples = emptyList(), detectionsBySample = emptyMap())
 
         assertEquals(
-            "https://staging.agartha.ph/verify?id=rep-custom-1&session=session-custom-1&ts=1762344000",
+            "https://staging.agartha.ph/verify?id=rep-custom-1",
             doc.header.verificationUrl,
         )
     }

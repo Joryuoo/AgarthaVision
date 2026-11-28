@@ -27,6 +27,30 @@ object QrCodeGenerator {
         require(content.isNotBlank()) { "QR content must not be blank" }
         require(sizePx > 0) { "sizePx must be positive" }
 
+        return encodeToBitmap(content, sizePx, darkColor, lightColor)
+    }
+
+    /**
+     * Generates a 1:1 module-accurate [Bitmap] without ZXing's extra centering padding.
+     *
+     * When drawn onto a PDF [android.graphics.Canvas] with `isFilterBitmap = false`, each module
+     * fills the full destination rect cleanly and decodes reliably even at 72 dpi on screen.
+     */
+    fun generateCompactQrBitmap(
+        content: String,
+        darkColor: Int = Color.BLACK,
+        lightColor: Int = Color.WHITE,
+    ): Bitmap {
+        require(content.isNotBlank()) { "QR content must not be blank" }
+        return encodeToBitmap(content, sizePx = 0, darkColor = darkColor, lightColor = lightColor)
+    }
+
+    private fun encodeToBitmap(
+        content: String,
+        sizePx: Int,
+        darkColor: Int,
+        lightColor: Int,
+    ): Bitmap {
         val hints = mapOf(
             EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
             EncodeHintType.MARGIN to QUIET_ZONE_MODULES,

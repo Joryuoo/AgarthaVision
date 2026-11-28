@@ -602,8 +602,7 @@
     <string name="report_pdf_hero_density_header">PER-FIELD DENSITY (LPF)</string>
     <string name="report_pdf_signoff_header">REVIEWED BY · MEDTECH</string>
     <string name="report_pdf_qr_scan_to_verify">SCAN TO VERIFY</string>
-    <string name="report_pdf_qr_authenticity_label">Scan to verify authentic laboratory results</string>
-    <string name="report_pdf_qr_tamper_notice">Official tamper-evident attestation</string>
+    <string name="report_pdf_qr_record_check">Scan to check this report against the laboratory\'s record</string>
     <string name="report_pdf_footer_report_id">REPORT ID  %1$s</string>
     <string name="report_pdf_footer_page">%1$d / %2$d</string>
     <string name="report_pdf_footer_page_appendix">%1$d / %2$d · APPENDIX</string>

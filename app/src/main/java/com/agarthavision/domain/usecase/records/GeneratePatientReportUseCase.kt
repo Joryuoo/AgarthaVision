@@ -120,7 +120,6 @@ class GeneratePatientReportUseCase @Inject constructor(
             positiveSpecies = positiveSpecies,
             config = config,
             identity = identity,
-            patientId = patientId,
         )
         val pdfPath = reportFileStore.writePatientPdf(reportId, patientId, pdfBytes)
 
@@ -163,7 +162,6 @@ class GeneratePatientReportUseCase @Inject constructor(
         positiveSpecies: List<String>,
         config: ReportConfig,
         identity: LocalIdentity?,
-        patientId: String,
     ): ByteArray {
         val appendixSamples = buildAppendixSamplesIfNeeded(breakdown, config)
         val pdfDoc = patientReportPdfBuilder.build(
@@ -184,7 +182,6 @@ class GeneratePatientReportUseCase @Inject constructor(
             generatedByEmail = identity?.email,
             organizationName = deriveOrganizationFromEmail(identity?.email),
             appendixSamples = appendixSamples,
-            patientId = patientId,
         )
         return patientReportPdfRenderer.render(pdfDoc)
     }

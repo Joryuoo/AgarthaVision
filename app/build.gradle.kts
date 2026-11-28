@@ -19,7 +19,8 @@ detekt {
 val localProperties = Properties()
 val localPropsFile = rootProject.file("local.properties")
 if (localPropsFile.exists()) localPropsFile.reader().use { reader -> localProperties.load(reader) }
-val defaultReportVerificationUrl = "https://agarthan-admin.vercel.app/verify/report"
+val defaultReportVerificationUrlDev = "https://agarthan-admin-staging.vercel.app/verify/report"
+val defaultReportVerificationUrlProd = "https://agarthan-admin.vercel.app/verify/report"
 
 android {
     namespace = "com.agarthavision"
@@ -83,7 +84,7 @@ android {
             buildConfigField(
                 "String",
                 "REPORT_VERIFICATION_BASE_URL",
-                "\"${localProperties.getProperty("REPORT_VERIFICATION_BASE_URL_DEV") ?: defaultReportVerificationUrl}\"",
+                "\"${localProperties.getProperty("REPORT_VERIFICATION_BASE_URL_DEV") ?: defaultReportVerificationUrlDev}\"",
             )
         }
         release {
@@ -118,7 +119,7 @@ android {
             buildConfigField(
                 "String",
                 "REPORT_VERIFICATION_BASE_URL",
-                "\"${localProperties.getProperty("REPORT_VERIFICATION_BASE_URL_PROD") ?: defaultReportVerificationUrl}\"",
+                "\"${localProperties.getProperty("REPORT_VERIFICATION_BASE_URL_PROD") ?: defaultReportVerificationUrlProd}\"",
             )
         }
     }

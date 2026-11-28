@@ -1,20 +1,14 @@
 package com.agarthavision.domain.model
 
-import java.time.Instant
+import com.agarthavision.domain.usecase.records.ReportVerificationUrlBuilder
 
 /**
- * Encapsulates the public identification reference encoded into a clinical report's QR code.
+ * Encapsulates the public report identifier encoded into a clinical report's QR code.
  *
- * Per consultation with Dr. Bayron, reports delivered directly to patients bypass physical
- * laboratory handoff. The QR code provides a cryptographic/server-resolvable reference so that
- * the receiving physician can confirm the printed/PDF findings match the authentic record in
- * Supabase without relying on easily falsified client-only claims.
+ * The QR code carries only the persisted [reportId] so a clinician can open the laboratory's
+ * stored record and compare it against the printed or shared PDF findings.
  */
 data class ReportVerificationPayload(
     val reportId: String,
-    val sessionId: String? = null,
-    val patientId: String? = null,
-    val generatedAt: Instant,
-    val baseUrl: String = "https://agarthan-admin.vercel.app/verify/report",
+    val baseUrl: String = ReportVerificationUrlBuilder.DEFAULT_BASE_URL,
 )
-

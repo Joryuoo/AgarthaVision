@@ -5,7 +5,6 @@ import androidx.room.ExperimentalRoomApi
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.agarthavision.BuildConfig
 import com.agarthavision.core.database.ALL_MIGRATIONS
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.ColleagueDao
@@ -31,8 +30,6 @@ import com.agarthavision.data.repository.PatientRepositoryImpl
 import com.agarthavision.data.repository.PsgcRepositoryImpl
 import com.agarthavision.data.repository.SampleRepositoryImpl
 import com.agarthavision.data.repository.SessionRepositoryImpl
-import com.agarthavision.domain.model.ReportVerificationConfig
-import com.agarthavision.domain.usecase.records.ReportVerificationUrlBuilder
 import com.agarthavision.data.repository.SupabaseAccountAccessRepository
 import com.agarthavision.data.repository.SupabaseAuthRepository
 import com.agarthavision.data.repository.SupabaseSampleImageRepository
@@ -145,14 +142,6 @@ object DatabaseModule {
 
     @Provides
     fun provideColleagueDao(database: AgarthaDatabase): ColleagueDao = database.colleagueDao()
-
-    @Provides
-    fun provideReportVerificationConfig(): ReportVerificationConfig =
-        ReportVerificationConfig(
-            baseUrl = BuildConfig.REPORT_VERIFICATION_BASE_URL.ifBlank {
-                ReportVerificationUrlBuilder.DEFAULT_BASE_URL
-            },
-        )
 }
 
 /**

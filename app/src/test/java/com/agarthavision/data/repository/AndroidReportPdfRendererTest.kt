@@ -251,8 +251,7 @@ class AndroidReportPdfRendererTest {
     @Test
     fun `render with verificationUrl renders authenticity QR code on summary page`() = runTest {
         val doc = createDocument(
-            verificationUrl = "https://agarthan-admin.vercel.app/verify/report" +
-                "?id=rep-1&session=sess-1&ts=1762344000",
+            verificationUrl = "https://agarthan-admin-staging.vercel.app/verify/report?id=rep-1",
         )
         val bytes = renderer.render(doc)
 
@@ -283,8 +282,7 @@ class AndroidReportPdfRendererTest {
         appendixSamples: List<ReportPdfSampleItem> = emptyList(),
         organizationName: String? = "Health Unit",
         generatedByEmail: String? = "medtech@example.com",
-        verificationUrl: String? = "https://agarthan-admin.vercel.app/verify/report" +
-            "?id=rep-12345678-abcd&session=sess-12345678-efgh&ts=1762344000",
+        verificationUrl: String? = "https://agarthan-admin-staging.vercel.app/verify/report?id=rep-12345678-abcd",
     ): ReportPdfDocument {
         return ReportPdfDocument(
             header = ReportPdfHeader(

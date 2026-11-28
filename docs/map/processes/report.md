@@ -1,7 +1,7 @@
 ---
 type: process
 status: verified
-verified: 2026-11-22
+verified: 2026-11-29
 commit: 4f6d0bbc
 ---
 
@@ -93,21 +93,20 @@ Prior to writing a report row to the database or saving a final PDF file to devi
 Both single-session and multi-session patient PDFs share a redesigned clinical document design:
 - **Chrome & Header:** `PdfChrome.kt::PdfChrome` renders a branded clinical header including an organization label derived from the medtech's email domain (`ReportOrganizationUtils.kt::deriveOrganizationFromEmail`), document title, generation timestamp, and medtech credentials.
 - **Microscopy Results Hero Card:** Rendered with deep maroon brand styling displaying identified species rows, Low Power Field density ranges (`min..max / LPF`), qualitative descriptors, and high-visibility parasite burden level pill badges (`ReportSpeciesRows.kt::buildReportSpeciesRows`, `PdfChrome.kt::PdfChrome`).
-- **Authenticity QR Code:** Rendered parallel to the medtech reviewer sign-off block on the summary page. Encodes a direct verification URL (`ReportVerificationUrlBuilder.kt::ReportVerificationUrlBuilder`) allowing attending physicians to attest document authenticity directly with a phone camera.
+- **Verification QR Code:** Rendered parallel to the medtech reviewer sign-off block on the summary page (`78 pt` / ~27.5 mm square). Encodes a compact verification URL (`ReportVerificationUrlBuilder.kt::ReportVerificationUrlBuilder`) carrying `?id=<reportId>` so attending clinicians can check the printed or shared PDF against the laboratory's stored record.
 - **Sample Image Appendix:** When `includeSampleImages = true`, verified field images are laid out in a balanced 2×2 grid per appendix page (`ReportOrganizationUtils.kt::buildAppendixSamples`), complete with field IDs, timestamps, and human-verified egg detections (`verdict != DetectionVerdict.FALSE_POSITIVE`, covering `CONFIRMED`, `WRONG_CLASS`, and `BOX_INCORRECT` with species resolved from `expertClass ?: classLabel` to match `DetectionDao.kt::getConfirmedEggCountsForSession`), powered by `AndroidReportPdfRenderer.kt::AndroidReportPdfRenderer` and `AndroidPatientReportPdfRenderer.kt::AndroidPatientReportPdfRenderer`.
 
-## QR Authenticity Verification Flow (Doctor Verification)
+## QR Verification Flow (Doctor Record Check)
 
-Per consultation with Dr. Bayron (86d4a6jzt), because reports are delivered directly to patients without requiring them to physically return to the laboratory, a QR code on the PDF report provides independent authenticity attestation to the attending physician.
+Per consultation with Dr. Bayron (86d4a6jzt), because reports are delivered directly to patients without requiring them to physically return to the laboratory, a QR code on the PDF report links the attending physician to the laboratory's stored record for comparison. The QR carries only the report ID — it is not a standalone cryptographic signature; it becomes a tamper check when the clinician compares the printed PDF against the stored findings (`reports.lpf_per_species`, `positive_species`, totals, and `generated_at`) displayed by the admin verifier page.
 
 ### 1. What the QR Code Encodes
-- **Target URL:** An admin web endpoint (`REPORT_VERIFICATION_BASE_URL`, configured via `local.properties` / `BuildConfig`, default `https://agarthan-admin.vercel.app/verify/report`) resolvable by any smartphone camera.
+- **Target URL:** Configured via `REPORT_VERIFICATION_BASE_URL` in `local.properties` / `BuildConfig` (provided by `ReportModule.kt::provideReportVerificationConfig`):
+  - **Debug / dev builds:** default `https://agarthan-admin-staging.vercel.app/verify/report` (`REPORT_VERIFICATION_BASE_URL_DEV`, live on admin staging).
+  - **Release builds:** default `https://agarthan-admin.vercel.app/verify/report` (`REPORT_VERIFICATION_BASE_URL_PROD`, answers once the verifier route is promoted to admin `main`).
 - **Payload Shape:**
-  - `id`: The report UUID (`ReportEntity.report_id`).
-  - `session`: The session UUID (`SessionEntity.session_id`, session reports only).
-  - `patient`: The patient UUID (`PatientEntity.patient_id`, patient reports only).
-  - `ts`: The exact generation epoch timestamp (`generated_at`).
-- **Cryptographic & Key Constraint (C10):** The APK never holds a signing secret or private key. Attestation is resolved server-side by the Admin Website verifier (86d43e3vu), which queries Supabase and compares what the physical PDF claims against the authoritative stored database record.
+  - `id`: The persisted report UUID (`ReportEntity.report_id`) only (`?id=<reportId>`). The server resolves the session or patient, findings, and `generated_at` from the `reports` row; keeping the URL short lowers the QR symbol version and improves phone-camera and on-screen scanning.
+- **Cryptographic & Key Constraint (C10):** The APK never holds a signing secret or private key. Record lookup is handled server-side by the Admin Console's `/verify/report` route (tracked separately in `AgarthaVision-Admin`), which queries Supabase and displays the stored findings for the clinician to compare against the physical PDF.
 
 ### 2. What the Physician Sees (Scan Flow & Verification States)
 When the doctor scans the QR code with a smartphone camera:

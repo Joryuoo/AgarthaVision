@@ -254,7 +254,7 @@ class PatientReportPdfBuilderTest {
     }
 
     @Test
-    fun `verificationUrl carries patientId when provided`() {
+    fun `verificationUrl encodes reportId only`() {
         val instant = Instant.parse("2026-01-05T12:00:00Z")
         val doc = builder.build(
             reportId = "rep-pat-1",
@@ -270,19 +270,17 @@ class PatientReportPdfBuilderTest {
             totalEggsConfirmed = 0,
             positiveSpecies = emptyList(),
             sessionRows = emptyList(),
-            patientId = "patient-uuid-12345",
         )
 
         assertEquals(
-            "https://agarthan-admin.vercel.app/verify/report" +
-                "?id=rep-pat-1&patient=patient-uuid-12345&ts=${instant.epochSecond}",
+            "https://agarthan-admin.vercel.app/verify/report?id=rep-pat-1",
             doc.header.verificationUrl,
         )
     }
 
     @Test
     fun `custom verificationConfig baseUrl is used by builder`() {
-        val customConfig = ReportVerificationConfig(baseUrl = "https://staging.agartha.ph/verify")
+        val customConfig = ReportVerificationConfig(baseUrl = "https://agarthan-admin-staging.vercel.app/verify/report")
         val customBuilder = PatientReportPdfBuilder(verificationConfig = customConfig)
         val instant = Instant.parse("2026-01-05T12:00:00Z")
         val doc = customBuilder.build(
@@ -299,11 +297,10 @@ class PatientReportPdfBuilderTest {
             totalEggsConfirmed = 0,
             positiveSpecies = emptyList(),
             sessionRows = emptyList(),
-            patientId = "patient-uuid-12345",
         )
 
         assertEquals(
-            "https://staging.agartha.ph/verify?id=rep-pat-1&patient=patient-uuid-12345&ts=${instant.epochSecond}",
+            "https://agarthan-admin-staging.vercel.app/verify/report?id=rep-pat-1",
             doc.header.verificationUrl,
         )
     }

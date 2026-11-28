@@ -44,10 +44,8 @@ class ReportPdfBuilder @Inject constructor(
         } else {
             1
         }
-        val verificationUrl = ReportVerificationUrlBuilder.buildSessionReportUrl(
+        val verificationUrl = ReportVerificationUrlBuilder.buildReportUrl(
             reportId = metadata.reportId,
-            sessionId = metadata.session.id,
-            generatedAt = metadata.generatedAt,
             baseUrl = verificationConfig.baseUrl,
         )
         val header = ReportPdfHeader(

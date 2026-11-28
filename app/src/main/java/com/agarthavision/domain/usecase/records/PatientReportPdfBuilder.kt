@@ -43,13 +43,10 @@ class PatientReportPdfBuilder @Inject constructor(
         generatedByEmail: String? = null,
         organizationName: String? = deriveOrganizationFromEmail(generatedByEmail),
         appendixSamples: List<ReportPdfSampleItem> = emptyList(),
-        patientId: String? = null,
     ): PatientReportPdfDocument {
         val appendixPageCount = if (config.includeSampleImages) appendixPageCount(appendixSamples.size) else 0
-        val verificationUrl = ReportVerificationUrlBuilder.buildPatientReportUrl(
+        val verificationUrl = ReportVerificationUrlBuilder.buildReportUrl(
             reportId = reportId,
-            patientId = patientId,
-            generatedAt = generatedAt,
             baseUrl = verificationConfig.baseUrl,
         )
         val header = PatientReportPdfHeader(

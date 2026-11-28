@@ -3,10 +3,15 @@ package com.agarthavision.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import androidx.test.core.app.ApplicationProvider
 import com.agarthavision.R
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeReader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -21,9 +26,11 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PdfChromeTest {
 
     private lateinit var context: Context
@@ -34,9 +41,9 @@ class PdfChromeTest {
     }
 
     @Test
-    fun `drawVerificationQrCode renders QR bitmap and clinical attestation copy`() {
+    fun `drawVerificationQrCode renders QR bitmap and record check copy`() {
         val mockCanvas = mock<Canvas>()
-        val testUrl = "https://agarthan-admin.vercel.app/verify/report?id=test-rep-1&ts=1762344000"
+        val testUrl = "https://agarthan-admin-staging.vercel.app/verify/report?id=test-rep-1"
         val topY = 200f
 
         val bottomY = PdfChrome.drawVerificationQrCode(
@@ -46,25 +53,54 @@ class PdfChromeTest {
             topY = topY,
         )
 
-        // 1. Verify QR bitmap is drawn to the designated rectangle
+        // 1. Verify QR bitmap is drawn at >= 72 pt (~25.4 mm) square
         val rectCaptor = argumentCaptor<RectF>()
         verify(mockCanvas).drawBitmap(any<Bitmap>(), anyOrNull(), rectCaptor.capture(), anyOrNull())
         val drawnRect = rectCaptor.firstValue
         assertEquals(topY, drawnRect.top, 0.01f)
-        assertTrue("QR code must have positive width", drawnRect.width() > 0f)
+        assertTrue("QR code must be at least 72 pt wide", drawnRect.width() >= 72f)
         assertEquals(drawnRect.width(), drawnRect.height(), 0.01f)
 
-        // 2. Verify all clinical attestation texts are drawn
+        // 2. Verify softened record-check copy is drawn
         val scanToVerify = context.getString(R.string.report_pdf_qr_scan_to_verify)
-        val authenticity = context.getString(R.string.report_pdf_qr_authenticity_label)
-        val notice = context.getString(R.string.report_pdf_qr_tamper_notice)
-
-        verify(mockCanvas).drawText(eq(scanToVerify), any(), any(), any<Paint>())
-        verify(mockCanvas).drawText(eq(authenticity), any(), any(), any<Paint>())
-        verify(mockCanvas).drawText(eq(notice), any(), any(), any<Paint>())
+        val recordCheck = context.getString(R.string.report_pdf_qr_record_check)
+        val textCaptor = argumentCaptor<String>()
+        verify(mockCanvas, atLeastOnce()).drawText(textCaptor.capture(), any(), any(), any<Paint>())
+        assertTrue(textCaptor.allValues.contains(scanToVerify))
+        val drawnBody = textCaptor.allValues.filterNot { it == scanToVerify }.joinToString(" ")
+        assertEquals(recordCheck, drawnBody)
 
         // 3. Verify returned bottom coordinate accounts for the QR code display size
         assertTrue(bottomY > topY + drawnRect.height())
+    }
+
+    @Test
+    fun `drawReviewerSignoff QR code decodes with ZXing at 72 dpi`() {
+        val stagingUrl =
+            "https://agarthan-admin-staging.vercel.app/verify/report?id=12345678-1234-1234-1234-1234567890ab"
+        val bitmap = Bitmap.createBitmap(PdfChrome.PAGE_WIDTH, 160, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+
+        PdfChrome.drawReviewerSignoff(
+            context = context,
+            canvas = canvas,
+            params = ReviewerSignoffParams(
+                reviewerName = "Maria Clara Medtech",
+                reviewerEmail = "maria@clinic.ph",
+                organizationName = "Barangay Health Center",
+                verificationUrl = stagingUrl,
+            ),
+            startY = 20f,
+        )
+
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+        val decoded = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)))
+        bitmap.recycle()
+
+        assertEquals(stagingUrl, decoded.text)
     }
 
     @Test
@@ -74,7 +110,7 @@ class PdfChromeTest {
             reviewerName = "Maria Clara Medtech",
             reviewerEmail = "maria@clinic.ph",
             organizationName = "Barangay Health Center",
-            verificationUrl = "https://agarthan-admin.vercel.app/verify/report?id=test-rep-1",
+            verificationUrl = "https://agarthan-admin-staging.vercel.app/verify/report?id=test-rep-1",
         )
 
         val bottomY = PdfChrome.drawReviewerSignoff(
@@ -109,4 +145,3 @@ class PdfChromeTest {
         assertTrue("Height with QR code must be greater than base height", qrHeight >= baseHeight)
     }
 }
-

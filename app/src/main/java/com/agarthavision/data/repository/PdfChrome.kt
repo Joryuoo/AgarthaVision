@@ -111,8 +111,9 @@ internal object PdfChrome {
     private const val TEXT_SIZE_PLACEHOLDER_SUB = 7.5f
     private const val TEXT_SIZE_QR_HEADER = 8f
     private const val TEXT_SIZE_QR_SUB = 7f
-    private const val TEXT_SIZE_QR_NOTICE = 6.5f
-    private const val QR_CODE_DISPLAY_SIZE = 54f
+    private const val QR_CODE_DISPLAY_SIZE = 78f
+    private const val QR_TEXT_MAX_WIDTH = 165f
+    private const val QR_TEXT_LINE_HEIGHT = 10f
 
     const val ELLIPSIS = "…"
 
@@ -640,12 +641,12 @@ internal object PdfChrome {
         val qrTop = topY
         val qrBottom = qrTop + QR_CODE_DISPLAY_SIZE
 
-        val qrBitmap = QrCodeGenerator.generateQrBitmap(
+        val qrBitmap = QrCodeGenerator.generateCompactQrBitmap(
             content = verificationUrl,
-            sizePx = 160,
         )
         val destRect = RectF(qrLeft, qrTop, qrRight, qrBottom)
-        canvas.drawBitmap(qrBitmap, null, destRect, null)
+        val qrPaint = Paint().apply { isFilterBitmap = false }
+        canvas.drawBitmap(qrBitmap, null, destRect, qrPaint)
         qrBitmap.recycle()
 
         val qrHeaderPaint = pdfPaint(
@@ -662,21 +663,18 @@ internal object PdfChrome {
             letterSpacing = 0.02f,
         ).apply { textAlign = Paint.Align.RIGHT }
 
-        val qrNoticePaint = pdfPaint(
-            color = AppColors.Gray400,
-            textSize = TEXT_SIZE_QR_NOTICE,
-            weight = 400,
-            letterSpacing = 0.01f,
-        ).apply { textAlign = Paint.Align.RIGHT }
-
         val textX = qrLeft - 8f
-        val line1Y = qrTop + 14f
-        val line2Y = line1Y + 11f
-        val line3Y = line2Y + 10f
-
+        val line1Y = qrTop + 20f
         canvas.drawText(context.getString(R.string.report_pdf_qr_scan_to_verify), textX, line1Y, qrHeaderPaint)
-        canvas.drawText(context.getString(R.string.report_pdf_qr_authenticity_label), textX, line2Y, qrSubPaint)
-        canvas.drawText(context.getString(R.string.report_pdf_qr_tamper_notice), textX, line3Y, qrNoticePaint)
+
+        val recordCheckLines = wrapText(
+            paint = qrSubPaint,
+            text = context.getString(R.string.report_pdf_qr_record_check),
+            maxWidth = QR_TEXT_MAX_WIDTH,
+        )
+        recordCheckLines.forEachIndexed { index, line ->
+            canvas.drawText(line, textX, line1Y + 12f + index * QR_TEXT_LINE_HEIGHT, qrSubPaint)
+        }
 
         return qrBottom + 12f
     }
